@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("OpenXmlSpike")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bd4e4a0001f3344c163e17f5fdb13029337f6849")]
 [assembly: System.Reflection.AssemblyProductAttribute("OpenXmlSpike")]
 [assembly: System.Reflection.AssemblyTitleAttribute("OpenXmlSpike")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -52,6 +52,7 @@ flowchart TD
 ### 2.1 Technology Stack
 - **Target Platform**: Windows 10/11 (64-bit).
 - **Core Desktop Runtime**: **.NET 8 / C# with Edge WebView2**.
+- **Frontend Architecture**: **Embedded Vite + TypeScript Single-Page Application (SPA)** communicating via typed asynchronous message bridge with C#.
 - **Excel Engine**: **`DocumentFormat.OpenXml` (v3.1.1)**.
 - **Deployment**: Single-file portable self-contained executable (`AHU_Verification.exe`).
 
@@ -95,10 +96,13 @@ interface Fact<T> {
 ```
 
 ### 3.3 Strict Weight & Code Mapping Semantics
-1. **Skid Weight Semantics**:
+1. **Immediate Ingestion & Auto-Population**:
+   - Dropping or opening `Config.xml` automatically ingests data into Layer 1 Graph and Layer 2 Fact Registry immediately.
+   - Authoritative specs are pre-populated; only facts flagged `Unknown` or `RequiresConfirmation` require detailer action.
+2. **Skid Weight Semantics**:
    - The application does **not** assume an unverified formula (e.g. sum of segment + component + base) for skid weight.
    - If a skid has no explicit authoritative weight in the XML, `skid.weight` is marked `status: 'Unknown'`, and any rule requiring skid weight evaluates to **`Needs Input`** until confirmed or overridden by the detailer.
-2. **No Speculative Code Mappings**:
+3. **No Speculative Code Mappings**:
    - Unknown/unconfirmed codes (e.g. `vendorType="DDPG2"`) are **not** guessed.
    - The Fact Registry records the raw code with `confidence: 'RequiresConfirmation'`.
    - Rules dependent on specific equipment classifications prompt the detailer for explicit confirmation.
@@ -107,7 +111,12 @@ interface Fact<T> {
 
 ## 4. Scoped Rules Engine & Semantic Key Decoupling
 
-### 4.1 Separation of Semantic Keys from Excel Cell Addresses
+### 4.1 Rule Transcription Philosophy & Decoupled Architecture
+- **Rule Extraction is Transcription, Not Interpretation**:
+  - Exact preservation of the verification requirements across all 12 workbook tabs.
+  - Stable semantic IDs, categories, and scopes (`Unit`, `Skid`, `Segment`, `Component`).
+  - AST predicates are only encoded where the trigger is supported by confirmed engineering logic. Ambiguous items are explicitly flagged for detailer review (`Needs Input`).
+
 - **Rule Definitions (`rules.json`)**:
   Rules reference purely **semantic keys** and structured JSON-AST predicates:
   ```json
@@ -153,9 +162,40 @@ interface Fact<T> {
 
 ---
 
-## 5. Early Project Persistence Specification (`.dvl`)
+## 5. UI Architecture & Workflow
 
-The `.dvl` project file is the authoritative single source of truth for the detailer's work session:
+### 5.1 Skid-Centric Tabbed Organization
+- **General Unit Tab**:
+  - Global AHU Specifications (Job Name, COM#, Shell Type, Unit Type, Base Height, Wall Thickness, Materials/Gauges).
+  - Dynamic Special Quotes (SQs) and Deviation Items Manager (up to 22 entries formatted for export).
+  - Unit-level checklist items.
+- **Dynamic Skid Tabs (`Skid 1`, `Skid 2`, ...)**:
+  - Skid boundary summary (Segments & Internals located on this skid).
+  - Scoped component verification groups: Base, Housing, Drain Pan, Fans, Filters, Reconnects.
+  - Interactive checklists with three-state indicators (`Applicable`, `Not Applicable`, `Needs Input`).
+  - Fact confirmation popovers for equipment codes requiring review.
+
+### 5.2 Dynamic SQ Manager
+- Detailers add, edit, reorder, and tag SQs with specific Skids or Rules.
+- SQs auto-populate rows 4–25 in columns G & H of the official `Verification List` sheet upon export.
+
+### 5.3 Export Pre-Flight & Gating
+- Clicking "Export Verification List (.xlsx)" launches an interactive Pre-Flight Modal:
+  - If all applicable items are complete and facts confirmed: 1-click **Final Verification Deliverable** export.
+  - If incomplete items or unconfirmed facts remain: Detailer can view jump links to missing items, or generate a **Draft Export** (flagged as in-progress).
+
+---
+
+## 6. Project Persistence (`.dvl`) & Offline Rule Sync
+
+### 6.1 Fully Self-Contained `.dvl` Specification
+The `.dvl` project file is a single JSON document containing:
+- File metadata, author, and pinned Rule Pack version/SHA-256 hash.
+- Full embedded raw `Config.xml` source text for 100% portable sharing across machines.
+- Normalized Graph & Fact Registry with complete override history.
+- SQ items and checklist completion states.
+- Continuous background autosaving to `%LOCALAPPDATA%/AHUVerification/autosave.dvl` for crash resilience.
+
 ```json
 {
   "formatVersion": "1.0",
@@ -171,7 +211,7 @@ The `.dvl` project file is the authoritative single source of truth for the deta
     "fileName": "Config.xml",
     "fileSha256": "4a5e...",
     "schemaVersion": "2018.9.14.1003",
-    "rawXml": "<AHU>...</AHU>"
+    "rawXml": "<root:AHU>...</root:AHU>"
   },
   "normalizedGraph": { "unit": {}, "skids": [], "segments": [], "bases": [] },
   "factRegistry": {
@@ -179,7 +219,7 @@ The `.dvl` project file is the authoritative single source of truth for the deta
     "unit.linerMaterial": { "value": "Aluminum", "status": "ManuallyOverridden" }
   },
   "sqItems": [
-    { "index": 1, "text": "Custom drain pan depth 3.5 in." }
+    { "index": 1, "text": "Custom drain pan depth 3.5 in.", "linkedSkidId": "skid-1" }
   ],
   "checklistInstances": [
     {
@@ -195,9 +235,14 @@ The `.dvl` project file is the authoritative single source of truth for the deta
 }
 ```
 
+### 6.2 Rule Pack Sync & Offline Fallback
+- **Embedded Default**: Rule Pack v1.0.0 is embedded directly in the application assembly for zero-config offline start.
+- **Configurable Remote Sync**: In-app settings allow specifying a shared network/OneDrive folder.
+- Background sync stages new rule pack bundles, verifies SHA-256 manifest hashes, atomically swaps the active store, and supports Last Known Good (LKG) rollback if validation fails.
+
 ---
 
-## 6. Phased Implementation Plan
+## 7. Phased Implementation Plan
 
 ```mermaid
 gantt
@@ -229,9 +274,9 @@ gantt
 | Phase | Milestone | Core Deliverables |
 |---|---|---|
 | **Phase 0** | **Spike (Completed)** | Validated OpenXML 100% roundtrip on `Detailing Verification List.xlsx` with 0 schema errors and intact validations/formulas. |
-| **Phase 1** | **Rule Pack Foundation** | Structured `rules.json` (semantic keys & AST), `template_map.json` (Excel coordinate mappings), and `approved_mappings.json` bundled with `template.xlsx`. |
-| **Phase 2** | **Core Data & Persistence** | Layer 1 XML Parser (structural graph), Layer 2 Fact Registry (4-state provenance), and early `.dvl` project persistence implementation. |
+| **Phase 1** | **Rule Pack Foundation** | Transcribe all 12 workbook sheets into `rules.json` (semantic keys & AST predicates), `template_map.json` (Excel coordinate mappings), and `approved_mappings.json` bundled with `template.xlsx`. |
+| **Phase 2** | **Core Data & Persistence** | Layer 1 XML Parser (structural graph), Layer 2 Fact Registry (4-state provenance), and self-contained `.dvl` project persistence with autosave. |
 | **Phase 3** | **Scoped Evaluator** | Predicate AST engine evaluating rules against Fact Registry across `Unit`, `Skid`, `Segment`, and `Component` scopes with `Applicable` / `Not Applicable` / `Needs Input`. |
-| **Phase 4** | **Desktop Interface** | WebView2 desktop UI featuring General Specs, Skid breakdowns, SQ editor, Fact confirmation prompts, and dynamic checklists. |
-| **Phase 5** | **Template Patcher** | OpenXML patcher injecting project facts, checklist marks, and comments into `template.xlsx` using `template_map.json`. |
-| **Phase 6** | **Sync & Packaging** | Filesystem rule sync (OneDrive/UNC) with hash verification and LKG rollback; single-file `.exe` build. |
+| **Phase 4** | **Desktop Interface** | Embedded Vite + TypeScript SPA in WebView2 with Skid-centric tabs, General Specs, dynamic SQ manager, Fact confirmation popovers, and pre-flight export modal. |
+| **Phase 5** | **Template Patcher** | OpenXML patcher injecting project facts, SQs, checklist marks, and comments into `template.xlsx` using `template_map.json`. |
+| **Phase 6** | **Sync & Packaging** | Configurable filesystem/OneDrive rule sync with hash checks and LKG rollback; single-file `.exe` build. |
