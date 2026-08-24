@@ -70,6 +70,14 @@ flowchart TD
 ### 4. OpenXML Deliverable Patcher
 - **Responsibility**: Generates the final `Detailing Verification List.xlsx` workbook by patching cell values via `DocumentFormat.OpenXml` without altering Excel schemas, data validation dropdowns, or formula recalculation chains.
 
+### 5. UI Architecture & Productivity Engine
+- **Responsibility**: Embedded Vite + TypeScript SPA inside WebView2 container.
+- **Theme**: User configurable (System Default, Dark, Light).
+- **Navigation**: Skid-centric tabs (`General Unit`, `Skid 1..N`) with real-time completion badges.
+- **Fact Resolution**: Inline quick-resolve popovers + global Resolution Center modal.
+- **Pre-Flight Export**: Verification audit with jump links and Draft vs Final deliverable modes.
+- **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and dynamic 22-slot SQ manager.
+
 ## Invariants and Sharp Edges
 
 1. **Excel Template Integrity**:
