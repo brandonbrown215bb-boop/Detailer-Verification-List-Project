@@ -1,0 +1,7 @@
+# AGENT_GROUND_START
+.agents/state/
+.obsidian/
+.graphify/
+graphify-out/
+.qmd/
+# AGENT_GROUND_END
