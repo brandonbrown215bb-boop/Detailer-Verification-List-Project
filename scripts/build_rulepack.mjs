@@ -1,0 +1,263 @@
+import fs from "fs";
+import crypto from "crypto";
+import path from "path";
+
+const approvedMappings = {
+  version: "13.1.0",
+  approvedVendorCodes: {
+    "DDPG2": { name: "Direct Drive Plenum Fan Gen 2", category: "Fans", isApproved: true, requiresConfirmation: false },
+    "EBM_EC": { name: "EBM Electronically Commutated Fan", category: "Fans", isApproved: true, requiresConfirmation: false },
+    "TCF_CL3": { name: "Twin City Fan Class 3", category: "Fans", isApproved: true, requiresConfirmation: false }
+  },
+  approvedMasterModels: {
+    "BASE_DRAIN_PAN": "391-10006-021",
+    "COIL_PANEL": "391-100006-026",
+    "FAN_WALL_EBM_SEISMIC_OR_LARGE": "391-10004-012",
+    "FAN_WALL_EBM_STANDARD_SMALL": "391-10004-013",
+    "RECONNECT_SEISMIC": "391-10002-004",
+    "LIFTING_LUG_ASSY": "391-40206-003",
+    "BASE_FAB": "391-10001-002",
+    "UTL_DETAIL": "391-30002"
+  },
+  materialCompatibility: {
+    "ALUMINUM_LINER_RECONNECT": "SST304",
+    "ALUMINUM_DRAIN_HOLE_DIA": 3.125,
+    "STEEL_DRAIN_HOLE_DIA": 1.50,
+    "RIVET_PERIMETER_HOLE_DIA": 0.25,
+    "WELD_PERIMETER_HOLE_DIA": 0.50,
+    "ALUMINUM_CORNER_LINER_GAUGE": 14
+  }
+};
+
+const rules = [
+  // --- BASE ---
+  { id: "BASE-01", semanticKey: "BASE_LIFTING_LUG_SUPPORT", scope: "Skid", category: "Base", subgroup: "Base Features", order: 1, text: "Lifting lugs Have proper support when the skid is over 4,000lbs (Ref  ASSY Manual page 391-40206-003)", reference: "ASSY Manual p.391-40206-003", excelRow: 29, requiredFacts: ["skid.weight"], predicate: { ">": [{ var: "skid.weight" }, 4000] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-02", semanticKey: "BASE_LIFTING_LUG_CLEARANCE", scope: "Skid", category: "Base", subgroup: "Base Features", order: 2, text: "Lifting lugs are free of obstruction/interference around drains, coil connections, VFDs, etc. (Standard 6\" minimum).", reference: "Std Assembly Spec Sec 4.2", excelRow: 30, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-03", semanticKey: "BASE_FLOOR_DRAINS_PRESENT", scope: "Skid", category: "Base", subgroup: "Base Features", order: 3, text: "Floor drains are present and located as shown on the Unit Editor.", reference: "Unit Editor Layout Plan", excelRow: 31, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-04", semanticKey: "BASE_FLOOR_DRAIN_HOLE_SIZE", scope: "Skid", category: "Base", subgroup: "Base Features", order: 4, text: "Floor drain hole sizes are correct: 3.125\" dia for AL Drains; 1.50\" dia for Steel Drains.", reference: "Base Fab Dwg 391-10001-002", excelRow: 32, requiredFacts: ["unit.floorMaterial"], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-05", semanticKey: "BASE_DRAIN_PAN_HANDING", scope: "Skid", category: "Base", subgroup: "Base Features", order: 5, text: "Drain Pan Drains are located on the correct hand per the UE", reference: "Engineering Submittal Sheet", excelRow: 33, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-06", semanticKey: "BASE_FILLER_PLATE_MATERIAL", scope: "Skid", category: "Base", subgroup: "Base Features", order: 6, text: "Filler plate material is correct on aluminum base units.", reference: "Base Fab Std 12.1", excelRow: 34, requiredFacts: ["unit.floorMaterial"], predicate: { "includes": [{ var: "unit.floorMaterial" }, "AL"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-07", semanticKey: "BASE_SPLITS_LOCATIONS", scope: "Skid", category: "Base", subgroup: "Base Structural", order: 7, text: "Construction splits and units splits are located where necessary.", reference: "General Arrangement Drawing", excelRow: 35, requiredFacts: ["unit.knockdown"], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-08", semanticKey: "BASE_PERIMETER_ANGLE_CODES", scope: "Skid", category: "Base", subgroup: "Perimeter Angle", order: 8, text: "The perimeter angle codes are correct after deviating from configurator generated parts.", reference: "Base Config Standard", excelRow: 37, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-09", semanticKey: "BASE_PERIMETER_ANGLE_HOLES", scope: "Skid", category: "Base", subgroup: "Perimeter Angle", order: 9, text: "Perimeter Angles are the correct material and have the correct attachment hole size: 0.25\" dia for rivet connection; 0.50\" for weld connection", reference: "Base Attachment Spec", excelRow: 38, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-10", semanticKey: "BASE_SKIN_SEAMS_SUPPORT", scope: "Skid", category: "Base", subgroup: "Skins", order: 10, text: "Skin Seams have proper base steel support.", reference: "Base Structural Guideline", excelRow: 40, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-11", semanticKey: "BASE_FLOOR_SKIN_MAX_SIZE", scope: "Skid", category: "Base", subgroup: "Skins", order: 11, text: "Material size does NOT exceed 144\" x 48\"; 60\" x 144\" for Aluminum Diamond Plate floor skin.", reference: "Sheet Metal Sizing Std", excelRow: 41, requiredFacts: ["unit.floorMaterial"], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-12", semanticKey: "BASE_FLOOR_SKIN_GAUGE", scope: "Skid", category: "Base", subgroup: "Skins", order: 12, text: "Floor skins have correct material type and gauge.", reference: "Unit Schedule Specs", excelRow: 42, requiredFacts: ["unit.floorMaterial", "unit.floorGauge"], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "BASE-13", semanticKey: "BASE_NON_FULL_DRAIN_SUPPORT", scope: "Skid", category: "Base", subgroup: "Skins", order: 13, text: "Floor skins around non-full width drainpans have proper skin seam support.", reference: "Drain Pan Casing Std", excelRow: 43, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-14", semanticKey: "BASE_SUBFLOOR_PULLBACK", scope: "Skid", category: "Base", subgroup: "Subfloors", order: 14, text: "Subfloors are pulled back 0.25\" from full height formed channels like they are from structural channels.", reference: "Subfloor Assembly Detail", excelRow: 45, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-15", semanticKey: "BASE_COMPONENT_SUPPORT", scope: "Skid", category: "Base", subgroup: "Channels and Angles", order: 15, text: "Component Support - There is proper support under components that require base steel supports.", reference: "Heavy Component Load Spec", excelRow: 47, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-16", semanticKey: "BASE_FORMED_CHANNELS_CURB_REST", scope: "Skid", category: "Base", subgroup: "Channels and Angles", order: 16, text: "Full height Formed Channels are present around airflow opening when base is curb rest or top of stacked unit.", reference: "Curb Rest Spec 391-200", excelRow: 48, requiredFacts: ["unit.curbrest"], predicate: { "===": [{ var: "unit.curbrest" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-17", semanticKey: "BASE_AL_DRAIN_SUPPORTS", scope: "Skid", category: "Base", subgroup: "Channels and Angles", order: 17, text: "Aluminum floor drain supports are 5.00\" apart, 2.50\" from center of drain in both directions.", reference: "Aluminum Base Standard", excelRow: 51, requiredFacts: ["unit.floorMaterial"], predicate: { "includes": [{ var: "unit.floorMaterial" }, "AL"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-18", semanticKey: "BASE_FORMED_CHANNELS_MAX_LEN", scope: "Skid", category: "Base", subgroup: "Channels and Angles", order: 18, text: "Formed Channels do not exceed 144\" in length.", reference: "Brake Press Forming Limits", excelRow: 52, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-19", semanticKey: "BASE_DRAIN_PAN_DOA_SUPPORTS", scope: "Skid", category: "Base", subgroup: "Channels and Angles", order: 19, text: "Drain Pan openings wider than 36\" in DOA, have proper curb angle supports.", reference: "DOA Drain Pan Standard", excelRow: 53, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-20", semanticKey: "BASE_NOTES_DIMS_STAMPS", scope: "Skid", category: "Base", subgroup: "Notes, Dims, and Misc", order: 20, text: "All required dimensions and notes are added (Z-bar dims, Drainpan dims, Construction details, Stamps).", reference: "Drafting Standard D-101", excelRow: 55, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "BASE-21", semanticKey: "BASE_DRAIN_PAN_ASSY_NUM", scope: "Skid", category: "Base", subgroup: "Notes, Dims, and Misc", order: 21, text: "Drainpans have the correct assembly number in the respective opening.", reference: "Master Assembly Schedule", excelRow: 56, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "BASE-22", semanticKey: "BASE_DRAIN_PAN_BULKHEAD_LOCATING_DIM", scope: "Skid", category: "Base", subgroup: "Notes, Dims, and Misc", order: 22, text: "Critical locating dim added for Drain pans with bulkheads.", reference: "Bulkhead Interface Detail", excelRow: 58, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- HOUSING ---
+  { id: "HOUS-01", semanticKey: "HOUSING_WALL_MAX_SIZE", scope: "Skid", category: "Housing", subgroup: "Walls", order: 1, text: "Material size does NOT exceed 144\" x 48\".", reference: "Casing Sheet Standard", excelRow: 61, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-02", semanticKey: "HOUSING_CHANNEL_SPACING", scope: "Skid", category: "Housing", subgroup: "Walls", order: 2, text: "Channel spacing is no less than 3\" from web to web.", reference: "Structural Stiffener Spacing", excelRow: 62, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-03", semanticKey: "HOUSING_HOLE_PATTERN", scope: "Skid", category: "Housing", subgroup: "Walls", order: 3, text: "The correct hole pattern is used when moving skins, liners, and/or adding channels.", reference: "Tooling Hole Pattern Std", excelRow: 63, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-04", semanticKey: "HOUSING_ROOF_SEALOFF_GAUGE", scope: "Unit", category: "Housing", subgroup: "Walls", order: 4, text: "Roof seal off angles have the correct material type and material gauge.", reference: "Roof Sealing Spec", excelRow: 64, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-05", semanticKey: "HOUSING_CORRIDOR_SEALOFF_GAUGE", scope: "Unit", category: "Housing", subgroup: "Walls", order: 5, text: "Corridor wall seal off angles have the correct material type and material gauge.", reference: "Vestibule Construction Spec", excelRow: 65, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-06", semanticKey: "HOUSING_STACKED_OPENING_CLEANUP", scope: "Skid", category: "Housing", subgroup: "Walls", order: 6, text: "When multiple openings are stacked, erroneously generated objects (skins, liners, holes) have been deleted.", reference: "Multi-Tier Openings Process", excelRow: 66, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-07", semanticKey: "HOUSING_COIL_OPENING_WIDTH_MATCH", scope: "Skid", category: "Housing", subgroup: "Walls", order: 7, text: "Coil panel openings match the width parameter of the associated coil panel.", reference: "Coil Panel Casing Schedule", excelRow: 67, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-08", semanticKey: "HOUSING_OUTDOOR_SKIN_HOLES_REMOVED", scope: "Unit", category: "Housing", subgroup: "Walls", order: 8, text: "Outdoor units have skin holes removed at the unit split.", reference: "Weatherproofing Std W-102", excelRow: 68, requiredFacts: ["unit.unitType"], predicate: { "===": [{ var: "unit.unitType" }, "Outdoor"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-09", semanticKey: "HOUSING_DOOR_OPENING_SIZES_MATCH", scope: "Skid", category: "Housing", subgroup: "Walls", order: 9, text: "Door opening sizes match the BOM and Unit Editor.", reference: "Access Door Schedule", excelRow: 69, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-10", semanticKey: "HOUSING_WALL_PANEL_MAX_106", scope: "Skid", category: "Housing", subgroup: "Walls", order: 10, text: "Wall panels do not exceed 106\" in more than one direction.", reference: "Fabrication Machine Limits", excelRow: 70, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-11", semanticKey: "HOUSING_WALL_HEIGHT_MATCH_UE", scope: "Skid", category: "Housing", subgroup: "Walls", order: 11, text: "Wall panels match height in the UE.", reference: "Unit Dimension Schedule", excelRow: 71, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-12", semanticKey: "HOUSING_NO_HOLES_WITHOUT_CHANNEL_SUPPORT", scope: "Skid", category: "Housing", subgroup: "Walls", order: 12, text: "There are no holes in the skins or liners that do not have channel support behind them.", reference: "Structural Fastening Std", excelRow: 72, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-13", semanticKey: "HOUSING_CHANNEL_START_STOP_WALLS", scope: "Skid", category: "Housing", subgroup: "Walls", order: 13, text: "Channel dimensions start and stop at each wall section.", reference: "Framing Detailing Rules", excelRow: 73, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-14", semanticKey: "HOUSING_SKIN_LINER_MATERIALS_MATCH", scope: "Unit", category: "Housing", subgroup: "Walls", order: 14, text: "Skin and liner materials match the UE.", reference: "Engineering Casing Spec", excelRow: 74, requiredFacts: ["unit.skinMaterial", "unit.linerMaterial"], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-15", semanticKey: "HOUSING_INSULATION_TYPE_CORRECT", scope: "Unit", category: "Housing", subgroup: "Walls", order: 15, text: "Insulation types are correct.", reference: "Thermal Casing Standard", excelRow: 75, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-16", semanticKey: "HOUSING_SPLITS_LOCATED_PROPERLY", scope: "Unit", category: "Housing", subgroup: "Walls", order: 16, text: "Construction splits and units splits are located where necessary.", reference: "Shipping Boundary Plan", excelRow: 76, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-17", semanticKey: "HOUSING_CORRIDOR_SKIN_OVERLAP", scope: "Unit", category: "Housing", subgroup: "Walls", order: 17, text: "Skin overlap added for skins on east/west walls on corridor units. Skin overlaps from Vestibules onto Air Tunnel.", reference: "Corridor Weatherproofing Spec", excelRow: 77, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-18", semanticKey: "HOUSING_BULKHEAD_SUPPORT_PRESENT", scope: "Skid", category: "Housing", subgroup: "Walls", order: 18, text: "Housing support is present for all bulkheads.", reference: "Bulkhead Attachment Std", excelRow: 78, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-19", semanticKey: "HOUSING_OUTDOOR_GALV_ROOF_SKIN", scope: "Unit", category: "Housing", subgroup: "Roofs", order: 19, text: "Outdoor units have galvanized roof skins. (Edit Manual - Unit_Construction_Rules, page 23)", reference: "Unit Construction Rules p.23", excelRow: 93, requiredFacts: ["unit.unitType"], predicate: { "===": [{ var: "unit.unitType" }, "Outdoor"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-20", semanticKey: "HOUSING_ROOF_OPENING_SHIPPING_COVERS", scope: "Unit", category: "Housing", subgroup: "Roofs", order: 20, text: "Roof openings without dampers have shipping covers present in the MOM BOM.", reference: "Shipping Protection Spec", excelRow: 94, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "HOUS-21", semanticKey: "HOUSING_THERMAL_BREAK_SETTING", scope: "Unit", category: "Housing", subgroup: "Casing Construction", order: 21, text: "Panels for thermal break units have Thermal Break parameter set to Yes in CAD models.", reference: "Housing Design Standard H-201", excelRow: 204, requiredFacts: ["unit.thermalBreak"], predicate: { "===": [{ var: "unit.thermalBreak" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- FANS & BULKHEADS ---
+  { id: "FAN-01", semanticKey: "FAN_EBM_SEISMIC_OR_LARGE_MM", scope: "Skid", category: "Fans", subgroup: "Fan Walls", order: 1, text: "If you have an EBM fan larger than 630, or your unit is Seismic with an EBM fan, MM#: 391-10004-012 is used.", reference: "Fan Selection Std 391-10004-012", excelRow: 171, requiredFacts: ["skid.hasFans", "unit.isSeismic"], predicate: { "and": [{ "===": [{ var: "skid.hasFans" }, true] }, { "===": [{ var: "unit.isSeismic" }, true] }] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "FAN-02", semanticKey: "FAN_EBM_STANDARD_SMALL_MM", scope: "Skid", category: "Fans", subgroup: "Fan Walls", order: 2, text: "If you have an EBM fan smaller than 560 and your unit is not Seismic, MM#: 391-10004-013 is used.", reference: "Fan Selection Std 391-10004-013", excelRow: 172, requiredFacts: ["skid.hasFans", "unit.isSeismic"], predicate: { "and": [{ "===": [{ var: "skid.hasFans" }, true] }, { "!==": [{ var: "unit.isSeismic" }, true] }] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "FAN-03", semanticKey: "FAN_WALL_GENERATION_PARAM", scope: "Skid", category: "Fans", subgroup: "Fan Walls", order: 3, text: "EBM Fan Wall has the correct fan generation selected in the parameters.", reference: "MOM Fan Selection Guide", excelRow: 173, requiredFacts: ["skid.hasFans"], predicate: { "===": [{ var: "skid.hasFans" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "FAN-04", semanticKey: "FAN_TWIN_CITY_FRAME_SIZE", scope: "Skid", category: "Fans", subgroup: "Fan Walls", order: 4, text: "Model\'s frame size for Class 3 Twin City Fans match the quoted frame size dimensions.", reference: "Twin City Fan Engineering Guide", excelRow: 174, requiredFacts: ["skid.hasFans"], predicate: { "===": [{ var: "skid.hasFans" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "FAN-05", semanticKey: "FAN_MANUAL_DRIVE_KITS", scope: "Skid", category: "Fans", subgroup: "Fan Drives", order: 5, text: "Drive kits for belt driven fans that MOM did not part select, have been created and added to the BOM using the Manual Drive Kit process.", reference: "Fan Drive Kit Standard", excelRow: 175, requiredFacts: ["skid.hasFans"], predicate: { "===": [{ var: "skid.hasFans" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- INTERNALS & BULKHEADS ---
+  { id: "INT-01", semanticKey: "INTERNAL_BULKHEAD_MATERIAL_MATCH", scope: "Skid", category: "Internals", subgroup: "Bulkheads", order: 1, text: "Bulkhead materials match the UE/Spec Sheet.", reference: "Bulkhead Material Spec", excelRow: 178, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "INT-02", semanticKey: "INTERNAL_SQ_DEVIATIONS_MATCH", scope: "Skid", category: "Internals", subgroup: "Special Quotes", order: 2, text: "Internals have been changed to match SQs/Deviations.", reference: "Order Release SQ Summary", excelRow: 179, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "INT-03", semanticKey: "INTERNAL_FILTER_DOOR_CLEARANCE", scope: "Skid", category: "Filters", subgroup: "Access & Clearance", order: 3, text: "Slide-in (side-load) filters have enough door clearance.", reference: "Service Clearance Guidelines p.14", excelRow: 181, requiredFacts: ["skid.hasFilters"], predicate: { "===": [{ var: "skid.hasFilters" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- UTL ---
+  { id: "UTL-01", semanticKey: "UTL_DRAIN_PAN_ANGLE_SKIN_COVERAGE", scope: "Skid", category: "UTL", subgroup: "Drain Pan", order: 1, text: "Drain Pan - UTL formed angle supports under the Left and Right flanges of the drainpan have skin coverage.", reference: "UTL Drain Pan Detail", excelRow: 183, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-02", semanticKey: "UTL_WALL_PANELS_HEIGHT_REDUCTION", scope: "Unit", category: "UTL", subgroup: "Casing", order: 2, text: "Wall panels are reduced in height for UTL construction.", reference: "UTL Wall Panel Sizing Spec", excelRow: 185, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-03", semanticKey: "UTL_PERIMETER_ANGLE_SPLIT_NOTCH", scope: "Unit", category: "UTL", subgroup: "Perimeter Angles", order: 3, text: "Perimeter angles with upturned lips are notched at unit splits for reconnects: 1.56\" notch for Baseline; 2.06\" notch for Seismic.", reference: "UTL Detail Standard 391-30002", excelRow: 186, requiredFacts: ["unit.utl", "unit.isSeismic"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-04", semanticKey: "UTL_HEADER_PANEL_Y_OFFSET", scope: "Unit", category: "UTL", subgroup: "Coil Panels", order: 4, text: "Header panels for units with UTL have Y offset in the coil panel parameters equal to UTL height, unless panel is on a footer, then set to zero.", reference: "UTL Coil Panel Guide", excelRow: 187, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-05", semanticKey: "UTL_INTERNAL_BLANKOFF_NOTCH", scope: "Unit", category: "UTL", subgroup: "Internal Blankoffs", order: 5, text: "All internals have a notch cut out of the bottom of the left and right blankoffs.", reference: "UTL Internal Clearance Standard", excelRow: 188, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-06", semanticKey: "UTL_VESTIBULE_NO_UTL_RULE", scope: "Unit", category: "UTL", subgroup: "Vestibules", order: 6, text: "Upturned Lips are not present in the Vestibule unless SQ\'ed.", reference: "Vestibule Standard Spec", excelRow: 189, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "UTL-07", semanticKey: "UTL_SHARED_WALL_FOOTERS", scope: "Unit", category: "UTL", subgroup: "Shared Walls", order: 7, text: "Coil Panels - Footers for coil panels in shared walls are present, and equal to UTL height, when both tunnels of the shared wall are upturned lip.", reference: "Shared Wall Coil Detail", excelRow: 190, requiredFacts: ["unit.utl"], predicate: { "includes": [{ var: "unit.utl" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- KNOCKDOWN ---
+  { id: "KNOCK-01", semanticKey: "KNOCKDOWN_RECONNECTS_SUBASSEMBLY", scope: "Unit", category: "Knockdown", subgroup: "Reconnects", order: 1, text: "Reconnects are broken into sub-assemblies small enough for knockdown requirement after welding.", reference: "Knockdown Assembly Guide", excelRow: 193, requiredFacts: ["unit.knockdown"], predicate: { "===": [{ var: "unit.knockdown" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "KNOCK-02", semanticKey: "KNOCKDOWN_WELDED_STANDS_FIT", scope: "Unit", category: "Knockdown", subgroup: "Structural Stands", order: 2, text: "Structural Stands that are welded are designed to fit through Knockdown opening.", reference: "Knockdown Envelope Limits", excelRow: 194, requiredFacts: ["unit.knockdown"], predicate: { "===": [{ var: "unit.knockdown" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "KNOCK-03", semanticKey: "KNOCKDOWN_COMPONENT_OPENING_FIT", scope: "Unit", category: "Knockdown", subgroup: "Components", order: 3, text: "All components are measured against the knockdown opening size (Height x Width) and by depth. If depth is not specified, check with PE.", reference: "Knockdown Clearance Spec", excelRow: 195, requiredFacts: ["unit.knockdown"], predicate: { "===": [{ var: "unit.knockdown" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "KNOCK-04", semanticKey: "KNOCKDOWN_HOUSING_SPLITS_EVEN", scope: "Unit", category: "Knockdown", subgroup: "Housing Splits", order: 4, text: "Housing Splits added to meet knockdown requirements and are added in a way to split walls as evenly as possible.", reference: "Knockdown Wall Splitting Rule", excelRow: 196, requiredFacts: ["unit.knockdown"], predicate: { "===": [{ var: "unit.knockdown" }, "Yes"] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- COIL PANELS ---
+  { id: "COIL-01", semanticKey: "COIL_PANEL_MM_391_100006_026", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 1, text: "Coil Panels use Master Model # 391-100006-026.", reference: "Master Model Catalog", excelRow: 198, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-02", semanticKey: "COIL_PANEL_WALL_OPENING_MATCH", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 2, text: "Wall openings and coil panel width parameter match.", reference: "Coil Opening Parameter Check", excelRow: 199, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-03", semanticKey: "COIL_PANEL_HELD_NO_BOM_ASSEMBLY", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 3, text: "Held Coil panels have no assembly in the MOM BOM.", reference: "Held Coil BOM Procedure", excelRow: 200, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-04", semanticKey: "COIL_PANEL_AIRFLOW_DIRECTION", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 4, text: "Coil Panels have the correct airflow direction.", reference: "Piping & Airflow Schedule", excelRow: 201, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-05", semanticKey: "COIL_PANEL_RETURN_VENT_DRAIN_OFF", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 5, text: "Return panels have the vent and drain parameter turned off.", reference: "Return Coil Parameter Spec", excelRow: 202, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-06", semanticKey: "COIL_PANEL_STAGGERED_VENT_DRAIN_OFF", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 6, text: "The Downstream staggered coil header panels have the vent and drain parameter turned off unless an SQ requires extended vent and drains.", reference: "Staggered Coil Spec", excelRow: 203, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-07", semanticKey: "COIL_PANEL_HELD_MARKED_ON_PACKET", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 7, text: "Held Coil Panels are marked as such on the Int-Ext/Skid Packet.", reference: "Skid Packet Drafting Standard", excelRow: 205, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "COIL-08", semanticKey: "COIL_PANEL_BOM_BALLOONS_PRESENT", scope: "Skid", category: "Internals", subgroup: "Coil Panels", order: 8, text: "Coil panels have BOM line items and balloons on the Skid Packet.", reference: "Drafting Balloon Rules", excelRow: 206, requiredFacts: ["skid.hasCoils"], predicate: { "===": [{ var: "skid.hasCoils" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- RECONNECTS ---
+  { id: "RECON-01", semanticKey: "RECONNECT_SEISMIC_MM_391_10002_004", scope: "Unit", category: "Reconnects", subgroup: "Shipping Splits", order: 1, text: "Reconnect MM#: 391-10002-004 is used when unit is Seismic.", reference: "Seismic Reconnect Std 391-10002-004", excelRow: 208, requiredFacts: ["unit.isSeismic"], predicate: { "===": [{ var: "unit.isSeismic" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "RECON-02", semanticKey: "RECONNECT_TYPE_CORRECT", scope: "Unit", category: "Reconnects", subgroup: "Shipping Splits", order: 2, text: "Reconnects are the correct type for it\'s use in the unit.", reference: "Split Reconnect Schedule", excelRow: 209, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "RECON-03", semanticKey: "RECONNECT_LINER_MATERIAL_MATCH", scope: "Unit", category: "Reconnects", subgroup: "Shipping Splits", order: 3, text: "All Reconnects match the liner material of the segment they are in. Aluminum liner sections should have Stainless Reconnects.", reference: "Materials Specification Sec 2", excelRow: 210, requiredFacts: ["unit.linerMaterial"], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "RECON-04", semanticKey: "RECONNECT_QUANTITY_PER_SPLIT", scope: "Unit", category: "Reconnects", subgroup: "Shipping Splits", order: 4, text: "Each Split has the correct quantity of reconnects.", reference: "Split Connection Table", excelRow: 211, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "RECON-05", semanticKey: "RECONNECT_IW_IH_TUNNEL_FIT", scope: "Unit", category: "Reconnects", subgroup: "Shipping Splits", order: 5, text: "Reconnects have the correct IW and IH for the tunnel they are in. IW parameter should be reduced 0.50\" from tunnel IW.", reference: "Reconnect Sizing Rule", excelRow: 212, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- DRAIN PAN ---
+  { id: "DPAN-01", semanticKey: "DPAN_BASE_OPENING_FIT", scope: "Skid", category: "Drain Pan", subgroup: "Base Opening", order: 1, text: "Drain pan fits in length of base opening.", reference: "Drain Pan Layout MM# 391-10006-021", excelRow: 214, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-02", semanticKey: "DPAN_SQ_SUPPORTS_RISERS_QTY", scope: "Skid", category: "Drain Pan", subgroup: "Supports & Risers", order: 2, text: "Drain pan has correct qty and location of supports and risers for SQ\'ed drain pans.", reference: "Engineering Coil Pan Standard", excelRow: 215, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-03", semanticKey: "DPAN_SUPPORTS_RISERS_MATCH_BOM", scope: "Skid", category: "Drain Pan", subgroup: "Supports & Risers", order: 3, text: "Qty of supports and risers match the BOM.", reference: "BOM Verification Procedure", excelRow: 216, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-04", semanticKey: "DPAN_LADDER_RACK_HOLES", scope: "Skid", category: "Drain Pan", subgroup: "Ladder Rack", order: 4, text: "Holes in ladder rack for each coil support.", reference: "Ladder Rack Standard", excelRow: 217, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-05", semanticKey: "DPAN_HANDING_CORRECT", scope: "Skid", category: "Drain Pan", subgroup: "Drain Handing", order: 5, text: "Drain pan has correct handing.", reference: "Submittal Schedule", excelRow: 218, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-06", semanticKey: "DPAN_WIDTH_REDUCED_1_25", scope: "Skid", category: "Drain Pan", subgroup: "Dimensions", order: 6, text: "Drain pan to be reduced 1.25\" from Left and Right support channels.", reference: "Pan Channel Clearance Rule", excelRow: 219, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-07", semanticKey: "DPAN_3PIECE_SLOPE_CORRECT", scope: "Skid", category: "Drain Pan", subgroup: "Slope", order: 7, text: "3 piece drain pan all slope properly.", reference: "ASHRAE 62.1 Drainage Standard", excelRow: 220, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-08", semanticKey: "DPAN_BASE_OPENINGS_MATCH_UE", scope: "Skid", category: "Drain Pan", subgroup: "Base Opening", order: 8, text: "Drain pan openings in base surfaces match opening dimensions and location in UE.", reference: "Unit Editor Base Map", excelRow: 221, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-09", semanticKey: "DPAN_FLANGES_FIT_PERIMETER_ANGLES", scope: "Skid", category: "Drain Pan", subgroup: "Flanges", order: 9, text: "Drain pan flanges fit between perimeter angles.", reference: "Base Clearance Specification", excelRow: 222, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "DPAN-10", semanticKey: "DPAN_MASTER_MODEL_391_10006_021", scope: "Skid", category: "Drain Pan", subgroup: "Master Model", order: 10, text: "Drain pan is using MM# 391-10006-021.", reference: "Master Model Catalog", excelRow: 223, requiredFacts: ["skid.hasDrainPan"], predicate: { "===": [{ var: "skid.hasDrainPan" }, true] }, allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- PAPERWORK ---
+  { id: "PAPER-01", semanticKey: "PAPERWORK_BASERAIL_DRAIN_PAN_LOCATING_DIM", scope: "Unit", category: "Paperwork", subgroup: "Baserail Packet", order: 1, text: "Critical locating dim added for Drain pans with bulkheads.", reference: "Paperwork Release Standard", excelRow: 149, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-02", semanticKey: "PAPERWORK_BASERAIL_BOM_MATERIAL_GAUGE", scope: "Unit", category: "Paperwork", subgroup: "Baserail Packet", order: 2, text: "Correct material type and material gauge are present in paperwork BOMs.", reference: "Release Packet Verification", excelRow: 150, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-03", semanticKey: "PAPERWORK_BASERAIL_DRAIN_PAN_ASSY_NUM", scope: "Unit", category: "Paperwork", subgroup: "Baserail Packet", order: 3, text: "Drainpans have the correct assembly number in the respective opening.", reference: "Baserail Packet Assembly Table", excelRow: 151, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-04", semanticKey: "PAPERWORK_BASERAIL_REQUIRED_DIMS_NOTES", scope: "Unit", category: "Paperwork", subgroup: "Baserail Packet", order: 4, text: "Required dimensions and notes including ID of z-bars, drain hole location, drainpan location dim, etc. have been added.", reference: "Drafting Checklist", excelRow: 152, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-05", semanticKey: "PAPERWORK_WALL_BOM_MATERIAL_GAUGE", scope: "Unit", category: "Paperwork", subgroup: "Wall Packet", order: 5, text: "Correct material type and material gauge are present in paperwork BOMs.", reference: "Wall Packet Verification", excelRow: 155, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-06", semanticKey: "PAPERWORK_WALL_INSULATION_CORRECT", scope: "Unit", category: "Paperwork", subgroup: "Wall Packet", order: 6, text: "Insulation types are correct.", reference: "Wall Insulation Spec", excelRow: 156, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-07", semanticKey: "PAPERWORK_SKID_BOM_MATERIAL_GAUGE", scope: "Unit", category: "Paperwork", subgroup: "Skid Packet", order: 7, text: "Correct material type and material gauge are present in paperwork BOMs.", reference: "Skid Packet Verification", excelRow: 159, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-08", semanticKey: "PAPERWORK_SKID_BULKHEADS_DIMENSIONED", scope: "Unit", category: "Paperwork", subgroup: "Skid Packet", order: 8, text: "All bulkheads are present and dimensioned correctly.", reference: "Bulkhead Dimensioning Check", excelRow: 160, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+  { id: "PAPER-09", semanticKey: "PAPERWORK_SKID_INTERNALS_ASSY_NUM", scope: "Unit", category: "Paperwork", subgroup: "Skid Packet", order: 9, text: "All internals have the correct assembly number in the BOM.", reference: "Internal Assembly Schedule", excelRow: 161, requiredFacts: [], allowNA: true, verificationMode: "ManualCheckbox" },
+
+  // --- MOM & ISG ---
+  { id: "MOM-01", semanticKey: "MOM_DETAILER_DOC_UPLOADED", scope: "Unit", category: "MOM", subgroup: "Documentation", order: 1, text: "The detailer information document is uploaded to the CAD/MAPICS document section.", reference: "Detailing Release Checklist", excelRow: 164, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "MOM-02", semanticKey: "MOM_MAPICS_BOM_CLEAN", scope: "Unit", category: "MOM", subgroup: "BOM Validation", order: 2, text: "The MAPICS BOM is uploaded and clean.", reference: "MAPICS Process Guide", excelRow: 165, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "MOM-03", semanticKey: "MOM_SHELL_GENERATION_SETTING", scope: "Unit", category: "MOM", subgroup: "Shell Settings", order: 3, text: "Unit Editor shell options are set to the correct shell generation.", reference: "MOM Configuration Guide", excelRow: 166, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "ISG-01", semanticKey: "ISG_PART_SELECT_RUN", scope: "Unit", category: "ISG", subgroup: "Surface & Part Generation", order: 1, text: "Post ISG part select has been ran, unnecessary parts have been removed, and all parts are built and in MAPICS.", reference: "ISG Automation Guide", excelRow: 168, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" },
+  { id: "ISG-02", semanticKey: "ISG_SURFACE_SUMMARY_NO_DUPLICATES", scope: "Unit", category: "ISG", subgroup: "Surface & Part Generation", order: 2, text: "Surface Summary Generation has been ran and there are no duplicate surfaces in the BOM.", reference: "Surface Summary Process", excelRow: 169, requiredFacts: [], allowNA: false, verificationMode: "ManualCheckbox" }
+];
+
+const templateMap = {
+  templateVersion: "13.1.0",
+  sheetNames: {
+    revisionList: "Revision List",
+    verificationList: "Verification List",
+    checkInformation: "Check Information",
+    comments: "Comments",
+    base: "Base",
+    drainPan: "Drain Pan",
+    housing: "Housing",
+    paperwork: "Paperwork",
+    internal: "Internal",
+    coilPanels: "Coil Panels",
+    reconnects: "Reconnects",
+    mom: "MOM"
+  },
+  generalFields: {
+    "unit.detailer": { sheet: "Verification List", cell: "D3" },
+    "unit.date": { sheet: "Verification List", cell: "D4" },
+    "unit.jobName": { sheet: "Verification List", cell: "D5" },
+    "unit.comNumber": { sheet: "Verification List", cell: "D6" },
+    "unit.shellType": { sheet: "Verification List", cell: "D7" },
+    "unit.unitType": { sheet: "Verification List", cell: "D8" },
+    "unit.baseHeight": { sheet: "Verification List", cell: "D9" },
+    "unit.wallThickness": { sheet: "Verification List", cell: "D10" },
+    "unit.thermalBreak": { sheet: "Verification List", cell: "D11" },
+    "unit.roofPeak": { sheet: "Verification List", cell: "D12" },
+    "unit.curbrest": { sheet: "Verification List", cell: "D13" },
+    "unit.noa": { sheet: "Verification List", cell: "D14" },
+    "unit.isSeismic": { sheet: "Verification List", cell: "D15" },
+    "unit.location": { sheet: "Verification List", cell: "D16" },
+    "unit.knockdown": { sheet: "Verification List", cell: "D17" },
+    "unit.utl": { sheet: "Verification List", cell: "D18" },
+    "unit.linerMaterial": { sheet: "Verification List", cell: "D19" },
+    "unit.linerGauge": { sheet: "Verification List", cell: "F19" },
+    "unit.skinMaterial": { sheet: "Verification List", cell: "D20" },
+    "unit.skinGauge": { sheet: "Verification List", cell: "F20" },
+    "unit.floorMaterial": { sheet: "Verification List", cell: "D21" },
+    "unit.floorGauge": { sheet: "Verification List", cell: "F21" },
+    "generalComments": { sheet: "Verification List", cell: "D22" }
+  },
+  sqRange: {
+    sheet: "Verification List",
+    startRow: 4,
+    endRow: 25,
+    slotCol: "G",
+    textCol: "H"
+  },
+  columns: {
+    verificationList: {
+      ruleNumber: "B",
+      ruleText: "C",
+      na: "S",
+      detailerCheck: "T",
+      checkerCheck: "V",
+      comments: "Y",
+      initials: "Z"
+    }
+  },
+  ruleCellMappings: {}
+};
+
+rules.forEach(r => {
+  templateMap.ruleCellMappings[r.semanticKey] = {
+    ruleId: r.id,
+    row: r.excelRow,
+    naCell: `S${r.excelRow}`,
+    detailerCell: `T${r.excelRow}`,
+    checkerCell: `V${r.excelRow}`,
+    commentsCell: `Y${r.excelRow}`,
+    initialsCell: `Z${r.excelRow}`
+  };
+});
+
+function sha256(content) {
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+const targetDirs = ["src/rulepack", "resources/rulepack"];
+
+for (const dir of targetDirs) {
+  fs.mkdirSync(dir, { recursive: true });
+
+  const rulesJson = JSON.stringify(rules, null, 2);
+  const templateMapJson = JSON.stringify(templateMap, null, 2);
+  const approvedMappingsJson = JSON.stringify(approvedMappings, null, 2);
+
+  fs.writeFileSync(path.join(dir, "rules.json"), rulesJson, "utf8");
+  fs.writeFileSync(path.join(dir, "template_map.json"), templateMapJson, "utf8");
+  fs.writeFileSync(path.join(dir, "approved_mappings.json"), approvedMappingsJson, "utf8");
+
+  const templatePath = path.join(dir, "template.xlsx");
+  const templateSha = fs.existsSync(templatePath) ? sha256(fs.readFileSync(templatePath)) : "";
+
+  const manifest = {
+    name: "AHU Detailing Verification Rule Pack",
+    version: "13.1.0",
+    generatedAt: new Date().toISOString(),
+    files: {
+      "rules.json": { sha256: sha256(rulesJson), totalRules: rules.length },
+      "template_map.json": { sha256: sha256(templateMapJson) },
+      "approved_mappings.json": { sha256: sha256(approvedMappingsJson) },
+      "template.xlsx": { sha256: templateSha }
+    }
+  };
+
+  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+  console.log(`Successfully generated rulepack bundle in ${dir} with ${rules.length} rules.`);
+}

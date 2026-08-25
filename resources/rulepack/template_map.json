@@ -1,0 +1,1022 @@
+{
+  "templateVersion": "13.1.0",
+  "sheetNames": {
+    "revisionList": "Revision List",
+    "verificationList": "Verification List",
+    "checkInformation": "Check Information",
+    "comments": "Comments",
+    "base": "Base",
+    "drainPan": "Drain Pan",
+    "housing": "Housing",
+    "paperwork": "Paperwork",
+    "internal": "Internal",
+    "coilPanels": "Coil Panels",
+    "reconnects": "Reconnects",
+    "mom": "MOM"
+  },
+  "generalFields": {
+    "unit.detailer": {
+      "sheet": "Verification List",
+      "cell": "D3"
+    },
+    "unit.date": {
+      "sheet": "Verification List",
+      "cell": "D4"
+    },
+    "unit.jobName": {
+      "sheet": "Verification List",
+      "cell": "D5"
+    },
+    "unit.comNumber": {
+      "sheet": "Verification List",
+      "cell": "D6"
+    },
+    "unit.shellType": {
+      "sheet": "Verification List",
+      "cell": "D7"
+    },
+    "unit.unitType": {
+      "sheet": "Verification List",
+      "cell": "D8"
+    },
+    "unit.baseHeight": {
+      "sheet": "Verification List",
+      "cell": "D9"
+    },
+    "unit.wallThickness": {
+      "sheet": "Verification List",
+      "cell": "D10"
+    },
+    "unit.thermalBreak": {
+      "sheet": "Verification List",
+      "cell": "D11"
+    },
+    "unit.roofPeak": {
+      "sheet": "Verification List",
+      "cell": "D12"
+    },
+    "unit.curbrest": {
+      "sheet": "Verification List",
+      "cell": "D13"
+    },
+    "unit.noa": {
+      "sheet": "Verification List",
+      "cell": "D14"
+    },
+    "unit.isSeismic": {
+      "sheet": "Verification List",
+      "cell": "D15"
+    },
+    "unit.location": {
+      "sheet": "Verification List",
+      "cell": "D16"
+    },
+    "unit.knockdown": {
+      "sheet": "Verification List",
+      "cell": "D17"
+    },
+    "unit.utl": {
+      "sheet": "Verification List",
+      "cell": "D18"
+    },
+    "unit.linerMaterial": {
+      "sheet": "Verification List",
+      "cell": "D19"
+    },
+    "unit.linerGauge": {
+      "sheet": "Verification List",
+      "cell": "F19"
+    },
+    "unit.skinMaterial": {
+      "sheet": "Verification List",
+      "cell": "D20"
+    },
+    "unit.skinGauge": {
+      "sheet": "Verification List",
+      "cell": "F20"
+    },
+    "unit.floorMaterial": {
+      "sheet": "Verification List",
+      "cell": "D21"
+    },
+    "unit.floorGauge": {
+      "sheet": "Verification List",
+      "cell": "F21"
+    },
+    "generalComments": {
+      "sheet": "Verification List",
+      "cell": "D22"
+    }
+  },
+  "sqRange": {
+    "sheet": "Verification List",
+    "startRow": 4,
+    "endRow": 25,
+    "slotCol": "G",
+    "textCol": "H"
+  },
+  "columns": {
+    "verificationList": {
+      "ruleNumber": "B",
+      "ruleText": "C",
+      "na": "S",
+      "detailerCheck": "T",
+      "checkerCheck": "V",
+      "comments": "Y",
+      "initials": "Z"
+    }
+  },
+  "ruleCellMappings": {
+    "BASE_LIFTING_LUG_SUPPORT": {
+      "ruleId": "BASE-01",
+      "row": 29,
+      "naCell": "S29",
+      "detailerCell": "T29",
+      "checkerCell": "V29",
+      "commentsCell": "Y29",
+      "initialsCell": "Z29"
+    },
+    "BASE_LIFTING_LUG_CLEARANCE": {
+      "ruleId": "BASE-02",
+      "row": 30,
+      "naCell": "S30",
+      "detailerCell": "T30",
+      "checkerCell": "V30",
+      "commentsCell": "Y30",
+      "initialsCell": "Z30"
+    },
+    "BASE_FLOOR_DRAINS_PRESENT": {
+      "ruleId": "BASE-03",
+      "row": 31,
+      "naCell": "S31",
+      "detailerCell": "T31",
+      "checkerCell": "V31",
+      "commentsCell": "Y31",
+      "initialsCell": "Z31"
+    },
+    "BASE_FLOOR_DRAIN_HOLE_SIZE": {
+      "ruleId": "BASE-04",
+      "row": 32,
+      "naCell": "S32",
+      "detailerCell": "T32",
+      "checkerCell": "V32",
+      "commentsCell": "Y32",
+      "initialsCell": "Z32"
+    },
+    "BASE_DRAIN_PAN_HANDING": {
+      "ruleId": "BASE-05",
+      "row": 33,
+      "naCell": "S33",
+      "detailerCell": "T33",
+      "checkerCell": "V33",
+      "commentsCell": "Y33",
+      "initialsCell": "Z33"
+    },
+    "BASE_FILLER_PLATE_MATERIAL": {
+      "ruleId": "BASE-06",
+      "row": 34,
+      "naCell": "S34",
+      "detailerCell": "T34",
+      "checkerCell": "V34",
+      "commentsCell": "Y34",
+      "initialsCell": "Z34"
+    },
+    "BASE_SPLITS_LOCATIONS": {
+      "ruleId": "BASE-07",
+      "row": 35,
+      "naCell": "S35",
+      "detailerCell": "T35",
+      "checkerCell": "V35",
+      "commentsCell": "Y35",
+      "initialsCell": "Z35"
+    },
+    "BASE_PERIMETER_ANGLE_CODES": {
+      "ruleId": "BASE-08",
+      "row": 37,
+      "naCell": "S37",
+      "detailerCell": "T37",
+      "checkerCell": "V37",
+      "commentsCell": "Y37",
+      "initialsCell": "Z37"
+    },
+    "BASE_PERIMETER_ANGLE_HOLES": {
+      "ruleId": "BASE-09",
+      "row": 38,
+      "naCell": "S38",
+      "detailerCell": "T38",
+      "checkerCell": "V38",
+      "commentsCell": "Y38",
+      "initialsCell": "Z38"
+    },
+    "BASE_SKIN_SEAMS_SUPPORT": {
+      "ruleId": "BASE-10",
+      "row": 40,
+      "naCell": "S40",
+      "detailerCell": "T40",
+      "checkerCell": "V40",
+      "commentsCell": "Y40",
+      "initialsCell": "Z40"
+    },
+    "BASE_FLOOR_SKIN_MAX_SIZE": {
+      "ruleId": "BASE-11",
+      "row": 41,
+      "naCell": "S41",
+      "detailerCell": "T41",
+      "checkerCell": "V41",
+      "commentsCell": "Y41",
+      "initialsCell": "Z41"
+    },
+    "BASE_FLOOR_SKIN_GAUGE": {
+      "ruleId": "BASE-12",
+      "row": 42,
+      "naCell": "S42",
+      "detailerCell": "T42",
+      "checkerCell": "V42",
+      "commentsCell": "Y42",
+      "initialsCell": "Z42"
+    },
+    "BASE_NON_FULL_DRAIN_SUPPORT": {
+      "ruleId": "BASE-13",
+      "row": 43,
+      "naCell": "S43",
+      "detailerCell": "T43",
+      "checkerCell": "V43",
+      "commentsCell": "Y43",
+      "initialsCell": "Z43"
+    },
+    "BASE_SUBFLOOR_PULLBACK": {
+      "ruleId": "BASE-14",
+      "row": 45,
+      "naCell": "S45",
+      "detailerCell": "T45",
+      "checkerCell": "V45",
+      "commentsCell": "Y45",
+      "initialsCell": "Z45"
+    },
+    "BASE_COMPONENT_SUPPORT": {
+      "ruleId": "BASE-15",
+      "row": 47,
+      "naCell": "S47",
+      "detailerCell": "T47",
+      "checkerCell": "V47",
+      "commentsCell": "Y47",
+      "initialsCell": "Z47"
+    },
+    "BASE_FORMED_CHANNELS_CURB_REST": {
+      "ruleId": "BASE-16",
+      "row": 48,
+      "naCell": "S48",
+      "detailerCell": "T48",
+      "checkerCell": "V48",
+      "commentsCell": "Y48",
+      "initialsCell": "Z48"
+    },
+    "BASE_AL_DRAIN_SUPPORTS": {
+      "ruleId": "BASE-17",
+      "row": 51,
+      "naCell": "S51",
+      "detailerCell": "T51",
+      "checkerCell": "V51",
+      "commentsCell": "Y51",
+      "initialsCell": "Z51"
+    },
+    "BASE_FORMED_CHANNELS_MAX_LEN": {
+      "ruleId": "BASE-18",
+      "row": 52,
+      "naCell": "S52",
+      "detailerCell": "T52",
+      "checkerCell": "V52",
+      "commentsCell": "Y52",
+      "initialsCell": "Z52"
+    },
+    "BASE_DRAIN_PAN_DOA_SUPPORTS": {
+      "ruleId": "BASE-19",
+      "row": 53,
+      "naCell": "S53",
+      "detailerCell": "T53",
+      "checkerCell": "V53",
+      "commentsCell": "Y53",
+      "initialsCell": "Z53"
+    },
+    "BASE_NOTES_DIMS_STAMPS": {
+      "ruleId": "BASE-20",
+      "row": 55,
+      "naCell": "S55",
+      "detailerCell": "T55",
+      "checkerCell": "V55",
+      "commentsCell": "Y55",
+      "initialsCell": "Z55"
+    },
+    "BASE_DRAIN_PAN_ASSY_NUM": {
+      "ruleId": "BASE-21",
+      "row": 56,
+      "naCell": "S56",
+      "detailerCell": "T56",
+      "checkerCell": "V56",
+      "commentsCell": "Y56",
+      "initialsCell": "Z56"
+    },
+    "BASE_DRAIN_PAN_BULKHEAD_LOCATING_DIM": {
+      "ruleId": "BASE-22",
+      "row": 58,
+      "naCell": "S58",
+      "detailerCell": "T58",
+      "checkerCell": "V58",
+      "commentsCell": "Y58",
+      "initialsCell": "Z58"
+    },
+    "HOUSING_WALL_MAX_SIZE": {
+      "ruleId": "HOUS-01",
+      "row": 61,
+      "naCell": "S61",
+      "detailerCell": "T61",
+      "checkerCell": "V61",
+      "commentsCell": "Y61",
+      "initialsCell": "Z61"
+    },
+    "HOUSING_CHANNEL_SPACING": {
+      "ruleId": "HOUS-02",
+      "row": 62,
+      "naCell": "S62",
+      "detailerCell": "T62",
+      "checkerCell": "V62",
+      "commentsCell": "Y62",
+      "initialsCell": "Z62"
+    },
+    "HOUSING_HOLE_PATTERN": {
+      "ruleId": "HOUS-03",
+      "row": 63,
+      "naCell": "S63",
+      "detailerCell": "T63",
+      "checkerCell": "V63",
+      "commentsCell": "Y63",
+      "initialsCell": "Z63"
+    },
+    "HOUSING_ROOF_SEALOFF_GAUGE": {
+      "ruleId": "HOUS-04",
+      "row": 64,
+      "naCell": "S64",
+      "detailerCell": "T64",
+      "checkerCell": "V64",
+      "commentsCell": "Y64",
+      "initialsCell": "Z64"
+    },
+    "HOUSING_CORRIDOR_SEALOFF_GAUGE": {
+      "ruleId": "HOUS-05",
+      "row": 65,
+      "naCell": "S65",
+      "detailerCell": "T65",
+      "checkerCell": "V65",
+      "commentsCell": "Y65",
+      "initialsCell": "Z65"
+    },
+    "HOUSING_STACKED_OPENING_CLEANUP": {
+      "ruleId": "HOUS-06",
+      "row": 66,
+      "naCell": "S66",
+      "detailerCell": "T66",
+      "checkerCell": "V66",
+      "commentsCell": "Y66",
+      "initialsCell": "Z66"
+    },
+    "HOUSING_COIL_OPENING_WIDTH_MATCH": {
+      "ruleId": "HOUS-07",
+      "row": 67,
+      "naCell": "S67",
+      "detailerCell": "T67",
+      "checkerCell": "V67",
+      "commentsCell": "Y67",
+      "initialsCell": "Z67"
+    },
+    "HOUSING_OUTDOOR_SKIN_HOLES_REMOVED": {
+      "ruleId": "HOUS-08",
+      "row": 68,
+      "naCell": "S68",
+      "detailerCell": "T68",
+      "checkerCell": "V68",
+      "commentsCell": "Y68",
+      "initialsCell": "Z68"
+    },
+    "HOUSING_DOOR_OPENING_SIZES_MATCH": {
+      "ruleId": "HOUS-09",
+      "row": 69,
+      "naCell": "S69",
+      "detailerCell": "T69",
+      "checkerCell": "V69",
+      "commentsCell": "Y69",
+      "initialsCell": "Z69"
+    },
+    "HOUSING_WALL_PANEL_MAX_106": {
+      "ruleId": "HOUS-10",
+      "row": 70,
+      "naCell": "S70",
+      "detailerCell": "T70",
+      "checkerCell": "V70",
+      "commentsCell": "Y70",
+      "initialsCell": "Z70"
+    },
+    "HOUSING_WALL_HEIGHT_MATCH_UE": {
+      "ruleId": "HOUS-11",
+      "row": 71,
+      "naCell": "S71",
+      "detailerCell": "T71",
+      "checkerCell": "V71",
+      "commentsCell": "Y71",
+      "initialsCell": "Z71"
+    },
+    "HOUSING_NO_HOLES_WITHOUT_CHANNEL_SUPPORT": {
+      "ruleId": "HOUS-12",
+      "row": 72,
+      "naCell": "S72",
+      "detailerCell": "T72",
+      "checkerCell": "V72",
+      "commentsCell": "Y72",
+      "initialsCell": "Z72"
+    },
+    "HOUSING_CHANNEL_START_STOP_WALLS": {
+      "ruleId": "HOUS-13",
+      "row": 73,
+      "naCell": "S73",
+      "detailerCell": "T73",
+      "checkerCell": "V73",
+      "commentsCell": "Y73",
+      "initialsCell": "Z73"
+    },
+    "HOUSING_SKIN_LINER_MATERIALS_MATCH": {
+      "ruleId": "HOUS-14",
+      "row": 74,
+      "naCell": "S74",
+      "detailerCell": "T74",
+      "checkerCell": "V74",
+      "commentsCell": "Y74",
+      "initialsCell": "Z74"
+    },
+    "HOUSING_INSULATION_TYPE_CORRECT": {
+      "ruleId": "HOUS-15",
+      "row": 75,
+      "naCell": "S75",
+      "detailerCell": "T75",
+      "checkerCell": "V75",
+      "commentsCell": "Y75",
+      "initialsCell": "Z75"
+    },
+    "HOUSING_SPLITS_LOCATED_PROPERLY": {
+      "ruleId": "HOUS-16",
+      "row": 76,
+      "naCell": "S76",
+      "detailerCell": "T76",
+      "checkerCell": "V76",
+      "commentsCell": "Y76",
+      "initialsCell": "Z76"
+    },
+    "HOUSING_CORRIDOR_SKIN_OVERLAP": {
+      "ruleId": "HOUS-17",
+      "row": 77,
+      "naCell": "S77",
+      "detailerCell": "T77",
+      "checkerCell": "V77",
+      "commentsCell": "Y77",
+      "initialsCell": "Z77"
+    },
+    "HOUSING_BULKHEAD_SUPPORT_PRESENT": {
+      "ruleId": "HOUS-18",
+      "row": 78,
+      "naCell": "S78",
+      "detailerCell": "T78",
+      "checkerCell": "V78",
+      "commentsCell": "Y78",
+      "initialsCell": "Z78"
+    },
+    "HOUSING_OUTDOOR_GALV_ROOF_SKIN": {
+      "ruleId": "HOUS-19",
+      "row": 93,
+      "naCell": "S93",
+      "detailerCell": "T93",
+      "checkerCell": "V93",
+      "commentsCell": "Y93",
+      "initialsCell": "Z93"
+    },
+    "HOUSING_ROOF_OPENING_SHIPPING_COVERS": {
+      "ruleId": "HOUS-20",
+      "row": 94,
+      "naCell": "S94",
+      "detailerCell": "T94",
+      "checkerCell": "V94",
+      "commentsCell": "Y94",
+      "initialsCell": "Z94"
+    },
+    "HOUSING_THERMAL_BREAK_SETTING": {
+      "ruleId": "HOUS-21",
+      "row": 204,
+      "naCell": "S204",
+      "detailerCell": "T204",
+      "checkerCell": "V204",
+      "commentsCell": "Y204",
+      "initialsCell": "Z204"
+    },
+    "FAN_EBM_SEISMIC_OR_LARGE_MM": {
+      "ruleId": "FAN-01",
+      "row": 171,
+      "naCell": "S171",
+      "detailerCell": "T171",
+      "checkerCell": "V171",
+      "commentsCell": "Y171",
+      "initialsCell": "Z171"
+    },
+    "FAN_EBM_STANDARD_SMALL_MM": {
+      "ruleId": "FAN-02",
+      "row": 172,
+      "naCell": "S172",
+      "detailerCell": "T172",
+      "checkerCell": "V172",
+      "commentsCell": "Y172",
+      "initialsCell": "Z172"
+    },
+    "FAN_WALL_GENERATION_PARAM": {
+      "ruleId": "FAN-03",
+      "row": 173,
+      "naCell": "S173",
+      "detailerCell": "T173",
+      "checkerCell": "V173",
+      "commentsCell": "Y173",
+      "initialsCell": "Z173"
+    },
+    "FAN_TWIN_CITY_FRAME_SIZE": {
+      "ruleId": "FAN-04",
+      "row": 174,
+      "naCell": "S174",
+      "detailerCell": "T174",
+      "checkerCell": "V174",
+      "commentsCell": "Y174",
+      "initialsCell": "Z174"
+    },
+    "FAN_MANUAL_DRIVE_KITS": {
+      "ruleId": "FAN-05",
+      "row": 175,
+      "naCell": "S175",
+      "detailerCell": "T175",
+      "checkerCell": "V175",
+      "commentsCell": "Y175",
+      "initialsCell": "Z175"
+    },
+    "INTERNAL_BULKHEAD_MATERIAL_MATCH": {
+      "ruleId": "INT-01",
+      "row": 178,
+      "naCell": "S178",
+      "detailerCell": "T178",
+      "checkerCell": "V178",
+      "commentsCell": "Y178",
+      "initialsCell": "Z178"
+    },
+    "INTERNAL_SQ_DEVIATIONS_MATCH": {
+      "ruleId": "INT-02",
+      "row": 179,
+      "naCell": "S179",
+      "detailerCell": "T179",
+      "checkerCell": "V179",
+      "commentsCell": "Y179",
+      "initialsCell": "Z179"
+    },
+    "INTERNAL_FILTER_DOOR_CLEARANCE": {
+      "ruleId": "INT-03",
+      "row": 181,
+      "naCell": "S181",
+      "detailerCell": "T181",
+      "checkerCell": "V181",
+      "commentsCell": "Y181",
+      "initialsCell": "Z181"
+    },
+    "UTL_DRAIN_PAN_ANGLE_SKIN_COVERAGE": {
+      "ruleId": "UTL-01",
+      "row": 183,
+      "naCell": "S183",
+      "detailerCell": "T183",
+      "checkerCell": "V183",
+      "commentsCell": "Y183",
+      "initialsCell": "Z183"
+    },
+    "UTL_WALL_PANELS_HEIGHT_REDUCTION": {
+      "ruleId": "UTL-02",
+      "row": 185,
+      "naCell": "S185",
+      "detailerCell": "T185",
+      "checkerCell": "V185",
+      "commentsCell": "Y185",
+      "initialsCell": "Z185"
+    },
+    "UTL_PERIMETER_ANGLE_SPLIT_NOTCH": {
+      "ruleId": "UTL-03",
+      "row": 186,
+      "naCell": "S186",
+      "detailerCell": "T186",
+      "checkerCell": "V186",
+      "commentsCell": "Y186",
+      "initialsCell": "Z186"
+    },
+    "UTL_HEADER_PANEL_Y_OFFSET": {
+      "ruleId": "UTL-04",
+      "row": 187,
+      "naCell": "S187",
+      "detailerCell": "T187",
+      "checkerCell": "V187",
+      "commentsCell": "Y187",
+      "initialsCell": "Z187"
+    },
+    "UTL_INTERNAL_BLANKOFF_NOTCH": {
+      "ruleId": "UTL-05",
+      "row": 188,
+      "naCell": "S188",
+      "detailerCell": "T188",
+      "checkerCell": "V188",
+      "commentsCell": "Y188",
+      "initialsCell": "Z188"
+    },
+    "UTL_VESTIBULE_NO_UTL_RULE": {
+      "ruleId": "UTL-06",
+      "row": 189,
+      "naCell": "S189",
+      "detailerCell": "T189",
+      "checkerCell": "V189",
+      "commentsCell": "Y189",
+      "initialsCell": "Z189"
+    },
+    "UTL_SHARED_WALL_FOOTERS": {
+      "ruleId": "UTL-07",
+      "row": 190,
+      "naCell": "S190",
+      "detailerCell": "T190",
+      "checkerCell": "V190",
+      "commentsCell": "Y190",
+      "initialsCell": "Z190"
+    },
+    "KNOCKDOWN_RECONNECTS_SUBASSEMBLY": {
+      "ruleId": "KNOCK-01",
+      "row": 193,
+      "naCell": "S193",
+      "detailerCell": "T193",
+      "checkerCell": "V193",
+      "commentsCell": "Y193",
+      "initialsCell": "Z193"
+    },
+    "KNOCKDOWN_WELDED_STANDS_FIT": {
+      "ruleId": "KNOCK-02",
+      "row": 194,
+      "naCell": "S194",
+      "detailerCell": "T194",
+      "checkerCell": "V194",
+      "commentsCell": "Y194",
+      "initialsCell": "Z194"
+    },
+    "KNOCKDOWN_COMPONENT_OPENING_FIT": {
+      "ruleId": "KNOCK-03",
+      "row": 195,
+      "naCell": "S195",
+      "detailerCell": "T195",
+      "checkerCell": "V195",
+      "commentsCell": "Y195",
+      "initialsCell": "Z195"
+    },
+    "KNOCKDOWN_HOUSING_SPLITS_EVEN": {
+      "ruleId": "KNOCK-04",
+      "row": 196,
+      "naCell": "S196",
+      "detailerCell": "T196",
+      "checkerCell": "V196",
+      "commentsCell": "Y196",
+      "initialsCell": "Z196"
+    },
+    "COIL_PANEL_MM_391_100006_026": {
+      "ruleId": "COIL-01",
+      "row": 198,
+      "naCell": "S198",
+      "detailerCell": "T198",
+      "checkerCell": "V198",
+      "commentsCell": "Y198",
+      "initialsCell": "Z198"
+    },
+    "COIL_PANEL_WALL_OPENING_MATCH": {
+      "ruleId": "COIL-02",
+      "row": 199,
+      "naCell": "S199",
+      "detailerCell": "T199",
+      "checkerCell": "V199",
+      "commentsCell": "Y199",
+      "initialsCell": "Z199"
+    },
+    "COIL_PANEL_HELD_NO_BOM_ASSEMBLY": {
+      "ruleId": "COIL-03",
+      "row": 200,
+      "naCell": "S200",
+      "detailerCell": "T200",
+      "checkerCell": "V200",
+      "commentsCell": "Y200",
+      "initialsCell": "Z200"
+    },
+    "COIL_PANEL_AIRFLOW_DIRECTION": {
+      "ruleId": "COIL-04",
+      "row": 201,
+      "naCell": "S201",
+      "detailerCell": "T201",
+      "checkerCell": "V201",
+      "commentsCell": "Y201",
+      "initialsCell": "Z201"
+    },
+    "COIL_PANEL_RETURN_VENT_DRAIN_OFF": {
+      "ruleId": "COIL-05",
+      "row": 202,
+      "naCell": "S202",
+      "detailerCell": "T202",
+      "checkerCell": "V202",
+      "commentsCell": "Y202",
+      "initialsCell": "Z202"
+    },
+    "COIL_PANEL_STAGGERED_VENT_DRAIN_OFF": {
+      "ruleId": "COIL-06",
+      "row": 203,
+      "naCell": "S203",
+      "detailerCell": "T203",
+      "checkerCell": "V203",
+      "commentsCell": "Y203",
+      "initialsCell": "Z203"
+    },
+    "COIL_PANEL_HELD_MARKED_ON_PACKET": {
+      "ruleId": "COIL-07",
+      "row": 205,
+      "naCell": "S205",
+      "detailerCell": "T205",
+      "checkerCell": "V205",
+      "commentsCell": "Y205",
+      "initialsCell": "Z205"
+    },
+    "COIL_PANEL_BOM_BALLOONS_PRESENT": {
+      "ruleId": "COIL-08",
+      "row": 206,
+      "naCell": "S206",
+      "detailerCell": "T206",
+      "checkerCell": "V206",
+      "commentsCell": "Y206",
+      "initialsCell": "Z206"
+    },
+    "RECONNECT_SEISMIC_MM_391_10002_004": {
+      "ruleId": "RECON-01",
+      "row": 208,
+      "naCell": "S208",
+      "detailerCell": "T208",
+      "checkerCell": "V208",
+      "commentsCell": "Y208",
+      "initialsCell": "Z208"
+    },
+    "RECONNECT_TYPE_CORRECT": {
+      "ruleId": "RECON-02",
+      "row": 209,
+      "naCell": "S209",
+      "detailerCell": "T209",
+      "checkerCell": "V209",
+      "commentsCell": "Y209",
+      "initialsCell": "Z209"
+    },
+    "RECONNECT_LINER_MATERIAL_MATCH": {
+      "ruleId": "RECON-03",
+      "row": 210,
+      "naCell": "S210",
+      "detailerCell": "T210",
+      "checkerCell": "V210",
+      "commentsCell": "Y210",
+      "initialsCell": "Z210"
+    },
+    "RECONNECT_QUANTITY_PER_SPLIT": {
+      "ruleId": "RECON-04",
+      "row": 211,
+      "naCell": "S211",
+      "detailerCell": "T211",
+      "checkerCell": "V211",
+      "commentsCell": "Y211",
+      "initialsCell": "Z211"
+    },
+    "RECONNECT_IW_IH_TUNNEL_FIT": {
+      "ruleId": "RECON-05",
+      "row": 212,
+      "naCell": "S212",
+      "detailerCell": "T212",
+      "checkerCell": "V212",
+      "commentsCell": "Y212",
+      "initialsCell": "Z212"
+    },
+    "DPAN_BASE_OPENING_FIT": {
+      "ruleId": "DPAN-01",
+      "row": 214,
+      "naCell": "S214",
+      "detailerCell": "T214",
+      "checkerCell": "V214",
+      "commentsCell": "Y214",
+      "initialsCell": "Z214"
+    },
+    "DPAN_SQ_SUPPORTS_RISERS_QTY": {
+      "ruleId": "DPAN-02",
+      "row": 215,
+      "naCell": "S215",
+      "detailerCell": "T215",
+      "checkerCell": "V215",
+      "commentsCell": "Y215",
+      "initialsCell": "Z215"
+    },
+    "DPAN_SUPPORTS_RISERS_MATCH_BOM": {
+      "ruleId": "DPAN-03",
+      "row": 216,
+      "naCell": "S216",
+      "detailerCell": "T216",
+      "checkerCell": "V216",
+      "commentsCell": "Y216",
+      "initialsCell": "Z216"
+    },
+    "DPAN_LADDER_RACK_HOLES": {
+      "ruleId": "DPAN-04",
+      "row": 217,
+      "naCell": "S217",
+      "detailerCell": "T217",
+      "checkerCell": "V217",
+      "commentsCell": "Y217",
+      "initialsCell": "Z217"
+    },
+    "DPAN_HANDING_CORRECT": {
+      "ruleId": "DPAN-05",
+      "row": 218,
+      "naCell": "S218",
+      "detailerCell": "T218",
+      "checkerCell": "V218",
+      "commentsCell": "Y218",
+      "initialsCell": "Z218"
+    },
+    "DPAN_WIDTH_REDUCED_1_25": {
+      "ruleId": "DPAN-06",
+      "row": 219,
+      "naCell": "S219",
+      "detailerCell": "T219",
+      "checkerCell": "V219",
+      "commentsCell": "Y219",
+      "initialsCell": "Z219"
+    },
+    "DPAN_3PIECE_SLOPE_CORRECT": {
+      "ruleId": "DPAN-07",
+      "row": 220,
+      "naCell": "S220",
+      "detailerCell": "T220",
+      "checkerCell": "V220",
+      "commentsCell": "Y220",
+      "initialsCell": "Z220"
+    },
+    "DPAN_BASE_OPENINGS_MATCH_UE": {
+      "ruleId": "DPAN-08",
+      "row": 221,
+      "naCell": "S221",
+      "detailerCell": "T221",
+      "checkerCell": "V221",
+      "commentsCell": "Y221",
+      "initialsCell": "Z221"
+    },
+    "DPAN_FLANGES_FIT_PERIMETER_ANGLES": {
+      "ruleId": "DPAN-09",
+      "row": 222,
+      "naCell": "S222",
+      "detailerCell": "T222",
+      "checkerCell": "V222",
+      "commentsCell": "Y222",
+      "initialsCell": "Z222"
+    },
+    "DPAN_MASTER_MODEL_391_10006_021": {
+      "ruleId": "DPAN-10",
+      "row": 223,
+      "naCell": "S223",
+      "detailerCell": "T223",
+      "checkerCell": "V223",
+      "commentsCell": "Y223",
+      "initialsCell": "Z223"
+    },
+    "PAPERWORK_BASERAIL_DRAIN_PAN_LOCATING_DIM": {
+      "ruleId": "PAPER-01",
+      "row": 149,
+      "naCell": "S149",
+      "detailerCell": "T149",
+      "checkerCell": "V149",
+      "commentsCell": "Y149",
+      "initialsCell": "Z149"
+    },
+    "PAPERWORK_BASERAIL_BOM_MATERIAL_GAUGE": {
+      "ruleId": "PAPER-02",
+      "row": 150,
+      "naCell": "S150",
+      "detailerCell": "T150",
+      "checkerCell": "V150",
+      "commentsCell": "Y150",
+      "initialsCell": "Z150"
+    },
+    "PAPERWORK_BASERAIL_DRAIN_PAN_ASSY_NUM": {
+      "ruleId": "PAPER-03",
+      "row": 151,
+      "naCell": "S151",
+      "detailerCell": "T151",
+      "checkerCell": "V151",
+      "commentsCell": "Y151",
+      "initialsCell": "Z151"
+    },
+    "PAPERWORK_BASERAIL_REQUIRED_DIMS_NOTES": {
+      "ruleId": "PAPER-04",
+      "row": 152,
+      "naCell": "S152",
+      "detailerCell": "T152",
+      "checkerCell": "V152",
+      "commentsCell": "Y152",
+      "initialsCell": "Z152"
+    },
+    "PAPERWORK_WALL_BOM_MATERIAL_GAUGE": {
+      "ruleId": "PAPER-05",
+      "row": 155,
+      "naCell": "S155",
+      "detailerCell": "T155",
+      "checkerCell": "V155",
+      "commentsCell": "Y155",
+      "initialsCell": "Z155"
+    },
+    "PAPERWORK_WALL_INSULATION_CORRECT": {
+      "ruleId": "PAPER-06",
+      "row": 156,
+      "naCell": "S156",
+      "detailerCell": "T156",
+      "checkerCell": "V156",
+      "commentsCell": "Y156",
+      "initialsCell": "Z156"
+    },
+    "PAPERWORK_SKID_BOM_MATERIAL_GAUGE": {
+      "ruleId": "PAPER-07",
+      "row": 159,
+      "naCell": "S159",
+      "detailerCell": "T159",
+      "checkerCell": "V159",
+      "commentsCell": "Y159",
+      "initialsCell": "Z159"
+    },
+    "PAPERWORK_SKID_BULKHEADS_DIMENSIONED": {
+      "ruleId": "PAPER-08",
+      "row": 160,
+      "naCell": "S160",
+      "detailerCell": "T160",
+      "checkerCell": "V160",
+      "commentsCell": "Y160",
+      "initialsCell": "Z160"
+    },
+    "PAPERWORK_SKID_INTERNALS_ASSY_NUM": {
+      "ruleId": "PAPER-09",
+      "row": 161,
+      "naCell": "S161",
+      "detailerCell": "T161",
+      "checkerCell": "V161",
+      "commentsCell": "Y161",
+      "initialsCell": "Z161"
+    },
+    "MOM_DETAILER_DOC_UPLOADED": {
+      "ruleId": "MOM-01",
+      "row": 164,
+      "naCell": "S164",
+      "detailerCell": "T164",
+      "checkerCell": "V164",
+      "commentsCell": "Y164",
+      "initialsCell": "Z164"
+    },
+    "MOM_MAPICS_BOM_CLEAN": {
+      "ruleId": "MOM-02",
+      "row": 165,
+      "naCell": "S165",
+      "detailerCell": "T165",
+      "checkerCell": "V165",
+      "commentsCell": "Y165",
+      "initialsCell": "Z165"
+    },
+    "MOM_SHELL_GENERATION_SETTING": {
+      "ruleId": "MOM-03",
+      "row": 166,
+      "naCell": "S166",
+      "detailerCell": "T166",
+      "checkerCell": "V166",
+      "commentsCell": "Y166",
+      "initialsCell": "Z166"
+    },
+    "ISG_PART_SELECT_RUN": {
+      "ruleId": "ISG-01",
+      "row": 168,
+      "naCell": "S168",
+      "detailerCell": "T168",
+      "checkerCell": "V168",
+      "commentsCell": "Y168",
+      "initialsCell": "Z168"
+    },
+    "ISG_SURFACE_SUMMARY_NO_DUPLICATES": {
+      "ruleId": "ISG-02",
+      "row": 169,
+      "naCell": "S169",
+      "detailerCell": "T169",
+      "checkerCell": "V169",
+      "commentsCell": "Y169",
+      "initialsCell": "Z169"
+    }
+  }
+}

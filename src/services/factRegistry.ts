@@ -139,27 +139,32 @@ export function extractFactsFromGraph(graph: NormalizedXmlGraph): Record<string,
     '/root:AHU/curbOptions/hasCurbRest'
   );
 
-  // Regulatory & Ratings (Require Confirmation)
+  // Regulatory & Ratings (Derived from unitConstructionType: Standard, IBC, OSHPD, NOA)
+  const constType = graph.unitOptions.unitConstructionType || 'Standard';
+  const isSeismic = constType === 'IBC' || constType === 'OSHPD';
+  const isNoa = constType === 'NOA';
+  const isRecognized = ['Standard', 'IBC', 'OSHPD', 'NOA'].includes(constType);
+
   facts['unit.noa'] = createFact(
     'unit.noa',
     'Notice of Acceptance (NOA)',
     'Ratings & Options',
-    null,
-    'Unknown',
-    'RequiresConfirmation',
-    undefined,
-    'Specify Florida/Miami-Dade NOA wind load rating if applicable.'
+    isNoa ? 'NOA' : 'N/A',
+    isRecognized ? 'Derived' : 'Unknown',
+    isRecognized ? 'Authoritative' : 'RequiresConfirmation',
+    '/root:AHU/unitOptions/unitConstructionType',
+    isRecognized ? undefined : `Unrecognized construction type '${constType}'. Specify Florida/Miami-Dade NOA wind load rating if applicable.`
   );
 
   facts['unit.isSeismic'] = createFact(
     'unit.isSeismic',
     'Seismic Certification Required',
     'Ratings & Options',
-    null,
-    'Unknown',
-    'RequiresConfirmation',
-    undefined,
-    'Verify if seismic IBC/OSHPD compliance and seismic reconnects are specified.'
+    isSeismic,
+    isRecognized ? 'Derived' : 'Unknown',
+    isRecognized ? 'Authoritative' : 'RequiresConfirmation',
+    '/root:AHU/unitOptions/unitConstructionType',
+    isRecognized ? undefined : `Unrecognized construction type '${constType}'. Verify if seismic IBC/OSHPD compliance and seismic reconnects are specified.`
   );
 
   facts['unit.location'] = createFact(

@@ -7,7 +7,8 @@ export function exportToExcel(
   sqItems: SpecialQuote[],
   checklists: ChecklistInstance[],
   rules: RuleDefinition[],
-  fileName?: string
+  fileName?: string,
+  isDraft: boolean = false
 ): void {
   // Build a multi-tab workbook representing the official verification deliverable
   const wb = XLSX.utils.book_new();
@@ -16,7 +17,7 @@ export function exportToExcel(
   const revData = [
     ['REVISION'],
     ['SUBMITTED BY:', 'REV. LEVEL:', 'REV. DATE:', 'DESCRIPTION', 'APPROVAL DATE:', 'APPROVED BY:'],
-    ['Tanner Dean', 13, new Date().toLocaleDateString(), 'Automated Ingestion & Verification Export', new Date().toLocaleDateString(), 'BB']
+    ['Tanner Dean', 13, new Date().toLocaleDateString(), isDraft ? 'Draft Incomplete Detailing Export' : 'Automated Ingestion & Verification Export', new Date().toLocaleDateString(), 'BB']
   ];
   const wsRev = XLSX.utils.aoa_to_sheet(revData);
   XLSX.utils.book_append_sheet(wb, wsRev, 'Revision List');
@@ -24,7 +25,7 @@ export function exportToExcel(
   // 2. Verification List Sheet
   const vlData: (string | number)[][] = [];
   vlData.push([]);
-  vlData.push(['', 'UNIT DETAILING VERIFICATION LIST', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+  vlData.push(['', isDraft ? 'UNIT DETAILING VERIFICATION LIST [DRAFT - INCOMPLETE]' : 'UNIT DETAILING VERIFICATION LIST', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
   vlData.push(['', 'DETAILER:', facts['unit.detailer']?.value || '', '', '', '', 'SQs & Deviation Items Related to Detailing']);
   vlData.push(['', 'DATE:', facts['unit.date']?.value || new Date().toISOString().split('T')[0]]);
   vlData.push(['', 'JOB NAME:', facts['unit.jobName']?.value || '']);
@@ -44,7 +45,7 @@ export function exportToExcel(
   vlData.push(['', 'LINER MATERIAL', facts['unit.linerMaterial']?.value || 'STL GALV', 'GA', facts['unit.linerGauge']?.value || 22]);
   vlData.push(['', 'SKIN MATERIAL', facts['unit.skinMaterial']?.value || 'STL GALV PPC', 'GA', facts['unit.skinGauge']?.value || 18]);
   vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);
-  vlData.push(['', 'Additional Comments:', 'Verified against Config.xml automated pipeline.']);
+  vlData.push(['', 'Additional Comments:', isDraft ? '[DRAFT - INCOMPLETE AUDIT] Verified against Config.xml pipeline.' : 'Verified against Config.xml automated pipeline.']);
 
   // Fill SQs in rows 3..24 (1..22 slots)
   for (let s = 1; s <= 22; s++) {

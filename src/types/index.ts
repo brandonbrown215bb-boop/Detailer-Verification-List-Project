@@ -3,6 +3,8 @@ export type FactConfidence = 'Authoritative' | 'RequiresConfirmation';
 export type RuleApplicability = 'Applicable' | 'NotApplicable' | 'NeedsInput';
 export type CheckStatus = 'Incomplete' | 'Passed' | 'NA' | 'Flagged';
 export type RuleScope = 'Unit' | 'Skid' | 'Segment' | 'Component';
+export type ThemeMode = 'dark' | 'light' | 'system';
+export type SkidViewMode = 'cards' | 'grid';
 
 export interface Fact<T = any> {
   key: string;
@@ -96,6 +98,7 @@ export interface NormalizedXmlGraph {
   unitOptions: {
     unitType: string;
     brandOption: string;
+    unitConstructionType: string;
     washdown: boolean;
     knockdown: boolean;
     hasUTL: boolean;
@@ -173,6 +176,36 @@ export interface ChecklistInstance {
   checkerComment?: string;
   updatedAt: string;
   factTraces: Array<{ key: string; label: string; value: any; status: FactStatus }>;
+}
+
+export interface CellCoordinate {
+  sheet: string;
+  cell: string;
+}
+
+export interface RuleCellMapping {
+  ruleId: string;
+  row: number;
+  naCell: string;
+  detailerCell: string;
+  checkerCell: string;
+  commentsCell: string;
+  initialsCell: string;
+}
+
+export interface SqRangeMapping {
+  sheet: string;
+  startRow: number;
+  endRow: number;
+  slotCol: string;
+  textCol: string;
+}
+
+export interface TemplateMap {
+  templateVersion: string;
+  generalFields: Record<string, CellCoordinate>;
+  sqRange: SqRangeMapping;
+  ruleCellMappings: Record<string, RuleCellMapping>;
 }
 
 export interface DvlProjectFile {

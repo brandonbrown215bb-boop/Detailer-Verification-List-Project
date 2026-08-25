@@ -4,16 +4,21 @@ import {
   Fact,
   SpecialQuote,
   ChecklistInstance,
-  CheckStatus
+  CheckStatus,
+  DvlProjectFile,
+  ThemeMode
 } from './types';
 import { parseAhuXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
 import { RULES_CATALOG } from './services/rulesCatalog';
 import { generateChecklists } from './services/ruleEvaluator';
-import { exportToExcel } from './services/excelExporter';
 import { createDvlProject, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
+import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
+import { desktopBridge } from './services/desktopBridge';
 import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
 
+import { HomePage } from './components/HomePage';
+import { ManualUnitModal } from './components/ManualUnitModal';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GeneralUnitTab } from './components/GeneralUnitTab';
@@ -21,7 +26,8 @@ import { SkidViewTab } from './components/SkidViewTab';
 import { ResolutionCenterModal } from './components/ResolutionCenterModal';
 import { PreFlightModal } from './components/PreFlightModal';
 import { OmniSearchModal } from './components/OmniSearchModal';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { SettingsModal } from './components/SettingsModal';
+import { AlertCircle, RefreshCw, CheckCircle2, FileSpreadsheet, Folder } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -49,13 +55,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-screen w-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-          <div className="max-w-xl w-full p-6 rounded-2xl bg-slate-900 border border-red-500/30 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-400">
+        <div className="h-screen w-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-6">
+          <div className="max-w-xl w-full p-6 rounded-2xl bg-white dark:bg-slate-900 border border-red-500/30 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-500">
               <AlertCircle className="w-6 h-6" />
               <h2 className="text-lg font-bold">Application Error</h2>
             </div>
-            <p className="text-xs text-slate-300 font-mono bg-slate-950 p-3 rounded border border-slate-800 overflow-x-auto">
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800 overflow-x-auto">
               {this.state.error?.message || 'An unexpected rendering error occurred.'}
             </p>
             <button
@@ -74,219 +80,387 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const AppContent: React.FC = () => {
-  // Synchronous initial parse
-  const [rawXml, setRawXml] = useState<string>(SAMPLE_CONFIG_XML);
-  const [graph, setGraph] = useState<NormalizedXmlGraph>(() => {
-    try {
-      return parseAhuXml(SAMPLE_CONFIG_XML);
-    } catch (e) {
-      console.error('Initial XML parse error:', e);
-      throw e;
-    }
-  });
+  // Navigation & Project Active State (Defaults to false = Landing Home Page)
+  const [isProjectLoaded, setIsProjectLoaded] = useState<boolean>(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
+  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(() => loadAutosave());
 
-  const [facts, setFacts] = useState<Record<string, Fact>>(() => {
-    try {
-      const g = parseAhuXml(SAMPLE_CONFIG_XML);
-      return extractFactsFromGraph(g);
-    } catch (e) {
-      return {};
-    }
-  });
+  // Project Workspace State
+  const [rawXml, setRawXml] = useState<string>('');
+  const [graph, setGraph] = useState<NormalizedXmlGraph | null>(null);
+  const [facts, setFacts] = useState<Record<string, Fact>>({});
+  const [sqItems, setSqItems] = useState<SpecialQuote[]>([]);
+  const [checklists, setChecklists] = useState<ChecklistInstance[]>([]);
+  const [generalComments, setGeneralComments] = useState<string>(
+    'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
+  );
 
-  const [sqItems, setSqItems] = useState<SpecialQuote[]>([
-    {
-      slot: 1,
-      id: 'sq-1',
-      text: 'Custom drain pan depth 3.5 in. with copper downspout connection',
-      linkedSkidId: 'skid-3',
-      initials: 'TD',
-      isCompleted: true
-    },
-    {
-      slot: 2,
-      id: 'sq-2',
-      text: 'Dual 630 EBM Fan Wall array with individual disconnects',
-      linkedSkidId: 'skid-4',
-      initials: 'TD',
-      isCompleted: false
-    }
-  ]);
-
-  const [checklists, setChecklists] = useState<ChecklistInstance[]>(() => {
-    try {
-      const g = parseAhuXml(SAMPLE_CONFIG_XML);
-      const f = extractFactsFromGraph(g);
-      return generateChecklists(RULES_CATALOG, g, f);
-    } catch (e) {
-      return [];
-    }
-  });
-
-  const [generalComments, setGeneralComments] = useState<string>('Automated verification session against Config.xml.');
-
-  // UI State
+  // Active view: 'general' or skid ID ('skid-1', 'skid-2', etc.)
   const [activeTab, setActiveTab] = useState<string>('general');
-  const [isResolutionOpen, setIsResolutionOpen] = useState<boolean>(false);
-  const [isPreFlightOpen, setIsPreFlightOpen] = useState<boolean>(false);
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
 
-  // Initialize from XML
+  // Modals & Navigation state
+  const [isResolutionOpen, setIsResolutionOpen] = useState(false);
+  const [isPreFlightOpen, setIsPreFlightOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Sidebar Collapse state (persisted in localStorage)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('dvl_sidebar_collapsed') === 'true';
+  });
+
+  // 3-Way Theme Mode state ('dark' | 'light' | 'system')
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('dvl_theme_mode') as ThemeMode;
+    return saved || 'dark';
+  });
+
+  // Live Autosave status tracking
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+
+  // Export success toast state
+  const [exportNotice, setExportNotice] = useState<{ fileName: string; filePath?: string } | null>(null);
+
+  // Apply Theme Mode class to document element
+  useEffect(() => {
+    const applyTheme = (mode: ThemeMode) => {
+      let isDark = true;
+      if (mode === 'light') isDark = false;
+      else if (mode === 'dark') isDark = true;
+      else if (mode === 'system') isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    applyTheme(themeMode);
+    localStorage.setItem('dvl_theme_mode', themeMode);
+
+    if (themeMode === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e: MediaQueryListEvent) => {
+        if (e.matches) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+      };
+      mq.addEventListener('change', listener);
+      return () => mq.removeEventListener('change', listener);
+    }
+  }, [themeMode]);
+
+  // Persist sidebar collapsed state
+  useEffect(() => {
+    localStorage.setItem('dvl_sidebar_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
+  // Autosave when active data changes
+  useEffect(() => {
+    if (isProjectLoaded && graph && facts && sqItems && checklists) {
+      const proj = createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
+      autosaveToLocal(proj);
+      setAutosavedProject(proj);
+      setLastSavedAt(new Date().toISOString());
+    }
+  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments]);
+
+  // Handler for loading new XML
   const loadXmlData = useCallback((xmlString: string) => {
     try {
-      const parsedGraph = parseAhuXml(xmlString);
-      const extractedFacts = extractFactsFromGraph(parsedGraph);
-      const initialChecks = generateChecklists(RULES_CATALOG, parsedGraph, extractedFacts);
+      const newGraph = parseAhuXml(xmlString);
+      const newFacts = extractFactsFromGraph(newGraph);
+      const newChecklists = generateChecklists(RULES_CATALOG, newGraph, newFacts);
 
       setRawXml(xmlString);
-      setGraph(parsedGraph);
-      setFacts(extractedFacts);
-      setChecklists(initialChecks);
-    } catch (err) {
-      console.error('Error parsing XML:', err);
-      alert('Error parsing XML file: ' + (err as Error).message);
+      setGraph(newGraph);
+      setFacts(newFacts);
+      setChecklists(newChecklists);
+      setSqItems([]);
+      setActiveTab('general');
+      setIsProjectLoaded(true);
+    } catch (err: any) {
+      alert(`Error parsing AHU XML: ${err.message}`);
     }
   }, []);
 
-  // Re-evaluate checklists whenever facts change
-  const handleUpdateFact = (key: string, value: any, note?: string) => {
-    const updatedFacts = overrideFact(facts, key, value, 'Detailer', note);
-    setFacts(updatedFacts);
-
-    if (graph) {
-      const updatedChecks = generateChecklists(RULES_CATALOG, graph, updatedFacts, checklists);
-      setChecklists(updatedChecks);
+  // Handler for loading saved .dvl project
+  const handleOpenDvl = useCallback((project: DvlProjectFile) => {
+    try {
+      setGraph(project.normalizedGraph);
+      setFacts(project.factRegistry);
+      setSqItems(project.sqItems || []);
+      setChecklists(project.checklistInstances || []);
+      setRawXml(project.sourceXml?.rawXml || '');
+      setGeneralComments(project.generalComments || '');
+      setActiveTab('general');
+      setIsProjectLoaded(true);
+    } catch (err: any) {
+      alert(`Error loading .dvl project: ${err.message}`);
     }
-  };
+  }, []);
 
-  const handleRevertFact = (key: string) => {
-    const updatedFacts = revertFact(facts, key);
-    setFacts(updatedFacts);
-
-    if (graph) {
-      const updatedChecks = generateChecklists(RULES_CATALOG, graph, updatedFacts, checklists);
-      setChecklists(updatedChecks);
+  // Handler for creating manual unit
+  const handleManualCreate = useCallback((config: ManualUnitConfig) => {
+    try {
+      const manual = createManualUnit(config);
+      setGraph(manual.graph);
+      setFacts(manual.facts);
+      setChecklists(manual.checklists);
+      setSqItems(manual.sqItems);
+      setRawXml(manual.rawXml);
+      setGeneralComments(manual.generalComments);
+      setActiveTab('general');
+      setIsProjectLoaded(true);
+    } catch (err: any) {
+      alert(`Error creating manual unit: ${err.message}`);
     }
-  };
+  }, []);
 
-  const handleBatchResolveDefaults = () => {
-    let currentFacts = { ...facts };
-
-    // Set standard defaults for known required unconfirmed facts
-    if (currentFacts['unit.isSeismic']) {
-      currentFacts = overrideFact(currentFacts, 'unit.isSeismic', false, 'Detailer', 'Standard Non-Seismic Default');
+  // Handler for resuming autosave
+  const handleResumeAutosave = useCallback(() => {
+    if (autosavedProject) {
+      handleOpenDvl(autosavedProject);
     }
-    if (currentFacts['unit.noa']) {
-      currentFacts = overrideFact(currentFacts, 'unit.noa', 'N/A', 'Detailer', 'Standard Wind Load Default');
-    }
+  }, [autosavedProject, handleOpenDvl]);
 
-    // Approve derived weights for all skids
-    if (graph) {
-      graph.skids.forEach((s) => {
-        const wKey = `skid.${s.id}.weight`;
-        if (currentFacts[wKey]) {
-          currentFacts = overrideFact(currentFacts, wKey, s.calculatedWeight, 'Detailer', 'Approved Calculated Weight');
+  // Handler for clearing autosave
+  const handleClearAutosave = useCallback(() => {
+    try {
+      localStorage.removeItem('ahu_dvl_autosave');
+      setAutosavedProject(null);
+      setLastSavedAt(null);
+    } catch (e) {
+      console.warn('Failed to clear autosave:', e);
+    }
+  }, []);
+
+  // Handler for loading demo sample
+  const handleLoadSample = useCallback(() => {
+    try {
+      const newGraph = parseAhuXml(SAMPLE_CONFIG_XML);
+      const newFacts = extractFactsFromGraph(newGraph);
+      const newChecklists = generateChecklists(RULES_CATALOG, newGraph, newFacts);
+
+      setRawXml(SAMPLE_CONFIG_XML);
+      setGraph(newGraph);
+      setFacts(newFacts);
+      setChecklists(newChecklists);
+      setSqItems([
+        {
+          slot: 1,
+          id: 'sq-1',
+          text: 'Custom drain pan depth 3.5 in. with copper downspout connection',
+          linkedSkidId: 'skid-3',
+          initials: 'TD',
+          isCompleted: true
+        },
+        {
+          slot: 2,
+          id: 'sq-2',
+          text: 'Dual 630 EBM Fan Wall array with individual disconnects',
+          linkedSkidId: 'skid-4',
+          initials: 'TD',
+          isCompleted: false
         }
-      });
+      ]);
+      setActiveTab('general');
+      setIsProjectLoaded(true);
+    } catch (err: any) {
+      alert(`Error loading sample: ${err.message}`);
     }
+  }, []);
 
-    setFacts(currentFacts);
-    if (graph) {
-      const updatedChecks = generateChecklists(RULES_CATALOG, graph, currentFacts, checklists);
-      setChecklists(updatedChecks);
-    }
-    setIsResolutionOpen(false);
-  };
-
-  // Checklist updates
-  const handleUpdateChecklistStatus = (instanceKey: string, status: CheckStatus) => {
-    setChecklists(prev =>
-      prev.map(c => (c.instanceKey === instanceKey ? { ...c, status, updatedAt: new Date().toISOString() } : c))
-    );
-  };
-
-  const handleUpdateChecklistComment = (instanceKey: string, comment: string) => {
-    setChecklists(prev =>
-      prev.map(c => (c.instanceKey === instanceKey ? { ...c, detailerComment: comment, updatedAt: new Date().toISOString() } : c))
-    );
-  };
-
-  // File upload handler (XML or .dvl)
+  // Handler for opening files (.xml or .dvl) from Header
   const handleFileUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (file.name.endsWith('.dvl') || file.name.endsWith('.json')) {
+      const text = e.target?.result as string;
+      if (file.name.endsWith('.dvl')) {
         try {
-          const dvl = JSON.parse(content);
-          if (dvl.normalizedGraph && dvl.factRegistry) {
-            setGraph(dvl.normalizedGraph);
-            setFacts(dvl.factRegistry);
-            setSqItems(dvl.sqItems || []);
-            setChecklists(dvl.checklistInstances || []);
-            setGeneralComments(dvl.generalComments || '');
-            if (dvl.sourceXml?.rawXml) setRawXml(dvl.sourceXml.rawXml);
-          }
-        } catch (err) {
-          alert('Error loading .dvl file: ' + (err as Error).message);
+          const project = JSON.parse(text);
+          handleOpenDvl(project);
+        } catch (err: any) {
+          alert(`Error reading .dvl project file: ${err.message}`);
         }
       } else {
-        loadXmlData(content);
+        loadXmlData(text);
       }
     };
     reader.readAsText(file);
   };
 
+  // Fact Update & Revert Handlers
+  const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
+    if (!graph) return;
+    setFacts(prev => {
+      const updated = overrideFact(prev, key, value, author, note);
+      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
+      setChecklists(newChecklists);
+      return updated;
+    });
+  }, [graph, checklists]);
+
+  const handleRevertFact = useCallback((key: string) => {
+    if (!graph) return;
+    setFacts(prev => {
+      const reverted = revertFact(prev, key);
+      const newChecklists = generateChecklists(RULES_CATALOG, graph, reverted, checklists);
+      setChecklists(newChecklists);
+      return reverted;
+    });
+  }, [graph, checklists]);
+
+  const handleBatchResolveDefaults = useCallback(() => {
+    if (!graph) return;
+    setFacts(prev => {
+      let updated = { ...prev };
+
+      // Set standard default specs
+      if (updated['unit.noa'] && updated['unit.noa'].confidence === 'RequiresConfirmation') {
+        updated = overrideFact(updated, 'unit.noa', 'N/A (Standard Unit)', 'Detailer', 'Standard Non-NOA unit');
+      }
+      if (updated['unit.isSeismic'] && updated['unit.isSeismic'].confidence === 'RequiresConfirmation') {
+        updated = overrideFact(updated, 'unit.isSeismic', 'No (Standard Non-Seismic)', 'Detailer', 'Standard Non-Seismic');
+      }
+
+      // Confirm all skid weights to calculated weights
+      graph.skids.forEach(s => {
+        const key = `skid.${s.id}.weight`;
+        if (updated[key] && updated[key].confidence === 'RequiresConfirmation') {
+          updated = overrideFact(updated, key, s.calculatedWeight, 'Detailer', 'Confirmed from segment mass properties');
+        }
+      });
+
+      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
+      setChecklists(newChecklists);
+      return updated;
+    });
+    setIsResolutionOpen(false);
+  }, [graph, checklists]);
+
+  // Checklist Update Handlers
+  const handleUpdateChecklistStatus = useCallback((instanceKey: string, status: CheckStatus) => {
+    setChecklists(prev => prev.map(item => {
+      if (item.instanceKey === instanceKey) {
+        return { ...item, status, updatedAt: new Date().toISOString() };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleUpdateChecklistComment = useCallback((instanceKey: string, detailerComment: string) => {
+    setChecklists(prev => prev.map(item => {
+      if (item.instanceKey === instanceKey) {
+        return { ...item, detailerComment, updatedAt: new Date().toISOString() };
+      }
+      return item;
+    }));
+  }, []);
+
   // Save .dvl Project
-  const handleSaveDvl = () => {
+  const handleSaveDvl = async () => {
     if (!graph) return;
     const project = createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
-    saveDvlToFile(project);
-    autosaveToLocal(project);
+    const jobName = facts['unit.jobName']?.value || 'AHU_Project';
+    const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
+    const defaultName = `${jobName}_${comNumber}.dvl`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+
+    if (desktopBridge.isRunningInDesktop()) {
+      const res = await desktopBridge.saveDvl(defaultName, project);
+      if (res.saved) {
+        setExportNotice({ fileName: defaultName, filePath: res.path });
+      }
+    } else {
+      saveDvlToFile(project);
+    }
   };
 
-  // Export Excel deliverable
-  const handleExportExcel = () => {
-    exportToExcel(facts, sqItems, checklists, RULES_CATALOG);
+  // Export Excel Deliverable
+  const handleExportExcel = async (isDraft: boolean = false) => {
+    if (!graph) return;
+    const jobName = facts['unit.jobName']?.value || 'AHU_Project';
+    const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
+    const defaultName = `${jobName}_${comNumber}_Detailing_Verification_List${isDraft ? '_DRAFT' : ''}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+
+    const result = await desktopBridge.exportExcelDeliverable(
+      facts,
+      sqItems,
+      checklists,
+      RULES_CATALOG,
+      generalComments,
+      defaultName,
+      isDraft
+    );
+
+    if (result.exported && !result.cancelled) {
+      setExportNotice({ fileName: result.fileName || defaultName, filePath: result.filePath });
+    }
   };
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts (Ctrl+K, Ctrl+S, Ctrl+E, Ctrl+B)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
       } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSaveDvl();
+        if (isProjectLoaded) {
+          e.preventDefault();
+          handleSaveDvl();
+        }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        if (isProjectLoaded) {
+          e.preventDefault();
+          setIsPreFlightOpen(true);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
-        setIsPreFlightOpen(true);
+        setIsSidebarCollapsed(prev => !prev);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [graph, facts, sqItems, checklists, rawXml, generalComments]);
+  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments]);
 
-  // Dark mode toggle
-  const toggleDarkMode = () => {
-    setIsDarkMode(prev => {
-      const next = !prev;
-      if (next) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      return next;
+  // Cycle Theme Mode handler
+  const handleCycleThemeMode = useCallback(() => {
+    setThemeMode(prev => {
+      if (prev === 'dark') return 'light';
+      if (prev === 'light') return 'system';
+      return 'dark';
     });
-  };
+  }, []);
 
-  const selectedSkid = graph?.skids.find(s => s.id === activeTab);
+  // --- RENDER: HOME / LANDING PAGE ---
+  if (!isProjectLoaded || !graph) {
+    return (
+      <div className="min-h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        <HomePage
+          autosavedProject={autosavedProject}
+          onResumeAutosave={handleResumeAutosave}
+          onClearAutosave={handleClearAutosave}
+          onImportXml={loadXmlData}
+          onOpenDvl={handleOpenDvl}
+          onOpenManualModal={() => setIsManualModalOpen(true)}
+          onLoadSample={handleLoadSample}
+        />
+
+        <ManualUnitModal
+          isOpen={isManualModalOpen}
+          onClose={() => setIsManualModalOpen(false)}
+          onCreateUnit={handleManualCreate}
+        />
+      </div>
+    );
+  }
+
+  // --- RENDER: ACTIVE WORKSPACE ---
+  const selectedSkid = graph.skids.find(s => s.id === activeTab);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Left Navigation Rail */}
       <Sidebar
         activeTab={activeTab}
@@ -294,24 +468,67 @@ export const AppContent: React.FC = () => {
         graph={graph}
         checklists={checklists}
         sqItems={sqItems}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
       />
 
       {/* Main Workspace Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950/60 dark:bg-slate-950">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
         {/* Top Header */}
         <Header
           jobName={String(facts['unit.jobName']?.value || '')}
           comNumber={String(facts['unit.comNumber']?.value || '')}
           facts={facts}
+          onGoHome={() => setIsProjectLoaded(false)}
           onOpenResolutionCenter={() => setIsResolutionOpen(true)}
           onOpenPreFlight={() => setIsPreFlightOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
-          onLoadSample={() => loadXmlData(SAMPLE_CONFIG_XML)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onLoadSample={handleLoadSample}
           onFileUpload={handleFileUpload}
           onSaveDvl={handleSaveDvl}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={toggleDarkMode}
+          themeMode={themeMode}
+          onCycleThemeMode={handleCycleThemeMode}
+          lastSavedAt={lastSavedAt || undefined}
         />
+
+        {/* Export Notification Toast */}
+        {exportNotice && (
+          <div className="bg-emerald-100 dark:bg-emerald-950/90 border-b border-emerald-300 dark:border-emerald-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                Successfully generated deliverable: <strong className="font-mono">{exportNotice.fileName}</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {exportNotice.filePath && (
+                <>
+                  <button
+                    onClick={() => desktopBridge.openFile(exportNotice.filePath!)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium transition-colors"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Open in Excel</span>
+                  </button>
+                  <button
+                    onClick={() => desktopBridge.showInExplorer(exportNotice.filePath!)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium transition-colors"
+                  >
+                    <Folder className="w-3.5 h-3.5" />
+                    <span>Show in Folder</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setExportNotice(null)}
+                className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Content View */}
         <main className="flex-1 overflow-y-auto p-6">
@@ -338,6 +555,7 @@ export const AppContent: React.FC = () => {
               facts={facts}
               onUpdateChecklistStatus={handleUpdateChecklistStatus}
               onUpdateChecklistComment={handleUpdateChecklistComment}
+              onUpdateFact={handleUpdateFact}
               onOpenResolutionCenter={() => setIsResolutionOpen(true)}
             />
           ) : null}
@@ -376,6 +594,19 @@ export const AppContent: React.FC = () => {
         sqItems={sqItems}
         graph={graph}
         onNavigate={(tabId) => setActiveTab(tabId)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        themeMode={themeMode}
+        onSetThemeMode={setThemeMode}
+        detailerName={String(facts['unit.detailer']?.value || 'Detailer')}
+        onUpdateDetailerName={(name) => handleUpdateFact('unit.detailer', name)}
+        rulePackVersion="13.1.0"
+        ruleCount={RULES_CATALOG.length}
+        lastAutosavedAt={lastSavedAt || undefined}
+        onClearAutosave={handleClearAutosave}
       />
     </div>
   );

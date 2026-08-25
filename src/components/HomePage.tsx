@@ -1,0 +1,294 @@
+import React, { useState, useRef } from 'react';
+import {
+  FileCode,
+  FolderOpen,
+  PlusCircle,
+  Play,
+  Shield,
+  UploadCloud,
+  CheckCircle2,
+  Clock,
+  Trash2,
+  Layers,
+  FileSpreadsheet,
+  ArrowRight
+} from 'lucide-react';
+import { DvlProjectFile } from '../types';
+import { desktopBridge } from '../services/desktopBridge';
+
+interface HomePageProps {
+  autosavedProject: DvlProjectFile | null;
+  onResumeAutosave: () => void;
+  onClearAutosave: () => void;
+  onImportXml: (xmlContent: string) => void;
+  onOpenDvl: (project: DvlProjectFile, rawJson?: string) => void;
+  onOpenManualModal: () => void;
+  onLoadSample: () => void;
+}
+
+export const HomePage: React.FC<HomePageProps> = ({
+  autosavedProject,
+  onResumeAutosave,
+  onClearAutosave,
+  onImportXml,
+  onOpenDvl,
+  onOpenManualModal,
+  onLoadSample
+}) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (file.name.endsWith('.dvl')) {
+        try {
+          const project = JSON.parse(text);
+          onOpenDvl(project, text);
+        } catch (err: any) {
+          alert(`Error reading .dvl project file: ${err.message}`);
+        }
+      } else {
+        onImportXml(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleNativeOpen = async () => {
+    if (desktopBridge.isRunningInDesktop()) {
+      const result = await desktopBridge.openFileDialog();
+      if (result) {
+        if (result.isDvl) {
+          try {
+            const project = JSON.parse(result.content);
+            onOpenDvl(project, result.content);
+          } catch (err: any) {
+            alert(`Error reading .dvl project: ${err.message}`);
+          }
+        } else {
+          onImportXml(result.content);
+        }
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`min-h-screen w-screen overflow-y-auto bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-between p-6 sm:p-10 transition-colors ${
+        isDragging ? 'bg-blue-50 dark:bg-blue-950/20' : ''
+      }`}
+    >
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileInputChange}
+        accept=".xml,.dvl"
+        className="hidden"
+      />
+
+      {/* Top Bar: Rule Pack & Architecture Badge */}
+      <div className="w-full max-w-5xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30">
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">AHU Detailing Verification System</h1>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Factory Detailing & Engineering Deliverables</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-medium">
+          <Shield className="w-3.5 h-3.5" />
+          <span>Rule Pack v13.1.0 (99 Rules)</span>
+        </div>
+      </div>
+
+      {/* Main Hero & Launch Grid */}
+      <div className="w-full max-w-5xl my-auto py-8 space-y-8">
+        {/* Title */}
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Select an AHU Project to Begin Verification
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
+            Ingest MOM XML engineering configuration, load an existing verification project, or configure a new custom unit.
+          </p>
+        </div>
+
+        {/* Autosave Resume Banner (if present) */}
+        {autosavedProject && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 dark:from-blue-950/70 dark:via-indigo-950/60 dark:to-slate-900 border border-blue-200 dark:border-blue-500/40 shadow-sm dark:shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">{autosavedProject.jobName}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold">
+                    {autosavedProject.comNumber}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Unsaved session from {new Date(autosavedProject.lastSavedAt).toLocaleString()} ({autosavedProject.author})
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <button
+                onClick={onClearAutosave}
+                title="Discard autosaved session"
+                className="p-2 rounded-lg bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-colors border border-slate-200 dark:border-slate-700"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onResumeAutosave}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition-all"
+              >
+                <span>Resume Previous Session</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4 Launch Action Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 1. Import Config.xml */}
+          <div
+            onClick={handleNativeOpen}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 cursor-pointer transition-all shadow-sm hover:shadow-blue-500/10 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <UploadCloud className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                Import Config.xml
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Ingest MOM XML engineering configuration to automatically extract unit geometry, casing materials, segments, and shipping splits.
+              </p>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-blue-600 dark:text-blue-400 font-medium">
+              <span>Select or Drop XML File</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 2. Open .dvl Project */}
+          <div
+            onClick={handleNativeOpen}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all shadow-sm hover:shadow-emerald-500/10 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <FolderOpen className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                Open .dvl Project
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Resume an existing Detailing Verification List project with complete 4-state fact provenance, checklists, and manual overrides intact.
+              </p>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <span>Browse Saved Projects</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 3. Manual Unit Setup */}
+          <div
+            onClick={onOpenManualModal}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 cursor-pointer transition-all shadow-sm hover:shadow-indigo-500/10 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <PlusCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                Manual Unit Setup
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Configure a custom unit from scratch without an XML file. Specify Job Name, COM#, Casing specs, and split skids.
+              </p>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+              <span>Setup Custom Workspace</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+
+          {/* 4. Load Sample Dataset */}
+          <div
+            onClick={onLoadSample}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all shadow-sm hover:shadow-amber-500/10 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <FileCode className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                Load Demo Dataset
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Quickly explore features, resolution center, and Excel export with the reference 4-skid AHU demo dataset (Medical Center Phase 3).
+              </p>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <span>Launch Reference Demo</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Notes */}
+      <div className="w-full max-w-5xl text-center border-t border-slate-200 dark:border-slate-900 pt-4 text-xs text-slate-500 font-mono flex items-center justify-between">
+        <span>Johnson Controls Custom Air Handling Units</span>
+        <span>OpenXML 3.1.1 Deliverable Engine &bull; Zero Schema Corruption</span>
+      </div>
+    </div>
+  );
+};

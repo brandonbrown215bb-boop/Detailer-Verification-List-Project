@@ -1,0 +1,41 @@
+{
+  "version": "13.1.0",
+  "approvedVendorCodes": {
+    "DDPG2": {
+      "name": "Direct Drive Plenum Fan Gen 2",
+      "category": "Fans",
+      "isApproved": true,
+      "requiresConfirmation": false
+    },
+    "EBM_EC": {
+      "name": "EBM Electronically Commutated Fan",
+      "category": "Fans",
+      "isApproved": true,
+      "requiresConfirmation": false
+    },
+    "TCF_CL3": {
+      "name": "Twin City Fan Class 3",
+      "category": "Fans",
+      "isApproved": true,
+      "requiresConfirmation": false
+    }
+  },
+  "approvedMasterModels": {
+    "BASE_DRAIN_PAN": "391-10006-021",
+    "COIL_PANEL": "391-100006-026",
+    "FAN_WALL_EBM_SEISMIC_OR_LARGE": "391-10004-012",
+    "FAN_WALL_EBM_STANDARD_SMALL": "391-10004-013",
+    "RECONNECT_SEISMIC": "391-10002-004",
+    "LIFTING_LUG_ASSY": "391-40206-003",
+    "BASE_FAB": "391-10001-002",
+    "UTL_DETAIL": "391-30002"
+  },
+  "materialCompatibility": {
+    "ALUMINUM_LINER_RECONNECT": "SST304",
+    "ALUMINUM_DRAIN_HOLE_DIA": 3.125,
+    "STEEL_DRAIN_HOLE_DIA": 1.5,
+    "RIVET_PERIMETER_HOLE_DIA": 0.25,
+    "WELD_PERIMETER_HOLE_DIA": 0.5,
+    "ALUMINUM_CORNER_LINER_GAUGE": 14
+  }
+}

@@ -120,14 +120,19 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const unitOptNode = unitOptNodes[0];
   const defaultConstNode = unitOptNode ? getElements(unitOptNode, 'defaultConstructionOptions')[0] : null;
 
+  const unitConstructionType = unitOptNode ? getChildText(unitOptNode, 'unitConstructionType', 'Standard') : 'Standard';
+  const isSeismic = unitConstructionType === 'IBC' || unitConstructionType === 'OSHPD';
+  const noaRating = unitConstructionType === 'NOA' ? 'NOA' : 'N/A';
+
   const unitOptions = {
     unitType: unitOptNode ? getChildText(unitOptNode, 'unitType', 'Outdoor') : 'Outdoor',
     brandOption: unitOptNode ? getChildText(unitOptNode, 'brandOption', 'YORKCustom') : 'YORKCustom',
+    unitConstructionType,
     washdown: unitOptNode ? getChildBool(unitOptNode, 'washdown', false) : false,
     knockdown: unitOptNode ? getChildBool(unitOptNode, 'knockdown', false) : false,
     hasUTL: false, // Calculated from base upturned lips
-    isSeismic: null as boolean | null,
-    noaRating: null as string | null,
+    isSeismic,
+    noaRating,
     primaryAccessSide: unitOptNode ? getChildText(unitOptNode, 'primaryAccessSide', 'Left') : 'Left',
     defaultUnitBaseHeight: unitOptNode ? getChildNumber(unitOptNode, 'defaultUnitBaseHeight', 10) : 10,
     materials: {
