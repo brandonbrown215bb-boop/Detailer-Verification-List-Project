@@ -122,7 +122,9 @@ export function generateChecklists(
     unitContext[k] = factRegistry[k].value;
   });
 
-  for (const rule of rules) {
+  const activeRules = rules.filter(r => !r.isArchived);
+
+  for (const rule of activeRules) {
     if (rule.scope === 'Unit') {
       const instanceKey = `unit:${rule.id}`;
       const existing = existingMap.get(instanceKey);

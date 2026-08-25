@@ -106,6 +106,7 @@ class DesktopBridge {
     sqItems: SpecialQuote[],
     checklists: ChecklistInstance[],
     rules: RuleDefinition[],
+    graph?: NormalizedXmlGraph,
     generalComments: string = '',
     defaultName?: string,
     isDraft: boolean = false
@@ -116,6 +117,7 @@ class DesktopBridge {
         sqItems,
         checklists,
         rules,
+        graph,
         generalComments,
         defaultName,
         isDraft
@@ -123,7 +125,7 @@ class DesktopBridge {
     }
 
     // Browser fallback
-    exportToExcel(facts, sqItems, checklists, rules, defaultName, isDraft);
+    exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
     return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
   }
 

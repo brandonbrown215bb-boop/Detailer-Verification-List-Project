@@ -1,40 +1,43 @@
 import { NormalizedXmlGraph, Segment, ShippingSkid, UnitBase, MotorControl } from '../types';
 
 const SEGMENT_NAMES: Record<string, string> = {
-  IP: 'Inlet Plenum',
-  FF: 'Flat Filter',
-  XA: 'Access / Inspection',
-  HW: 'Heat Wheel (Energy Recovery)',
-  FE: 'Fan (Exhaust)',
-  PC: 'Pipe Chase',
-  RF: 'Rigid / High Efficiency Filter',
-  HC: 'Coil (Heating)',
-  CC: 'Coil (Cooling)',
-  FR: 'Fan (Return)',
-  FS: 'Fan (Supply)',
-  DP: 'Discharge Plenum',
-  AT: 'Sound Attenuator',
-  MB: 'Mixing Box',
+  AB: 'Air Blender',
   AF: 'Angle Filter',
+  AT: 'Sound Attenuator',
+  CC: 'Coil (Cooling)',
   DI: 'Diffuser',
+  DP: 'Discharge Plenum',
   EB: 'External Bypass',
   EE: 'Economizer',
   EF: 'Filter Economizer',
   EH: 'Electric Heat',
   FD: 'Face Damper',
+  FE: 'Fan (Exhaust)',
+  FF: 'Flat Filter',
+  FM: 'Filter Mixing Box',
+  FR: 'Fan (Return)',
+  FS: 'Fan (Supply)',
+  HC: 'Coil (Heating)',
+  HD: 'Hot Deck',
   HF: 'HEPA Filter',
   HM: 'Humidifier',
+  HW: 'Heat Wheel',
   HX: 'Heat Exchanger',
   IB: 'Internal Bypass',
-  IC: 'Integrated Face & Bypass Coil',
+  IC: 'Integrated Face and Bypass Coil',
   IG: 'Indirect Fired Gas',
   IO: 'Inlet / Outlet',
-  TN: 'Turning Section',
+  IP: 'Inlet Plenum',
+  MB: 'Mixing Box',
+  PC: 'Pipe Chase',
+  RF: 'High Efficiency Filter',
+  TN: 'Turning',
   UV: 'UV Light',
   VC: 'Vertical Coil',
   VE: 'Vertical Economizer',
   VB: 'Vestibule / Corridor',
-  VP: 'Vertical Plenum'
+  VP: 'Vertical Plenum',
+  XA: 'Access'
 };
 
 function getElements(parent: Element | Document, tagName: string): Element[] {
@@ -243,7 +246,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
       // Detect internals
       const internals: string[] = [];
       const coilEls = getElements(segEl, 'coil');
-      if (coilEls.length > 0 || tag === 'segment_CC' || tag === 'segment_HC') {
+      if (coilEls.length > 0 || ['CC', 'HC', 'IC', 'VC', 'HD'].includes(typeCode)) {
         if (coilEls.length > 0) {
           for (let c = 0; c < coilEls.length; c++) {
             const bh = getChildText(coilEls[c], 'coilBulkheadMaterial');
@@ -251,18 +254,29 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
             internals.push(bh ? `${cType} (${bh} Bulkhead)` : cType);
           }
         } else {
-          internals.push(tag === 'segment_CC' ? 'Cooling Coil Wall' : 'Heating Coil Wall');
+          internals.push(typeCode === 'CC' ? 'Coil (Cooling)' : (typeCode === 'HC' ? 'Coil (Heating)' : 'Coil Panel'));
         }
       }
       const fanEls = getElements(segEl, 'fan');
-      if (fanEls.length > 0 || tag === 'segment_FS' || tag === 'segment_FE' || tag === 'segment_FR') {
-        internals.push('Fan Array / Wall');
+      if (fanEls.length > 0 || ['FS', 'FE', 'FR'].includes(typeCode)) {
+        internals.push('EBM Fan Wall');
       }
-      if (tag === 'segment_HW') internals.push('Heat Recovery Wheel');
-      if (tag === 'segment_AT') internals.push('Sound Attenuator Baffles');
-      if (tag === 'segment_MB') internals.push('Mixing Dampers');
-      if (tag === 'segment_PC') internals.push('Pipe Chase Enclosure');
-      if (tag.includes('FF') || tag.includes('RF') || tag.includes('AF')) internals.push('Filter Rack / Wall');
+      if (['FF', 'RF', 'AF', 'HF', 'EF', 'FM'].includes(typeCode)) {
+        if (typeCode === 'HF') internals.push('Filter (HEPA)');
+        else if (typeCode === 'AF') internals.push('Angle Filter');
+        else if (typeCode === 'RF') internals.push('Rigid Filter');
+        else internals.push('Flat Filter');
+      }
+      if (typeCode === 'HW') internals.push('Heat Wheel');
+      if (typeCode === 'HX') internals.push('Heat Exchanger');
+      if (typeCode === 'AT') internals.push('Sound Attenuator');
+      if (['MB', 'FM', 'EE', 'VE', 'FD', 'EB', 'IB'].includes(typeCode)) internals.push('Damper Wall');
+      if (typeCode === 'HM') internals.push('Humidifier');
+      if (typeCode === 'EH') internals.push('Electric Heater');
+      if (typeCode === 'IG') internals.push('Indirect Gas Heater');
+      if (typeCode === 'UV') internals.push('UV Light Wall');
+      if (typeCode === 'AB') internals.push('Air Blender');
+      if (typeCode === 'XA') internals.push('Access Panel');
 
       const segmentObj: Segment = {
         id,

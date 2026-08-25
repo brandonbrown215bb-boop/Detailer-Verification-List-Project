@@ -202,7 +202,7 @@ namespace AHUVerification.Core.Services
                 unitContext[kv.Key] = kv.Value.Value;
             }
 
-            foreach (var rule in rules)
+            foreach (var rule in rules.Where(r => r.IsArchived != true))
             {
                 if (rule.Scope == RuleScope.Unit)
                 {

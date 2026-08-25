@@ -1,28 +1,28 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, RuleDefinition } from '../types';
+import { Fact, SpecialQuote, ChecklistInstance, RuleDefinition, NormalizedXmlGraph } from '../types';
 
 export function exportToExcel(
   facts: Record<string, Fact>,
   sqItems: SpecialQuote[],
   checklists: ChecklistInstance[],
   rules: RuleDefinition[],
+  graph?: NormalizedXmlGraph,
   fileName?: string,
   isDraft: boolean = false
 ): void {
-  // Build a multi-tab workbook representing the official verification deliverable
   const wb = XLSX.utils.book_new();
 
   // 1. Revision List Sheet
   const revData = [
     ['REVISION'],
     ['SUBMITTED BY:', 'REV. LEVEL:', 'REV. DATE:', 'DESCRIPTION', 'APPROVAL DATE:', 'APPROVED BY:'],
-    ['Tanner Dean', 13, new Date().toLocaleDateString(), isDraft ? 'Draft Incomplete Detailing Export' : 'Automated Ingestion & Verification Export', new Date().toLocaleDateString(), 'BB']
+    ['Tanner Dean', 14, new Date().toLocaleDateString(), isDraft ? 'Draft Incomplete Detailing Export' : 'Automated Ingestion & Verification Export (Skid Grouped)', new Date().toLocaleDateString(), 'BB']
   ];
   const wsRev = XLSX.utils.aoa_to_sheet(revData);
   XLSX.utils.book_append_sheet(wb, wsRev, 'Revision List');
 
-  // 2. Verification List Sheet
+  // 2. Verification List Sheet (Dynamic Skid-Grouped Layout)
   const vlData: (string | number)[][] = [];
   vlData.push([]);
   vlData.push(['', isDraft ? 'UNIT DETAILING VERIFICATION LIST [DRAFT - INCOMPLETE]' : 'UNIT DETAILING VERIFICATION LIST', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
@@ -47,8 +47,9 @@ export function exportToExcel(
   vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);
   vlData.push(['', 'Additional Comments:', isDraft ? '[DRAFT - INCOMPLETE AUDIT] Verified against Config.xml pipeline.' : 'Verified against Config.xml automated pipeline.']);
 
-  // Fill SQs in rows 3..24 (1..22 slots)
-  for (let s = 1; s <= 22; s++) {
+  // Fill Special Quotes in columns G & H dynamically
+  const maxSqRows = Math.max(sqItems.length, 10);
+  for (let s = 1; s <= maxSqRows; s++) {
     const rowIdx = s + 2; // Row index in 0-based array
     while (vlData.length <= rowIdx) vlData.push([]);
     const sq = sqItems.find(item => item.slot === s);
@@ -56,32 +57,101 @@ export function exportToExcel(
     vlData[rowIdx][7] = sq?.text || '';
   }
 
-  // Add Verification Header
+  // Ensure header has padding before checks
   vlData.push([]);
-  vlData.push(['', 'CAD Verifications', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'N/A', 'Detailer Check off', '', 'Checker Check off', '', '', 'Comments', 'Initials']);
+  vlData.push([]);
 
-  // Add Verification Rules
-  rules.forEach((rule, idx) => {
-    // Find checklist instances for this rule across targets
-    const instances = checklists.filter(c => c.ruleId === rule.id);
-    const isPassed = instances.some(i => i.status === 'Passed');
-    const isNA = instances.every(i => i.status === 'NA' || i.applicability === 'NotApplicable');
-    const comments = instances.map(i => i.detailerComment).filter(Boolean).join('; ');
+  // Column Headers for Verifications
+  const columnsHeader = ['', 'Rule ID', 'Verification Check Item', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Status', 'Detailer Check', '', 'Checker Check', '', '', 'Detailer Comments', 'Initials'];
 
-    const rowArr: (string | number)[] = [
-      '',
-      idx + 1,
-      rule.text,
-      '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-      isNA ? 'Yes' : '0',
-      isPassed ? 'Yes' : '0',
-      '',
-      '0',
-      '', '',
-      comments || '',
-      facts['unit.detailer']?.value ? String(facts['unit.detailer'].value).slice(0, 2).toUpperCase() : 'TD'
-    ];
-    vlData.push(rowArr);
+  const detailerInitials = facts['unit.detailer']?.value ? String(facts['unit.detailer'].value).split(' ').map(n => n[0]).join('').toUpperCase() : 'TD';
+
+  // --- SECTION 1: GENERAL UNIT VERIFICATIONS ---
+  const unitChecks = checklists.filter(c => c.scopeTargetId === 'unit' && c.applicability === 'Applicable');
+  if (unitChecks.length > 0) {
+    vlData.push(['', '=== GENERAL UNIT VERIFICATIONS ===']);
+    vlData.push(columnsHeader);
+
+    // Group by category
+    const unitCatMap: Record<string, ChecklistInstance[]> = {};
+    unitChecks.forEach(c => {
+      const rule = rules.find(r => r.id === c.ruleId);
+      const cat = rule?.category || 'General';
+      if (!unitCatMap[cat]) unitCatMap[cat] = [];
+      unitCatMap[cat].push(c);
+    });
+
+    Object.entries(unitCatMap).forEach(([category, items]) => {
+      vlData.push(['', `[Category: ${category}]`]);
+      items.forEach(inst => {
+        const rule = rules.find(r => r.id === inst.ruleId);
+        if (!rule) return;
+        const isPassed = inst.status === 'Passed';
+        vlData.push([
+          '',
+          rule.id,
+          rule.text,
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+          isPassed ? 'Verified' : 'Pending',
+          isPassed ? 'Yes' : '0',
+          '',
+          '0',
+          '', '',
+          inst.detailerComment || '',
+          detailerInitials
+        ]);
+      });
+    });
+    vlData.push([]);
+  }
+
+  // --- SECTION 2..N: SKID VERIFICATIONS ---
+  const skids = graph?.skids || [];
+  skids.forEach((skid) => {
+    const skidChecks = checklists.filter(c => c.scopeTargetId === skid.id && c.applicability === 'Applicable');
+    if (skidChecks.length === 0) return;
+
+    vlData.push(['', `=== ${skid.name.toUpperCase()} VERIFICATIONS ===`]);
+    vlData.push(columnsHeader);
+
+    // Group by category & subgroup
+    const skidCatMap: Record<string, Record<string, ChecklistInstance[]>> = {};
+    skidChecks.forEach(c => {
+      const rule = rules.find(r => r.id === c.ruleId);
+      const cat = rule?.category || 'Base';
+      const sub = rule?.subgroup || 'General';
+      if (!skidCatMap[cat]) skidCatMap[cat] = {};
+      if (!skidCatMap[cat][sub]) skidCatMap[cat][sub] = [];
+      skidCatMap[cat][sub].push(c);
+    });
+
+    Object.entries(skidCatMap).forEach(([category, subMap]) => {
+      Object.entries(subMap).forEach(([subgroup, items]) => {
+        const headerLabel = category === 'Internals' ? `[Internals: ${subgroup}]` : `[Category: ${category}]`;
+        vlData.push(['', headerLabel]);
+
+        items.forEach(inst => {
+          const rule = rules.find(r => r.id === inst.ruleId);
+          if (!rule) return;
+          const isPassed = inst.status === 'Passed';
+          vlData.push([
+            '',
+            rule.id,
+            rule.text,
+            '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+            isPassed ? 'Verified' : 'Pending',
+            isPassed ? 'Yes' : '0',
+            '',
+            '0',
+            '', '',
+            inst.detailerComment || '',
+            detailerInitials
+          ]);
+        });
+      });
+    });
+
+    vlData.push([]);
   });
 
   const wsVL = XLSX.utils.aoa_to_sheet(vlData);

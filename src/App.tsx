@@ -388,6 +388,7 @@ export const AppContent: React.FC = () => {
       sqItems,
       checklists,
       RULES_CATALOG,
+      graph,
       generalComments,
       defaultName,
       isDraft

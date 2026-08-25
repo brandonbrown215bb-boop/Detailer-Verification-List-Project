@@ -101,15 +101,11 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
   const handleAddSq = () => {
     if (!newSqText.trim()) return;
-    if (sqItems.length >= 22) {
-      alert('Maximum of 22 Special Quote slots reached.');
-      return;
-    }
 
-    // Find first available slot 1..22
+    // Find next available slot 1..N
     const usedSlots = new Set(sqItems.map(s => s.slot));
     let nextSlot = 1;
-    while (nextSlot <= 22 && usedSlots.has(nextSlot)) {
+    while (usedSlots.has(nextSlot)) {
       nextSlot++;
     }
 
@@ -384,13 +380,13 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
               Special Quotes (SQs) & Detailing Deviations
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Mapped to official 22-slot table on 'Verification List' (Rows 4–25, Columns G & H). Drag handles to reorder slots.
+              Notated project Special Quotes and deviations. Drag handles to reorder items.
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-              {sqItems.length} / 22 Slots Active
+              {sqItems.length} SQs Active
             </span>
           </div>
         </div>

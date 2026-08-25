@@ -152,8 +152,8 @@ export interface RuleDefinition {
   id: string;
   semanticKey: string;
   scope: RuleScope;
-  category: string;             // Base, Housing, Drain Pan, Fans, Filters, Internals, Reconnects, UTL, Knockdown, MOM, ISG
-  subgroup?: string;
+  category: string;             // Base, Housing, Knockdown, UTL, Paperwork, MOM, Internals
+  subgroup?: string;            // Used for Internals: Fan Segments, Coil Segments, Access Segments, Filter Segments, Reconnects
   order: number;
   text: string;
   reference?: string;
@@ -162,6 +162,7 @@ export interface RuleDefinition {
   predicate?: ASTPredicate;     // AST logic rule
   allowNA: boolean;
   verificationMode: 'ManualCheckbox' | 'AutoEvaluated' | 'MeasurementVerify';
+  isArchived?: boolean;
 }
 
 export interface ChecklistInstance {
@@ -201,8 +202,16 @@ export interface SqRangeMapping {
   textCol: string;
 }
 
+export interface TemplateCategoryConfig {
+  key: string;
+  hasSubgroups: boolean;
+  subgroups?: string[];
+}
+
 export interface TemplateMap {
   templateVersion: string;
+  sheetNames?: Record<string, string>;
+  categories?: TemplateCategoryConfig[];
   generalFields: Record<string, CellCoordinate>;
   sqRange: SqRangeMapping;
   ruleCellMappings: Record<string, RuleCellMapping>;

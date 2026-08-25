@@ -1,17 +1,19 @@
 {
   "name": "AHU Detailing Verification Rule Pack",
-  "version": "13.1.0",
-  "generatedAt": "2026-08-25T15:52:49.097Z",
+  "version": "14.0.0",
+  "generatedAt": "2026-08-25T21:07:11.259Z",
   "files": {
     "rules.json": {
-      "sha256": "9e61df16691b432383cf8ad3e05613e342119f6c1baeb3184b1facf97dddd25f",
-      "totalRules": 99
+      "sha256": "9253637d6771e9c0f0ea827eb452e1e567b5451111ce7c9a20dc4152460ad45c",
+      "totalRules": 104,
+      "activeRules": 99,
+      "archivedRules": 5
     },
     "template_map.json": {
-      "sha256": "fa517aa44bf8ff56808bf4baba35e343b0cc4bc3828e65b04be21c8eee40d721"
+      "sha256": "ba6ce15386c6180eefb9a9270a8436b8445d6df8e1efda886b64bde1ffdf325a"
     },
     "approved_mappings.json": {
-      "sha256": "2267b1a227e48df0cbbaa51e25ebaf9709ba133284cb0c50427c41469de557a7"
+      "sha256": "1c891b8776c9aaddb798c9a0261e32ad95505ab35e759af44772a947b4100886"
     },
     "template.xlsx": {
       "sha256": "406f6a516635deef612b540171a665e157c282bac0f2d3d4bdf77a07e70fbc44"

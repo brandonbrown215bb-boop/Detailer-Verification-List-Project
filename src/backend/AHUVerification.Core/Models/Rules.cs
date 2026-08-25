@@ -71,6 +71,9 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("verificationMode")]
         public string VerificationMode { get; set; } = "ManualCheckbox";
+
+        [JsonPropertyName("isArchived")]
+        public bool? IsArchived { get; set; }
     }
 
     public class FactTrace

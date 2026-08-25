@@ -1,5 +1,183 @@
 {
-  "version": "13.1.0",
+  "version": "14.0.0",
+  "approvedSegments": {
+    "AB": {
+      "name": "Air Blender",
+      "internalSubgroup": "Access Segments"
+    },
+    "AF": {
+      "name": "Angle Filter",
+      "internalSubgroup": "Filter Segments"
+    },
+    "AT": {
+      "name": "Sound Attenuator",
+      "internalSubgroup": "Access Segments"
+    },
+    "CC": {
+      "name": "Coil (Cooling)",
+      "internalSubgroup": "Coil Segments"
+    },
+    "DI": {
+      "name": "Diffuser",
+      "internalSubgroup": "Access Segments"
+    },
+    "DP": {
+      "name": "Discharge Plenum",
+      "internalSubgroup": "Access Segments"
+    },
+    "EB": {
+      "name": "External Bypass",
+      "internalSubgroup": "Access Segments"
+    },
+    "EE": {
+      "name": "Economizer",
+      "internalSubgroup": "Access Segments"
+    },
+    "EF": {
+      "name": "Filter Economizer",
+      "internalSubgroup": "Filter Segments"
+    },
+    "EH": {
+      "name": "Electric Heat",
+      "internalSubgroup": "Coil Segments"
+    },
+    "FD": {
+      "name": "Face Damper",
+      "internalSubgroup": "Access Segments"
+    },
+    "FE": {
+      "name": "Fan (Exhaust)",
+      "internalSubgroup": "Fan Segments"
+    },
+    "FF": {
+      "name": "Flat Filter",
+      "internalSubgroup": "Filter Segments"
+    },
+    "FM": {
+      "name": "Filter Mixing Box",
+      "internalSubgroup": "Filter Segments"
+    },
+    "FR": {
+      "name": "Fan (Return)",
+      "internalSubgroup": "Fan Segments"
+    },
+    "FS": {
+      "name": "Fan (Supply)",
+      "internalSubgroup": "Fan Segments"
+    },
+    "HC": {
+      "name": "Coil (Heating)",
+      "internalSubgroup": "Coil Segments"
+    },
+    "HD": {
+      "name": "Hot Deck",
+      "internalSubgroup": "Coil Segments"
+    },
+    "HF": {
+      "name": "HEPA Filter",
+      "internalSubgroup": "Filter Segments"
+    },
+    "HM": {
+      "name": "Humidifier",
+      "internalSubgroup": "Access Segments"
+    },
+    "HW": {
+      "name": "Heat Wheel",
+      "internalSubgroup": "Access Segments"
+    },
+    "HX": {
+      "name": "Heat Exchanger",
+      "internalSubgroup": "Access Segments"
+    },
+    "IB": {
+      "name": "Internal Bypass",
+      "internalSubgroup": "Access Segments"
+    },
+    "IC": {
+      "name": "Integrated Face and Bypass Coil",
+      "internalSubgroup": "Coil Segments"
+    },
+    "IG": {
+      "name": "Indirect Fired Gas",
+      "internalSubgroup": "Coil Segments"
+    },
+    "IO": {
+      "name": "Inlet / Outlet",
+      "internalSubgroup": "Access Segments"
+    },
+    "IP": {
+      "name": "Inlet Plenum",
+      "internalSubgroup": "Access Segments"
+    },
+    "MB": {
+      "name": "Mixing Box",
+      "internalSubgroup": "Access Segments"
+    },
+    "PC": {
+      "name": "Pipe Chase",
+      "internalSubgroup": "Access Segments"
+    },
+    "RF": {
+      "name": "High Efficiency Filter",
+      "internalSubgroup": "Filter Segments"
+    },
+    "TN": {
+      "name": "Turning",
+      "internalSubgroup": "Access Segments"
+    },
+    "UV": {
+      "name": "UV Light",
+      "internalSubgroup": "Access Segments"
+    },
+    "VC": {
+      "name": "Vertical Coil",
+      "internalSubgroup": "Coil Segments"
+    },
+    "VE": {
+      "name": "Vertical Economizer",
+      "internalSubgroup": "Access Segments"
+    },
+    "VB": {
+      "name": "Vestibule / Corridor",
+      "internalSubgroup": "Access Segments"
+    },
+    "VP": {
+      "name": "Vertical Plenum",
+      "internalSubgroup": "Access Segments"
+    },
+    "XA": {
+      "name": "Access",
+      "internalSubgroup": "Access Segments"
+    }
+  },
+  "approvedInternals": [
+    "Access Panel",
+    "Air Blender",
+    "Angle Filter",
+    "Coil (Cooling)",
+    "Coil (DX)",
+    "Coil (Heating)",
+    "Coil (Split)",
+    "Coil (SQ)",
+    "Coil (Staggered)",
+    "Coil (Wing/IC)",
+    "Coil Panel",
+    "Damper Wall",
+    "Drain Pan",
+    "Drain Pan (Aux)",
+    "EBM Fan Wall",
+    "Electric Heater",
+    "Filter (HEPA)",
+    "Flat Filter",
+    "Heat Exchanger",
+    "Heat Wheel",
+    "Humidifier",
+    "Indirect Gas Heater",
+    "Perf Basket(s)",
+    "Rigid Filter",
+    "Sound Attenuator",
+    "UV Light Wall"
+  ],
   "approvedVendorCodes": {
     "DDPG2": {
       "name": "Direct Drive Plenum Fan Gen 2",
@@ -19,16 +197,6 @@
       "isApproved": true,
       "requiresConfirmation": false
     }
-  },
-  "approvedMasterModels": {
-    "BASE_DRAIN_PAN": "391-10006-021",
-    "COIL_PANEL": "391-100006-026",
-    "FAN_WALL_EBM_SEISMIC_OR_LARGE": "391-10004-012",
-    "FAN_WALL_EBM_STANDARD_SMALL": "391-10004-013",
-    "RECONNECT_SEISMIC": "391-10002-004",
-    "LIFTING_LUG_ASSY": "391-40206-003",
-    "BASE_FAB": "391-10001-002",
-    "UTL_DETAIL": "391-30002"
   },
   "materialCompatibility": {
     "ALUMINUM_LINER_RECONNECT": "SST304",
