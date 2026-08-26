@@ -35,13 +35,13 @@ Or double-clicking `setup.bat` from Windows File Explorer.
   ```powershell
   node scripts/build_rulepack.mjs
   ```
-- **Publish Self-Contained Desktop Folder** (includes `dist/` and `resources/rulepack/`):
+- **Publish Self-Contained Desktop Folder** (includes `dist/`, `resources/rulepack/`, and `resources/bin/`):
   ```powershell
   npm run build
   node scripts/build_rulepack.mjs
   dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/publish/win-x64
   ```
 
-The publish directory is the deployable unit; do not distribute the `.exe` by itself. Confirm that `dist/index.html`, `resources/rulepack/manifest.json`, and all four manifest-declared Rule Pack members are present before release.
+The publish directory is the deployable unit; do not distribute the `.exe` by itself. Confirm that `dist/index.html`, `resources/rulepack/manifest.json`, all four manifest-declared Rule Pack members, and `resources/bin/unpack32.exe` / `ywunpack.dll` (for native `.upz` bundle extraction) are present before release.
 
-The browser development build can generate a SheetJS workbook for workflow preview. Only the desktop OpenXML export is the official verification deliverable.
+The browser development build can generate a SheetJS workbook for workflow preview. Only the desktop OpenXML export is the official verification deliverable. Native `.upz` archive decompression requires the desktop host application.

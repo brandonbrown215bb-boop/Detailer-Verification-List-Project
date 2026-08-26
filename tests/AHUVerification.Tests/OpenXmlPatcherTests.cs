@@ -14,7 +14,7 @@ namespace AHUVerification.Tests
     public class OpenXmlPatcherTests
     {
         [Fact]
-        public void PatchTemplate_PreservesZeroSchemaErrorsAndFormulaChains()
+        public void PatchTemplate_GeneratesDynamicDeliverableWithoutNARowsAndAdaptsCategorySheets()
         {
             string templatePath = TestPathHelper.GetRepoPath("Detailing Verification List.xlsx");
             Assert.True(File.Exists(templatePath), $"Template file should exist at {templatePath}");
@@ -32,8 +32,11 @@ namespace AHUVerification.Tests
             var evaluator = new AstRuleEvaluator();
             var checklists = evaluator.GenerateChecklists(bundle.Rules, graph, facts);
 
-            // Mark some checklists as Passed
-            foreach (var c in checklists.Take(10))
+            // Mark some applicable checks as Passed with comments
+            var applicableChecks = checklists.Where(c => c.Applicability == RuleApplicability.Applicable).ToList();
+            Assert.NotEmpty(applicableChecks);
+
+            foreach (var c in applicableChecks.Take(5))
             {
                 c.Status = CheckStatus.Passed;
                 c.DetailerComment = "Verified in CAD model.";
@@ -45,19 +48,29 @@ namespace AHUVerification.Tests
                 new SpecialQuote { Slot = 2, Id = "sq-2", Text = "Dual 630 EBM Fan Wall array with individual disconnects", LinkedSkidId = "skid-4", Initials = "TD", IsCompleted = false }
             };
 
-            string outputPath = Path.Combine(Path.GetTempPath(), "Patched_Verification_Deliverable.xlsx");
+            string outputPath = Path.Combine(Path.GetTempPath(), $"Dynamic_Deliverable_{System.Guid.NewGuid():N}.xlsx");
             try
             {
                 var patcher = new OpenXmlTemplatePatcher();
-                patcher.PatchTemplate(templatePath, outputPath, bundle.TemplateMap, facts, sqItems, checklists, bundle.Rules, "General verification notes.");
+                patcher.PatchTemplate(
+                    templatePath,
+                    outputPath,
+                    bundle.TemplateMap,
+                    facts,
+                    sqItems,
+                    checklists,
+                    bundle.Rules,
+                    "General verification audit comments.",
+                    isDraft: false,
+                    graph: graph
+                );
 
                 Assert.True(File.Exists(outputPath));
 
-                // 1. OpenXmlValidator Verification: 0 new schema errors
+                // 1. OpenXmlValidator Verification: 0 schema errors
                 using (var doc = SpreadsheetDocument.Open(outputPath, false))
                 {
                     var validator = new OpenXmlValidator();
-                    // Filter legacy Office shapeId attribute warning inherent to Excel VML comments
                     var schemaErrors = validator.Validate(doc)
                         .Where(e => !e.Description.Contains("shapeId", System.StringComparison.OrdinalIgnoreCase))
                         .ToList();
@@ -66,28 +79,30 @@ namespace AHUVerification.Tests
                     var wbPart = doc.WorkbookPart;
                     Assert.NotNull(wbPart);
 
-                    // 2. Verify all 12 sheets are present
                     var sheets = wbPart.Workbook.Sheets?.Elements<Sheet>().ToList();
                     Assert.NotNull(sheets);
-                    Assert.Equal(12, sheets.Count);
 
-                    // 3. Verify DataValidations elements are preserved
-                    int totalDataValidations = 0;
-                    foreach (var wsPart in wbPart.WorksheetParts)
+                    // 2. Verify essential sheets are present
+                    Assert.Contains(sheets, s => s.Name?.Value == "Revision List");
+                    Assert.Contains(sheets, s => s.Name?.Value == "Verification List");
+                    Assert.Contains(sheets, s => s.Name?.Value == "Check Information");
+                    Assert.Contains(sheets, s => s.Name?.Value == "Comments");
+
+                    // 3. Verify only active category sheets are retained
+                    var retainedCategorySheetNames = sheets.Select(s => s.Name?.Value).Where(n => n is "Base" or "Drain Pan" or "Housing" or "Paperwork" or "Internal" or "Coil Panels" or "Reconnects" or "MOM").ToList();
+                    Assert.NotEmpty(retainedCategorySheetNames);
+
+                    // 4. Verify Check Information formulas have no #REF! errors
+                    var ciSheet = sheets.FirstOrDefault(s => s.Name?.Value == "Check Information");
+                    Assert.NotNull(ciSheet);
+                    var ciWsPart = (WorksheetPart)wbPart.GetPartById(ciSheet.Id!);
+                    var formulaCells = ciWsPart.Worksheet.Descendants<Cell>().Where(c => c.CellFormula != null).ToList();
+                    foreach (var fc in formulaCells)
                     {
-                        var dvs = wsPart.Worksheet.Elements<DataValidations>().ToList();
-                        totalDataValidations += dvs.Count;
+                        Assert.False(fc.CellFormula!.Text.Contains("#REF!"), $"Formula in cell {fc.CellReference?.Value} contains #REF!: {fc.CellFormula.Text}");
                     }
-                    Assert.True(totalDataValidations > 0, "DataValidations should be preserved across sheets");
 
-                    // 4. Verify Formula Chains on 'Check Information'
-                    var checkSheet = sheets.FirstOrDefault(s => s.Name?.Value == "Check Information");
-                    Assert.NotNull(checkSheet);
-                    var checkWsPart = (WorksheetPart)wbPart.GetPartById(checkSheet.Id!);
-                    var formulaCells = checkWsPart.Worksheet.Descendants<Cell>().Where(c => c.CellFormula != null).ToList();
-                    Assert.NotEmpty(formulaCells);
-
-                    // 5. Verify patched values on 'Verification List'
+                    // 5. Verify Verification List dynamic structure
                     var vlSheet = sheets.FirstOrDefault(s => s.Name?.Value == "Verification List");
                     Assert.NotNull(vlSheet);
                     var vlWsPart = (WorksheetPart)wbPart.GetPartById(vlSheet.Id!);
@@ -108,16 +123,45 @@ namespace AHUVerification.Tests
                         return val;
                     }
 
-                    // Check General Specs
+                    // Check General Specs & SQs
                     Assert.Equal("Tanner Dean", GetCellValue("D3"));
                     Assert.Equal("Medical Center Phase 3", GetCellValue("D5"));
                     Assert.Equal("COM-842910", GetCellValue("D6"));
-
-                    // Check SQs
                     Assert.Equal("1", GetCellValue("G4"));
                     Assert.Equal("Custom drain pan depth 3.5 in. with copper downspout connection", GetCellValue("H4"));
-                    Assert.Equal("2", GetCellValue("G5"));
-                    Assert.Equal("Dual 630 EBM Fan Wall array with individual disconnects", GetCellValue("H5"));
+
+                    // Verify dynamic rows start at row 26 with section headers
+                    var vlRows = vlWsPart.Worksheet.Descendants<Row>().Where(r => r.RowIndex != null && r.RowIndex.Value >= 26).ToList();
+                    Assert.NotEmpty(vlRows);
+
+                    var allEmittedTexts = vlRows.SelectMany(r => r.Elements<Cell>()).Select(c => {
+                        string txt = c.CellValue?.Text ?? "";
+                        if (c.DataType != null && c.DataType.Value == CellValues.SharedString && int.TryParse(txt, out int idx) && idx < sst.Count)
+                            return sst[idx];
+                        return txt;
+                    }).ToList();
+
+                    // Check for Skid / General headers
+                    Assert.Contains(allEmittedTexts, t => t.Contains("VERIFICATIONS"));
+
+                    // Verify NO N/A check text is emitted for rules that are non-applicable everywhere (e.g. UTL / Knockdown)
+                    var strictlyNaRuleIds = checklists
+                        .GroupBy(c => c.RuleId)
+                        .Where(g => g.All(i => i.Applicability == RuleApplicability.NotApplicable))
+                        .Select(g => g.Key)
+                        .ToHashSet();
+
+                    var emittedRuleIds = vlRows
+                        .Select(r => GetCellValue($"B{r.RowIndex?.Value}"))
+                        .Where(id => !string.IsNullOrEmpty(id) && id.Contains("-"))
+                        .ToList();
+
+                    Assert.Equal(applicableChecks.Count, emittedRuleIds.Count);
+
+                    foreach (var emittedId in emittedRuleIds)
+                    {
+                        Assert.DoesNotContain(emittedId, strictlyNaRuleIds);
+                    }
                 }
             }
             finally

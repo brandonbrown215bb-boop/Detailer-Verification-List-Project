@@ -1659,7 +1659,7 @@ function computeBundleSha256(files) {
   return sha256(rulePackFileOrder.map(name => `${name}:${files[name].sha256}`).join("\n"));
 }
 
-const targetDirs = ["src/rulepack", "resources/rulepack", "docs/roolz"];
+const targetDirs = ["src/rulepack", "resources/rulepack"];
 
 for (const dir of targetDirs) {
   fs.mkdirSync(dir, { recursive: true });

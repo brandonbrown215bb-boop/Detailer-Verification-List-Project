@@ -53,7 +53,12 @@ export async function createDvlProject(
   sqItems: SpecialQuote[],
   checklists: ChecklistInstance[],
   rawXml: string,
-  generalComments: string = ''
+  generalComments: string = '',
+  sourceMetadata?: {
+    fileName?: string;
+    isUpzBundle?: boolean;
+    orderRevision?: any;
+  }
 ): Promise<DvlProjectFile> {
   const author = String(facts['unit.detailer']?.value || 'Detailer');
   const jobName = String(facts['unit.jobName']?.value || 'AHU Project');
@@ -72,10 +77,12 @@ export async function createDvlProject(
       sha256: RULE_PACK_IDENTITY.sha256
     },
     sourceXml: {
-      fileName: 'Config.xml',
+      fileName: sourceMetadata?.fileName || 'Config.xml',
       fileSha256: await sha256Hex(rawXml),
       schemaVersion: graph.documentVersion || '2018.9.14.1003',
-      rawXml
+      rawXml,
+      isUpzBundle: sourceMetadata?.isUpzBundle,
+      orderRevision: sourceMetadata?.orderRevision
     },
     normalizedGraph: graph,
     factRegistry: facts,

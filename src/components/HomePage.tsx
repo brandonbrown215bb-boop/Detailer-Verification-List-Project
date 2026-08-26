@@ -13,7 +13,7 @@ import {
   FileSpreadsheet,
   ArrowRight
 } from 'lucide-react';
-import { DvlProjectFile } from '../types';
+import { DvlProjectFile, UpzBundle } from '../types';
 import { desktopBridge } from '../services/desktopBridge';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from '../services/rulesCatalog';
 
@@ -21,7 +21,7 @@ interface HomePageProps {
   autosavedProject: DvlProjectFile | null;
   onResumeAutosave: () => void;
   onClearAutosave: () => void;
-  onImportXml: (xmlContent: string) => void;
+  onImportXml: (xmlContent: string, bundle?: UpzBundle, sourceFileName?: string) => void;
   onOpenDvl: (project: DvlProjectFile, rawJson?: string, filePath?: string) => void | Promise<void>;
   onOpenManualModal: () => void;
   onLoadSample: () => void;
@@ -39,11 +39,30 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
+    if (file.name.toLowerCase().endsWith('.upz')) {
+      const filePath = (file as any).path;
+      if (desktopBridge.isRunningInDesktop() && filePath) {
+        try {
+          const res = await desktopBridge.extractUpz(filePath);
+          onImportXml(res.content, res.bundle, res.fileName);
+          return;
+        } catch (err: any) {
+          alert(`Error unpacking UPZ bundle: ${err.message}`);
+          return;
+        }
+      } else {
+        alert(
+          'UPZ bundle decompression requires the desktop application runtime. In browser preview mode, please import standalone Config.xml or .dvl project files.'
+        );
+        return;
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      if (file.name.endsWith('.dvl')) {
+      if (file.name.toLowerCase().endsWith('.dvl')) {
         try {
           const project = JSON.parse(text);
           onOpenDvl(project, text);
@@ -51,7 +70,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           alert(`Error reading .dvl project file: ${err.message}`);
         }
       } else {
-        onImportXml(text);
+        onImportXml(text, undefined, file.name);
       }
     };
     reader.readAsText(file);
@@ -72,14 +91,14 @@ export const HomePage: React.FC<HomePageProps> = ({
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      processFile(file);
+      void processFile(file);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      processFile(file);
+      void processFile(file);
     }
   };
 
@@ -94,8 +113,10 @@ export const HomePage: React.FC<HomePageProps> = ({
           } catch (err: any) {
             alert(`Error reading .dvl project: ${err.message}`);
           }
+        } else if (result.isUpz && result.bundle) {
+          onImportXml(result.content, result.bundle, result.fileName);
         } else {
-          onImportXml(result.content);
+          onImportXml(result.content, undefined, result.fileName);
         }
       }
     } else {
@@ -116,15 +137,15 @@ export const HomePage: React.FC<HomePageProps> = ({
         type="file"
         ref={fileInputRef}
         onChange={handleFileInputChange}
-        accept=".xml,.dvl"
+        accept=".xml,.dvl,.upz"
         className="hidden"
       />
 
-      {/* Top Bar: Rule Pack & Architecture Badge */}
-      <div className="w-full max-w-5xl flex items-center justify-between">
+      {/* Header Banner */}
+      <div className="w-full max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-900 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/30">
-            <Layers className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+            <FileSpreadsheet className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">AHU Detailing Verification System</h1>
@@ -191,7 +212,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         {/* 4 Launch Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 1. Import Config.xml */}
+          {/* 1. Import Config.xml / .upz Bundle */}
           <div
             onClick={handleNativeOpen}
             className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 cursor-pointer transition-all shadow-sm hover:shadow-blue-500/10 flex flex-col justify-between"
@@ -201,15 +222,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <UploadCloud className="w-6 h-6" />
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                Import Config.xml
+                Import Config.xml / .upz Bundle
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Ingest MOM XML engineering configuration to automatically extract unit geometry, casing materials, segments, and shipping splits.
+                Ingest MOM Config.xml or JCI .upz bundle to automatically extract unit geometry, order identity (Job Name, COM#, Tag), casing materials, segments, and shipping splits.
               </p>
             </div>
 
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-blue-600 dark:text-blue-400 font-medium">
-              <span>Select or Drop XML File</span>
+              <span>Select or Drop XML / UPZ File</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>

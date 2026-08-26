@@ -37,3 +37,9 @@ These failures share one boundary: persisted and distributed artifacts need expl
 - Line-ending conversion cannot disable a valid Windows installation, while any substantive content change still fails integrity checks.
 - Saving can no longer silently target the process working directory, and interrupted writes do not partially replace a project.
 - Published output is a folder whose required runtime assets can be inspected and validated directly.
+
+## Addendum (2026-08-26)
+
+1. **Native UPZ Binary Assets**: In addition to `dist/` and `resources/rulepack/`, the publish distribution includes `resources/bin/` containing native 32-bit `unpack32.exe` and `ywunpack.dll` for UPZ decompression.
+2. **MSBuild Packaging Verification**: MSBuild target `ValidatePackagedAssets` enforces that `dist/index.html`, all 5 `resources/rulepack/` files, and both `resources/bin/` native binaries exist prior to publish.
+

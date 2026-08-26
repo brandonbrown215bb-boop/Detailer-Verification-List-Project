@@ -217,6 +217,25 @@ export interface TemplateMap {
   ruleCellMappings: Record<string, RuleCellMapping>;
 }
 
+export interface OrderRevisionData {
+  productType: string;
+  jobName: string;
+  orderNumber: string;
+  lineNumber: number;
+  projectName: string;
+  projectId: string;
+  baseSQOrderNumber: string;
+  tagList: string[];
+  primaryTag?: string;
+}
+
+export interface UpzBundle {
+  rawConfigXml: string;
+  rawOrderRevXml?: string;
+  rawManifestXml?: string;
+  orderRevision?: OrderRevisionData;
+}
+
 export interface DvlProjectFile {
   formatVersion: string;
   appVersion: string;
@@ -235,6 +254,8 @@ export interface DvlProjectFile {
     fileSha256: string;
     schemaVersion: string;
     rawXml: string;
+    isUpzBundle?: boolean;
+    orderRevision?: OrderRevisionData;
   };
   normalizedGraph: NormalizedXmlGraph;
   factRegistry: Record<string, Fact>;

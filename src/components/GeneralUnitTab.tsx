@@ -177,7 +177,15 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   };
 
   // Group facts logically
-  const orderFacts = ['unit.jobName', 'unit.comNumber', 'unit.detailer', 'unit.date'];
+  const orderFacts = [
+    'unit.jobName',
+    'unit.orderNumber',
+    'unit.comNumber',
+    'unit.tag',
+    'unit.productType',
+    'unit.detailer',
+    'unit.date'
+  ];
   const geometryFacts = [
     'unit.shellType',
     'unit.unitType',

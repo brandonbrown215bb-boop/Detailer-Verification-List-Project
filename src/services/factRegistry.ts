@@ -1,4 +1,4 @@
-import { NormalizedXmlGraph, Fact, FactStatus, FactConfidence } from '../types';
+import { NormalizedXmlGraph, Fact, FactStatus, FactConfidence, OrderRevisionData } from '../types';
 
 export function createFact<T>(
   key: string,
@@ -24,19 +24,23 @@ export function createFact<T>(
   };
 }
 
-export function extractFactsFromGraph(graph: NormalizedXmlGraph): Record<string, Fact> {
+export function extractFactsFromGraph(
+  graph: NormalizedXmlGraph,
+  orderRev?: OrderRevisionData | null
+): Record<string, Fact> {
   const facts: Record<string, Fact> = {};
 
-  // Order & Identity (Manual Entry / MAPICS Order Packet)
+  // Order & Identity
+  const hasJobName = !!orderRev?.jobName?.trim();
   facts['unit.jobName'] = createFact(
     'unit.jobName',
     'Job Name',
     'Order & Identity',
-    'Medical Center Phase 3',
+    hasJobName ? orderRev!.jobName.trim() : 'Medical Center Phase 3',
     'Known',
     'Authoritative',
-    undefined,
-    'Enter Job Name from Order Packet'
+    hasJobName ? '/root:OrderRevision/jobName' : undefined,
+    hasJobName ? undefined : 'Enter Job Name from Order Packet'
   );
 
   facts['unit.comNumber'] = createFact(
@@ -49,6 +53,44 @@ export function extractFactsFromGraph(graph: NormalizedXmlGraph): Record<string,
     undefined,
     'Enter COM# from MAPICS (e.g. COM-123456)'
   );
+
+  const hasOrderNum = !!orderRev?.orderNumber?.trim();
+  if (hasOrderNum) {
+    facts['unit.orderNumber'] = createFact(
+      'unit.orderNumber',
+      'Order Number',
+      'Order & Identity',
+      orderRev!.orderNumber.trim(),
+      'Known',
+      'Authoritative',
+      '/root:OrderRevision/orderNumber'
+    );
+  }
+
+  const tag = orderRev?.primaryTag || orderRev?.tagList?.[0];
+  if (tag) {
+    facts['unit.tag'] = createFact(
+      'unit.tag',
+      'Unit Tag',
+      'Order & Identity',
+      tag.trim(),
+      'Known',
+      'Authoritative',
+      '/root:OrderRevision/tagList/tag'
+    );
+  }
+
+  if (orderRev?.productType) {
+    facts['unit.productType'] = createFact(
+      'unit.productType',
+      'Product Type',
+      'Order & Identity',
+      orderRev.productType.trim(),
+      'Known',
+      'Authoritative',
+      '/root:OrderRevision/productType'
+    );
+  }
 
   facts['unit.detailer'] = createFact(
     'unit.detailer',

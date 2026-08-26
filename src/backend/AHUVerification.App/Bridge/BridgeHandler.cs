@@ -48,6 +48,7 @@ namespace AHUVerification.App.Bridge
         private readonly DvlProjectManager _projectManager = new();
         private readonly OpenXmlTemplatePatcher _patcher = new();
         private readonly RulePackManager _rulePackManager = new();
+        private readonly UpzBundleExtractor _upzExtractor = new();
 
         private RulePackBundle? _activeRulePack;
         private readonly string _rulePackPath;
@@ -93,8 +94,9 @@ namespace AHUVerification.App.Bridge
                 {
                     "getAppInfo" => GetAppInfo(),
                     "getRulePack" => GetRulePack(),
-                    "openFileDialog" => OpenFileDialog(),
-                    "saveFileDialog" => SaveFileDialog(req.Payload),
+                    "openFileDialog" => ShowOpenFileDialog(),
+                    "saveFileDialog" => ShowSaveFileDialog(req.Payload),
+                    "extractUpz" => ExtractUpz(req.Payload),
                     "parseXml" => ParseXml(req.Payload),
                     "saveDvl" => SaveDvl(req.Payload),
                     "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
@@ -136,7 +138,7 @@ namespace AHUVerification.App.Bridge
             };
         }
 
-        private object? OpenFileDialog()
+        private object? ShowOpenFileDialog()
         {
             object? result = null;
             _parentForm.Invoke(() =>
@@ -144,25 +146,49 @@ namespace AHUVerification.App.Bridge
                 using var ofd = new OpenFileDialog
                 {
                     Title = "Open AHU Engineering File",
-                    Filter = "All Supported Files (*.xml;*.dvl)|*.xml;*.dvl|Config XML (*.xml)|*.xml|DVL Project (*.dvl)|*.dvl|All Files (*.*)|*.*"
+                    Filter = "All Supported Files (*.upz;*.xml;*.dvl)|*.upz;*.xml;*.dvl|Unit Package (*.upz)|*.upz|Config XML (*.xml)|*.xml|DVL Project (*.dvl)|*.dvl|All Files (*.*)|*.*"
                 };
 
                 if (ofd.ShowDialog(_parentForm) == DialogResult.OK)
                 {
-                    string content = File.ReadAllText(ofd.FileName);
-                    result = new
+                    if (ofd.FileName.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
                     {
-                        fileName = Path.GetFileName(ofd.FileName),
-                        filePath = ofd.FileName,
-                        content,
-                        isDvl = ofd.FileName.EndsWith(".dvl", StringComparison.OrdinalIgnoreCase)
-                    };
+                        var bundle = _upzExtractor.Extract(ofd.FileName);
+                        result = new
+                        {
+                            fileName = Path.GetFileName(ofd.FileName),
+                            filePath = ofd.FileName,
+                            content = bundle.RawConfigXml,
+                            isDvl = false,
+                            isUpz = true,
+                            bundle = new
+                            {
+                                rawConfigXml = bundle.RawConfigXml,
+                                rawOrderRevXml = bundle.RawOrderRevXml,
+                                rawManifestXml = bundle.RawManifestXml,
+                                orderRevision = bundle.OrderRevision,
+                                manifest = bundle.Manifest
+                            }
+                        };
+                    }
+                    else
+                    {
+                        string content = File.ReadAllText(ofd.FileName);
+                        result = new
+                        {
+                            fileName = Path.GetFileName(ofd.FileName),
+                            filePath = ofd.FileName,
+                            content,
+                            isDvl = ofd.FileName.EndsWith(".dvl", StringComparison.OrdinalIgnoreCase),
+                            isUpz = false
+                        };
+                    }
                 }
             });
             return result;
         }
 
-        private object? SaveFileDialog(JsonElement payload)
+        private object? ShowSaveFileDialog(JsonElement payload)
         {
             string defaultName = payload.TryGetProperty("defaultName", out var n) ? n.GetString() ?? "Project.dvl" : "Project.dvl";
             string filter = payload.TryGetProperty("filter", out var f) ? f.GetString() ?? "DVL Project (*.dvl)|*.dvl" : "DVL Project (*.dvl)|*.dvl";
@@ -185,11 +211,40 @@ namespace AHUVerification.App.Bridge
             return result;
         }
 
+        private object ExtractUpz(JsonElement payload)
+        {
+            string filePath = payload.GetProperty("filePath").GetString() ?? "";
+            var bundle = _upzExtractor.Extract(filePath);
+            return new
+            {
+                fileName = Path.GetFileName(filePath),
+                filePath,
+                content = bundle.RawConfigXml,
+                isDvl = false,
+                isUpz = true,
+                bundle = new
+                {
+                    rawConfigXml = bundle.RawConfigXml,
+                    rawOrderRevXml = bundle.RawOrderRevXml,
+                    rawManifestXml = bundle.RawManifestXml,
+                    orderRevision = bundle.OrderRevision,
+                    manifest = bundle.Manifest
+                }
+            };
+        }
+
         private object ParseXml(JsonElement payload)
         {
             string xmlContent = payload.GetProperty("xmlContent").GetString() ?? "";
             var graph = _parser.Parse(xmlContent);
-            var facts = _factExtractor.ExtractFacts(graph);
+
+            OrderRevisionData? orderRev = null;
+            if (payload.TryGetProperty("orderRevision", out var ordEl) && ordEl.ValueKind == JsonValueKind.Object)
+            {
+                orderRev = JsonSerializer.Deserialize<OrderRevisionData>(ordEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+
+            var facts = _factExtractor.ExtractFacts(graph, orderRev);
 
             List<RuleDefinition> rules = _activeRulePack?.Rules ?? new();
             var checklists = _evaluator.GenerateChecklists(rules, graph, facts);
@@ -252,6 +307,12 @@ namespace AHUVerification.App.Bridge
                 return new { cancelled = true };
             }
 
+            NormalizedXmlGraph? graph = null;
+            if (payload.TryGetProperty("graph", out var gEl) && gEl.ValueKind == JsonValueKind.Object)
+            {
+                graph = JsonSerializer.Deserialize<NormalizedXmlGraph>(gEl.GetRawText(), options);
+            }
+
             _patcher.PatchTemplate(
                 templatePath,
                 chosenPath,
@@ -261,7 +322,8 @@ namespace AHUVerification.App.Bridge
                 checklists,
                 _activeRulePack.Rules,
                 generalComments,
-                isDraft
+                isDraft,
+                graph
             );
 
             return new

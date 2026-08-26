@@ -157,25 +157,58 @@ export function exportToExcel(
   const wsVL = XLSX.utils.aoa_to_sheet(vlData);
   XLSX.utils.book_append_sheet(wb, wsVL, 'Verification List');
 
-  // 3. Check Information Sheet
-  const checkData = [
+  // 3. Dynamic Category Scratchpad Sheets
+  const activeCategorySheets = new Set<string>();
+  const applicableChecks = checklists.filter(c => c.applicability === 'Applicable');
+  applicableChecks.forEach(inst => {
+    const rule = rules.find(r => r.id === inst.ruleId);
+    if (!rule) return;
+    const cat = rule.category;
+    const sub = rule.subgroup;
+    if (cat === 'Base') activeCategorySheets.add('Base');
+    else if (cat === 'Paperwork') activeCategorySheets.add('Paperwork');
+    else if (cat === 'MOM') activeCategorySheets.add('MOM');
+    else if (cat === 'Housing' || cat === 'UTL' || cat === 'Knockdown') activeCategorySheets.add('Housing');
+    else if (cat === 'Internals' || cat === 'Internal') {
+      if (sub === 'Drain Pan') activeCategorySheets.add('Drain Pan');
+      else if (sub === 'Coil Segments') activeCategorySheets.add('Coil Panels');
+      else if (sub === 'Reconnects') activeCategorySheets.add('Reconnects');
+      else activeCategorySheets.add('Internal');
+    }
+  });
+
+  const categoryOrder = ['Base', 'Drain Pan', 'Housing', 'Paperwork', 'Internal', 'Coil Panels', 'Reconnects', 'MOM'];
+  categoryOrder.forEach(catName => {
+    if (activeCategorySheets.has(catName)) {
+      const scratchpadData = [
+        ['Total Checks', 'Passed', 'Errors (DR)', 0, 'Errors (DVL)', 0, 'Notes', 0, 'Photos', 0],
+        ['', ''],
+        [`${catName} Scratchpad & Verification Markups`, '', ''],
+        ['Paste detailer markups, drawings, and component photos below for checking:']
+      ];
+      const wsCat = XLSX.utils.aoa_to_sheet(scratchpadData);
+      XLSX.utils.book_append_sheet(wb, wsCat, catName);
+    }
+  });
+
+  // 4. Check Information Sheet
+  const checkData: (string | number)[][] = [
     ['Check Information'],
     ['Detailer', facts['unit.detailer']?.value || ''],
     ['COM', facts['unit.comNumber']?.value || ''],
     ['Checker', 'Pending'],
     ['Date Checked', ''],
     ['Error Tracker'],
-    ['Type', 'DR', 'DVL'],
-    ['Base Errors', 0, 0],
-    ['Drain Pan Errors', 0, 0],
-    ['Housing Errors', 0, 0],
-    ['Paperwork Errors', 0, 0],
-    ['Internal Component Errors', 0, 0],
-    ['Coil Panel Errors', 0, 0],
-    ['Reconnect Errors', 0, 0],
-    ['MOM Errors', 0, 0],
-    ['Total Errors', 0, 0]
+    ['Category Sheet', 'DR Errors', 'DVL Errors']
   ];
+
+  categoryOrder.forEach(catName => {
+    if (activeCategorySheets.has(catName)) {
+      checkData.push([`${catName} Errors`, 0, 0]);
+    }
+  });
+  checkData.push(['Total Errors', 0, 0]);
+
   const wsCheck = XLSX.utils.aoa_to_sheet(checkData);
   XLSX.utils.book_append_sheet(wb, wsCheck, 'Check Information');
 

@@ -46,12 +46,15 @@ flowchart TD
 
 ---
 
-## 2. Comparison Matrix: Manual Setup vs. XML Import
+## 2. Comparison Matrix: Manual Setup vs. XML / UPZ Ingestion
 
-| Field Key | Label | Category | Manual Setup Origin & Logic | XML Import Source Pointer & Logic | Status (XML) | Confidence (XML) | Target Excel Cell |
+| Field Key | Label | Category | Manual Setup Origin & Logic | Ingestion Source Pointer & Logic | Status | Confidence | Target Excel Cell |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `unit.jobName` | Job Name | Order & Identity | Wizard Input: `config.jobName` (Default: "New AHU Project") | Default: `"Medical Center Phase 3"` (Entered from Order Packet) | `Known` | `Authoritative` | `Verification List!D5` |
-| `unit.comNumber` | COM # | Order & Identity | Wizard Input: `config.comNumber` (Default: "COM-100001") | Default: `"COM-842910"` (Entered from MAPICS Order Packet) | `Known` | `Authoritative` | `Verification List!D6` |
+| `unit.jobName` | Job Name | Order & Identity | Wizard Input: `config.jobName` | UPZ: `/root:OrderRevision/jobName`<br/>XML: Default `"Medical Center Phase 3"` | `Known` | `Authoritative` | `Verification List!D5` |
+| `unit.orderNumber` | Order Number | Order & Identity | Wizard Input: N/A | UPZ: `/root:OrderRevision/orderNumber`<br/>XML: Prompted | `Known` | `Authoritative` | Context / Header |
+| `unit.tag` | Unit Tag | Order & Identity | Wizard Input: N/A | UPZ: `/root:OrderRevision/tagList/tag`<br/>XML: Prompted | `Known` | `Authoritative` | Context / Header |
+| `unit.productType` | Product Type | Order & Identity | Wizard Input: `config.productType` (`SolutionYC`) | UPZ: `/root:OrderRevision/productType`<br/>XML: `/root:AHU/unitOptions/unitType` | `Known` | `Authoritative` | Context / Header |
+| `unit.comNumber` | COM # | Order & Identity | Wizard Input: `config.comNumber` (Default: "COM-100001") | Default: `"COM-842910"` (Manual Entry from MAPICS Order Packet) | `Known` | `Authoritative` | `Verification List!D6` |
 | `unit.detailer` | Detailer Name | Order & Identity | Wizard Input: `config.detailerName` (Default: "Detailer") | Default: `"Tanner Dean"` (Current detailer profile) | `Known` | `Authoritative` | `Verification List!D3` |
 | `unit.date` | Verification Date | Order & Identity | Current ISO Date (`YYYY-MM-DD`) | Current UTC ISO Date (`YYYY-MM-DD`) | `Known` | `Authoritative` | `Verification List!D4` |
 | `unit.shellType` | Shell Type | Geometry & Casing | Wizard Input: `config.housingStyle` (`ThermalBreak` / `Standard`) | `/root:AHU/unitOptions/defaultConstructionOptions/housingStyle` | `Known` | `Authoritative` | `Verification List!D7` |
@@ -81,8 +84,10 @@ flowchart TD
 ## 3. Detailed Derivation Logic by Functional Domain
 
 ### 3.1. Order & Identity Domain
-- **In Manual Mode**: `unit.jobName`, `unit.comNumber`, and `unit.detailer` are captured directly via the `ManualUnitModal` wizard fields. They are applied to the fact registry via `overrideFact(...)` with the author tag `"Manual Project Creation"`.
-- **In XML Import Mode**: `Config.xml` does not contain customer-facing job names or MAPICS COM numbers (it only contains raw internal GUIDs like `unit_MOMID`). These fields initialize with standard placeholders and prompt notes directing the detailer to verify against the MAPICS order packet.
+- **In Manual Setup Mode**: `unit.jobName`, `unit.comNumber`, and `unit.detailer` are captured directly via the `ManualUnitModal` wizard fields. They are applied to the fact registry with `Status = ManuallyOverridden` and `Confidence = Authoritative`.
+- **In UPZ Bundle Ingestion Mode**: Loading a `.upz` unit archive extracts `OrderRev.xml` via `UpzBundleExtractor`, authoritatively populating `unit.jobName`, `unit.orderNumber`, `unit.tag`, and `unit.productType` with `Status = Known` and `Confidence = Authoritative`.
+- **In Standalone Config.xml Mode**: `Config.xml` does not contain order-level tags (only raw internal IDs). Order fields initialize with standard defaults and prompt notes directing the detailer to confirm against the MAPICS order packet.
+- **COM # Boundary**: `unit.comNumber` (MAPICS COM #) is never stored in engineering selection files (`Config.xml` or `.upz`) and remains an explicit, prompt-guided manual entry field for detailers across all ingestion modes.
 
 ### 3.2. Geometry, Structural Casing & Thermal Break
 - **`unit.shellType`**: Extracted directly from `<housingStyle>` (e.g., `ThermalBreak` or `Standard`).

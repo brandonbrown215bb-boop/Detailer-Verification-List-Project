@@ -6,9 +6,10 @@ import {
   ChecklistInstance,
   CheckStatus,
   DvlProjectFile,
-  ThemeMode
+  ThemeMode,
+  UpzBundle
 } from './types';
-import { parseAhuXml } from './services/xmlParser';
+import { parseAhuXml, parseOrderRevXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './services/rulesCatalog';
 import { generateChecklists } from './services/ruleEvaluator';
@@ -49,29 +50,24 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error in AHU Verification UI:', error, errorInfo);
+    console.error('Uncaught error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-screen w-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-6">
-          <div className="max-w-xl w-full p-6 rounded-2xl bg-white dark:bg-slate-900 border border-red-500/30 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-500">
-              <AlertCircle className="w-6 h-6" />
-              <h2 className="text-lg font-bold">Application Error</h2>
-            </div>
-            <p className="text-xs text-slate-700 dark:text-slate-300 font-mono bg-slate-50 dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800 overflow-x-auto">
-              {this.state.error?.message || 'An unexpected rendering error occurred.'}
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Reload Workspace</span>
-            </button>
+        <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-6 text-center">
+          <div className="p-4 bg-status-danger/10 border border-status-danger rounded-lg max-w-lg mb-4 text-status-danger">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <h2 className="text-lg font-bold">Something went wrong</h2>
+            <p className="text-xs text-text-muted mt-2 font-mono break-all">{this.state.error?.message}</p>
           </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-fg rounded hover:bg-primary/90 flex items-center gap-2 text-sm"
+          >
+            <RefreshCw className="w-4 h-4" /> Reload App
+          </button>
         </div>
       );
     }
@@ -80,27 +76,33 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const AppContent: React.FC = () => {
-  // Navigation & Project Active State (Defaults to false = Landing Home Page)
-  const [isProjectLoaded, setIsProjectLoaded] = useState<boolean>(false);
-  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
-  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(() => loadAutosave());
+  // App info & Rule Pack state
+  const [appInfo, setAppInfo] = useState<{ appVersion: string; isDesktopHost: boolean; rulePackVersion?: string } | null>(null);
 
-  // Project Workspace State
-  const [rawXml, setRawXml] = useState<string>('');
+  // Application Data States
+  const [isProjectLoaded, setIsProjectLoaded] = useState(false);
   const [graph, setGraph] = useState<NormalizedXmlGraph | null>(null);
   const [facts, setFacts] = useState<Record<string, Fact>>({});
   const [sqItems, setSqItems] = useState<SpecialQuote[]>([]);
   const [checklists, setChecklists] = useState<ChecklistInstance[]>([]);
+  const [rawXml, setRawXml] = useState<string>('');
+  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(null);
   const [generalComments, setGeneralComments] = useState<string>(
     'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
   );
   const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
   const [projectIntegrityWarning, setProjectIntegrityWarning] = useState<string | null>(null);
+  const [sourceMetadata, setSourceMetadata] = useState<{
+    fileName?: string;
+    isUpzBundle?: boolean;
+    orderRevision?: any;
+  }>({});
 
   // Active view: 'general' or skid ID ('skid-1', 'skid-2', etc.)
   const [activeTab, setActiveTab] = useState<string>('general');
 
   // Modals & Navigation state
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isResolutionOpen, setIsResolutionOpen] = useState(false);
   const [isPreFlightOpen, setIsPreFlightOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -161,7 +163,7 @@ export const AppContent: React.FC = () => {
   useEffect(() => {
     if (isProjectLoaded && graph && facts && sqItems && checklists) {
       let cancelled = false;
-      void createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments)
+      void createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata)
         .then(proj => {
           if (cancelled) return;
           autosaveToLocal(proj);
@@ -173,15 +175,28 @@ export const AppContent: React.FC = () => {
         cancelled = true;
       };
     }
-  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments]);
+  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata]);
 
-  // Handler for loading new XML
-  const loadXmlData = useCallback((xmlString: string) => {
+  // Handler for loading new XML or UPZ bundle
+  const loadXmlData = useCallback((xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
     try {
       const newGraph = parseAhuXml(xmlString);
-      const newFacts = extractFactsFromGraph(newGraph);
+
+      let orderRev = bundle?.orderRevision;
+      if (!orderRev && bundle?.rawOrderRevXml) {
+        orderRev = parseOrderRevXml(bundle.rawOrderRevXml);
+      }
+
+      const newFacts = extractFactsFromGraph(newGraph, orderRev);
       const newChecklists = generateChecklists(RULES_CATALOG, newGraph, newFacts);
 
+      const meta = {
+        fileName: sourceFileName || (bundle ? 'bundle.upz' : 'Config.xml'),
+        isUpzBundle: !!bundle,
+        orderRevision: orderRev
+      };
+
+      setSourceMetadata(meta);
       setRawXml(xmlString);
       setGraph(newGraph);
       setFacts(newFacts);
@@ -206,6 +221,11 @@ export const AppContent: React.FC = () => {
       setChecklists(project.checklistInstances || []);
       setRawXml(project.sourceXml?.rawXml || '');
       setGeneralComments(project.generalComments || '');
+      setSourceMetadata({
+        fileName: project.sourceXml?.fileName,
+        isUpzBundle: project.sourceXml?.isUpzBundle,
+        orderRevision: project.sourceXml?.orderRevision
+      });
       setCurrentProjectPath(filePath || null);
       setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
       setActiveTab('general');

@@ -34,20 +34,23 @@ namespace AHUVerification.Core.Services
             };
         }
 
-        public Dictionary<string, Fact> ExtractFacts(NormalizedXmlGraph graph)
+        public Dictionary<string, Fact> ExtractFacts(
+            NormalizedXmlGraph graph,
+            OrderRevisionData? orderRev = null)
         {
             var facts = new Dictionary<string, Fact>();
 
             // Order & Identity
+            bool hasJobName = !string.IsNullOrWhiteSpace(orderRev?.JobName);
             facts["unit.jobName"] = CreateFact(
                 "unit.jobName",
                 "Job Name",
                 "Order & Identity",
-                "Medical Center Phase 3",
+                hasJobName ? orderRev!.JobName : "Medical Center Phase 3",
                 FactStatus.Known,
                 FactConfidence.Authoritative,
-                null,
-                "Enter Job Name from Order Packet"
+                hasJobName ? "/root:OrderRevision/jobName" : null,
+                hasJobName ? null : "Enter Job Name from Order Packet"
             );
 
             facts["unit.comNumber"] = CreateFact(
@@ -58,8 +61,50 @@ namespace AHUVerification.Core.Services
                 FactStatus.Known,
                 FactConfidence.Authoritative,
                 null,
-                "Enter COM# from MAPICS"
+                "Enter COM# from MAPICS (e.g. COM-123456)"
             );
+
+            bool hasOrderNum = !string.IsNullOrWhiteSpace(orderRev?.OrderNumber);
+            if (hasOrderNum)
+            {
+                facts["unit.orderNumber"] = CreateFact(
+                    "unit.orderNumber",
+                    "Order Number",
+                    "Order & Identity",
+                    orderRev!.OrderNumber,
+                    FactStatus.Known,
+                    FactConfidence.Authoritative,
+                    "/root:OrderRevision/orderNumber"
+                );
+            }
+
+            bool hasTag = !string.IsNullOrWhiteSpace(orderRev?.PrimaryTag);
+            if (hasTag)
+            {
+                facts["unit.tag"] = CreateFact(
+                    "unit.tag",
+                    "Unit Tag",
+                    "Order & Identity",
+                    orderRev!.PrimaryTag,
+                    FactStatus.Known,
+                    FactConfidence.Authoritative,
+                    "/root:OrderRevision/tagList/tag"
+                );
+            }
+
+            bool hasProductType = !string.IsNullOrWhiteSpace(orderRev?.ProductType);
+            if (hasProductType)
+            {
+                facts["unit.productType"] = CreateFact(
+                    "unit.productType",
+                    "Product Type",
+                    "Order & Identity",
+                    orderRev!.ProductType,
+                    FactStatus.Known,
+                    FactConfidence.Authoritative,
+                    "/root:OrderRevision/productType"
+                );
+            }
 
             facts["unit.detailer"] = CreateFact(
                 "unit.detailer",

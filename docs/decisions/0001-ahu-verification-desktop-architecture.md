@@ -37,3 +37,10 @@ AHU detailing verification requires validating complex engineering configuration
 - High developer velocity and modularity by cleanly separating rule logic from Excel cell coordinates.
 - Complete fidelity to existing engineering standards without risking Excel corruption.
 - Robust offline operation on detailer workstations without network dependencies.
+
+## Addendum (2026-08-26)
+
+1. **Framework & Packaging Update**: Standardized on **.NET 10** (`net10.0-windows` / `net10.0`) and folder-based self-contained delivery (`PublishSingleFile=false`) alongside adjacent `dist/`, `resources/rulepack/`, and `resources/bin/` directories.
+2. **Dynamic OpenXML Deliverable Synthesis**: Decision 2 is superseded by ADR-0005. Inactive category worksheets are pruned, formula chains on `Check Information` are adapted dynamically to eliminate `#REF!` errors, `CalculationChainPart` is dropped to force Excel recalculation, and `Verification List` rows ($\ge 26$) are built dynamically grouped by shipping skid sections.
+3. **Client Storage & Autosave**: Frontend debounces active state autosaves to WebView2 `localStorage` (`ahu_dvl_autosave`), while `%LOCALAPPDATA%/AHUVerification/WebView2Data/` provides isolated runtime profile storage.
+

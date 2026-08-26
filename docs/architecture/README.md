@@ -5,18 +5,28 @@ scope:
   - implementation_plan.md
   - spike/**
   - src/**
+  - tests/**
+  - scripts/**
+  - resources/**
 ---
 
 # Architecture: AHU Detailing Verification Desktop Application
 
 ## Purpose
 
-The **AHU Detailing Verification** system is a Windows desktop application (.NET 10 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml`), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
+The **AHU Detailing Verification** system is a Windows desktop application (.NET 10 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml` or `.upz` unit package bundles), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
 
 ## Boundaries
 
 ```mermaid
 flowchart TD
+    subgraph Ingestion Sources ["Ingestion Sources"]
+        UPZ[".upz Archive Bundle<br/>(Config.xml, OrderRev.xml, Manifest.xml)"] --> UNPACK[Native Decompressor<br/>unpack32.exe / ywunpack.dll]
+        UNPACK --> XML[Config.xml]
+        UNPACK --> ORDER_REV[OrderRev.xml]
+        RAW_XML[Standalone Config.xml] --> XML
+    end
+
     subgraph Rule Pack Distribution ["Rule Pack (SharePoint / OneDrive / UNC)"]
         RP[Rule Pack Bundle<br/>• manifest.json<br/>• rules.json (Semantic Keys & AST)<br/>• template_map.json (Physical Cell Map)<br/>• approved_mappings.json (Confirmed Only)<br/>• template.xlsx]
     end
@@ -28,10 +38,11 @@ flowchart TD
     RP --> SYNC
 
     subgraph Data Pipeline
-        XML[Config.xml] --> PARSER[Relational XML Parser & Schema Validator]
+        XML --> PARSER[Relational XML Parser & Schema Validator]
         PARSER --> RAW_MODEL[Layer 1: Normalized XML Graph<br/>Faithful Structural Representation]
         
         RAW_MODEL --> EXTRACTOR[Fact Extractor]
+        ORDER_REV --> EXTRACTOR
         CACHE -.->|Approved Mappings Only| EXTRACTOR
         
         EXTRACTOR --> FACT_REG[Layer 2: Provenance-Aware Fact Registry<br/>Known | Derived | Unknown | Overridden]
@@ -48,7 +59,7 @@ flowchart TD
     end
 
     subgraph Handoff Deliverable
-        UI --> PATCHER[OpenXML Template Patcher]
+        UI --> PATCHER[OpenXML Deliverable Patcher<br/>Dynamic Sheet Pruning & Formula Adaptation]
         CACHE -.->|Provides template.xlsx & template_map.json| PATCHER
         PATCHER --> OUT[Detailing Verification List.xlsx<br/>Official Deliverable for Checker]
     end
@@ -59,22 +70,26 @@ flowchart TD
 - **Identity**: Every JSON member is hashed as UTF-8 with LF-normalized line endings, `template.xlsx` is hashed by exact bytes, and `bundleSha256` covers the ordered member hashes.
 - **Sync**: A complete staged pack is verified before directory promotion, with Last Known Good (LKG) rollback.
 
-### 2. Data Pipeline
-- **Layer 1: Normalized XML Graph (`NormalizedXmlGraph`)**: Pure, uninterpreted structural graph of `Config.xml` (Units, Skids, Bases, Segments, Components/Internals).
-- **Layer 2: Provenance-Aware Fact Registry (`FactRegistry`)**: Strongly-typed business facts with 4-state status (`Known`, `Derived`, `Unknown`, `ManuallyOverridden`) and confidence flags (`Authoritative`, `RequiresConfirmation`).
+### 2. Ingestion & Data Pipeline
+- **Package Decompression (`UpzBundleExtractor`)**: When provided a `.upz` bundle, the host invokes the bundled `unpack32.exe` / `ywunpack.dll` in an isolated temp directory to extract `Config.xml`, `OrderRev.xml`, and `Manifest.xml`.
+- **Layer 1: Normalized XML Graph (`NormalizedXmlGraph`)**: Pure, uninterpreted structural graph of `Config.xml` (Units, Skids, Bases, Segments, Components/Internals). Also synthesized cleanly for manual unit configurations without XML.
+- **Layer 2: Provenance-Aware Fact Registry (`FactRegistry`)**: Strongly-typed business facts with 4-state status (`Known`, `Derived`, `Unknown`, `ManuallyOverridden`) and confidence flags (`Authoritative`, `RequiresConfirmation`). Order-level facts (`unit.jobName`, `unit.orderNumber`, `unit.tag`, `unit.productType`) are populated authoritatively from `OrderRev.xml`, while `unit.comNumber` (COM #) remains an explicit manual entry field for detailers.
 - **Scoped Rule Evaluator**: JSON-AST predicate engine evaluating rules across `Unit`, `Skid`, `Segment`, and `Component` scopes to produce `Applicable`, `Not Applicable`, or `Needs Input`.
 
-### 3. Desktop Application & Persistence (`.dvl`)
+### 3. Desktop Host & Typed Asynchronous IPC Bridge
 - **Responsibility**: C#/.NET 10 hosting Edge WebView2 interface.
+- **Typed Asynchronous IPC Bridge**: Communication occurs via 11 typed asynchronous actions (`getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `parseXml`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `syncRulePack`) with graceful browser fallback.
 - **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, checklist completion states, full source XML SHA-256, and pinned Rule Pack bundle identity.
 - **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file.
 
-### 4. OpenXML Deliverable Patcher
-- **Responsibility**: Generates the final `Detailing Verification List.xlsx` workbook by patching cell values via `DocumentFormat.OpenXml` without altering Excel schemas, data validation dropdowns, or formula recalculation chains.
-- **Boundary**: This desktop OpenXML path is the official deliverable path. Browser SheetJS export is preview-only.
+### 4. Dynamic OpenXML Deliverable Synthesis
+- **Responsibility**: Generates the final `Detailing Verification List.xlsx` workbook using `DocumentFormat.OpenXml` (v3.1.1+).
+- **Dynamic Category Pruning**: Inactive category scratchpad sheets (`Base`, `Drain Pan`, `Housing`, `Paperwork`, `Internal`, `Coil Panels`, `Reconnects`, `MOM`) with zero applicable checks are pruned from the workbook package.
+- **Formula Adaptation**: Adapts `Check Information` formula calculation chains (`B8..B15`, `C8..C15`, `B19`, `B20`) replacing pruned category links with numeric `0` to prevent `#REF!` errors, and removes `CalculationChainPart` to force fresh formula evaluation upon opening in Excel.
+- **Dynamic Skid Row Generation**: Rebuilds `Verification List` rows $\ge 26$ dynamically with structured shipping skid and general unit section headers containing only applicable checks.
 
 ### 5. Desktop Delivery
-- **Artifact**: A self-contained `win-x64` publish folder containing the desktop host, `dist/`, and `resources/rulepack/`.
+- **Artifact**: A self-contained `win-x64` publish folder containing the desktop host executable, `dist/` (frontend web assets), `resources/rulepack/` (rule pack files), and `resources/bin/` (`unpack32.exe` and `ywunpack.dll`).
 - **Runtime Resolution**: Release builds load adjacent packaged assets only. Debug builds may use the repository bundle or a running Vite development server.
 
 ### 6. UI Architecture & Productivity Engine
@@ -87,9 +102,9 @@ flowchart TD
 
 ## Invariants and Sharp Edges
 
-1. **Excel Template Integrity**:
-   - `DocumentFormat.OpenXml` (v3.1.1+) must be used for template patching.
-   - Must preserve all 12 `DataValidations` elements and all 23 formula chains on `Check Information` (e.g. `='Drain Pan'!F1`).
+1. **Excel Deliverable Synthesis**:
+   - `DocumentFormat.OpenXml` (v3.1.1+) must be used for deliverable synthesis.
+   - Inactive category scratchpad worksheets are pruned when no applicable checks exist; dependent formulas on `Check Information` must be adapted dynamically to eliminate `#REF!` errors.
 2. **Strict Skid Weight Semantics**:
    - Do not guess or auto-calculate aggregate skid weight unless explicitly authored or approved.
    - Missing skid weights remain `status: 'Unknown'` and evaluate dependent rules to `Needs Input`.
@@ -100,11 +115,13 @@ flowchart TD
 5. **Local-First & Offline Resilience**:
    - Application must function 100% offline with pinned local rule packs if remote network shares are unavailable.
 6. **Artifact Completeness**:
-   - A release is incomplete unless `dist/index.html` and every manifest-declared baseline Rule Pack artifact are present beside the executable in the publish folder.
+   - A release is incomplete unless `dist/index.html`, every manifest-declared baseline Rule Pack artifact in `resources/rulepack/`, and native decompression binaries (`unpack32.exe` / `ywunpack.dll` in `resources/bin/`) are present beside the executable in the publish folder.
 
 ## Validation
 
-- **Spike Validation**: Completed OpenXML roundtrip verification against `Detailing Verification List.xlsx` confirming 0 schema errors and intact formulas/validations.
+- **OpenXML Deliverable Validation**: Automated unit tests verify dynamic worksheet pruning, formula adaptation, and schema compliance on generated Excel workbooks.
 - **Rule Evaluator Verification**: Unit tests against AST evaluation logic across all scope levels.
 - **Roundtrip Project Persistence**: Unit tests verify `.dvl` save/load fidelity, full Rule Pack identity, source XML identity, and absolute atomic save behavior.
 - **Rule Pack Integrity**: Unit tests reject missing or tampered members and accept JSON line-ending conversion without weakening content hashes.
+- **UPZ Decompression**: Automated unit tests verify native extraction of XML artifacts and order metadata parsing.
+

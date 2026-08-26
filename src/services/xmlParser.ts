@@ -1,4 +1,4 @@
-import { NormalizedXmlGraph, Segment, ShippingSkid, UnitBase, MotorControl } from '../types';
+import { NormalizedXmlGraph, Segment, ShippingSkid, UnitBase, MotorControl, OrderRevisionData } from '../types';
 
 const SEGMENT_NAMES: Record<string, string> = {
   AB: 'Air Blender',
@@ -391,3 +391,46 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     motorControls
   };
 }
+
+export function parseOrderRevXml(xmlContent: string): OrderRevisionData {
+  if (!xmlContent || typeof xmlContent !== 'string') {
+    return {
+      productType: '',
+      jobName: '',
+      orderNumber: '',
+      lineNumber: 1,
+      projectName: '',
+      projectId: '',
+      baseSQOrderNumber: '',
+      tagList: []
+    };
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlContent, 'text/xml');
+  const root = doc.documentElement;
+
+  const productType = getChildText(root, 'productType');
+  const jobName = getChildText(root, 'jobName');
+  const orderNumber = getChildText(root, 'orderNumber');
+  const lineNumber = getChildNumber(root, 'lineNumber', 1);
+  const projectName = getChildText(root, 'projectName');
+  const projectId = getChildText(root, 'projectID');
+  const baseSQOrderNumber = getChildText(root, 'baseSQOrderNumber');
+
+  const tagListNodes = getElements(root, 'tag');
+  const tagList = tagListNodes.map(t => t.textContent?.trim() || '').filter(Boolean);
+
+  return {
+    productType,
+    jobName,
+    orderNumber,
+    lineNumber,
+    projectName,
+    projectId,
+    baseSQOrderNumber,
+    tagList,
+    primaryTag: tagList[0] || ''
+  };
+}
+

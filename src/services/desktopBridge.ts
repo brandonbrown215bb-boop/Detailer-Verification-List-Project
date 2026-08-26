@@ -1,4 +1,4 @@
-import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition } from '../types';
+import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, UpzBundle } from '../types';
 import { exportToExcel } from './excelExporter';
 import { saveDvlToFile } from './projectStorage';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog';
@@ -86,11 +86,29 @@ class DesktopBridge {
     };
   }
 
-  public async openFileDialog(): Promise<{ fileName: string; filePath: string; content: string; isDvl: boolean } | null> {
+  public async openFileDialog(): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz?: boolean;
+    bundle?: UpzBundle;
+  } | null> {
     if (this.isDesktop) {
       return this.sendRequest('openFileDialog');
     }
     return null;
+  }
+
+  public async extractUpz(filePath: string): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz: boolean;
+    bundle: UpzBundle;
+  }> {
+    return this.sendRequest('extractUpz', { filePath });
   }
 
   public async saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
