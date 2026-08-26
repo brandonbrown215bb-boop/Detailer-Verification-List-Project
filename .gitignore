@@ -17,6 +17,7 @@ dist-ssr/
 # .NET / C#
 bin/
 obj/
+publish/
 [Dd]ebug/
 [Rr]elease/
 *.user

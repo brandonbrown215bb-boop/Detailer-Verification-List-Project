@@ -59,13 +59,16 @@ namespace AHUVerification.RuleEditor
                 string repositoryDist = Path.Combine(repoRoot, "dist");
                 if (Directory.Exists(repositoryRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
+                if (!Directory.Exists(rulePackPath))
+                {
+                    rulePackPath = Path.Combine(repoRoot, "resources", "rulepack");
+                }
 #endif
 
                 if (!Directory.Exists(rulePackPath))
-                {
-                    string root = FindRepoRoot();
-                    rulePackPath = Path.Combine(root, "resources", "rulepack");
-                }
+                    throw new DirectoryNotFoundException($"Packaged Rule Pack not found: {rulePackPath}");
+                if (!File.Exists(Path.Combine(distFolder, "rule-editor.html")))
+                    throw new FileNotFoundException("Packaged web interface not found.", Path.Combine(distFolder, "rule-editor.html"));
 
                 _bridgeHandler = new RuleEditorBridgeHandler(this, rulePackPath);
                 _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
