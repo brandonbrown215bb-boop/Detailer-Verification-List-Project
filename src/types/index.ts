@@ -268,3 +268,18 @@ export interface RulePackIdentity {
   version: string;
   sha256: string;
 }
+
+export interface RulePackManifestFileEntry {
+  sha256: string;
+  totalRules?: number;
+  activeRules?: number;
+  archivedRules?: number;
+}
+
+export interface RulePackManifest {
+  name: string;
+  version: string;
+  generatedAt: string;
+  bundleSha256: string;
+  files: Record<string, RulePackManifestFileEntry>;
+}

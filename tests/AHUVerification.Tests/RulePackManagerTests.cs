@@ -94,6 +94,54 @@ namespace AHUVerification.Tests
             }
         }
 
+        [Fact]
+        public void PublishToDirectory_GeneratesValidBundle_WithAccurateBundleSha()
+        {
+            var manager = new RulePackManager();
+            var baseline = manager.LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+
+            string tempPublishDir = Path.Combine(Path.GetTempPath(), $"ahu-published-rulepack-{Guid.NewGuid():N}");
+            try
+            {
+                var modifiedRules = baseline.Rules.ToList();
+                modifiedRules.Add(new Core.Models.RuleDefinition
+                {
+                    Id = "TEST-99",
+                    SemanticKey = "TEST_CUSTOM_RULE",
+                    Scope = Core.Models.RuleScope.Unit,
+                    Category = "Base",
+                    Text = "Test newly published rule verification.",
+                    Order = 99
+                });
+
+                var publishedBundle = manager.PublishToDirectory(
+                    tempPublishDir,
+                    "15.0.0",
+                    modifiedRules,
+                    baseline.TemplateMap,
+                    baseline.ApprovedMappings,
+                    baseline.TemplatePath
+                );
+
+                Assert.True(publishedBundle.IsValid);
+                Assert.Equal("15.0.0", publishedBundle.Manifest.Version);
+                Assert.Equal(64, publishedBundle.Manifest.BundleSha256.Length);
+                Assert.Contains(publishedBundle.Rules, r => r.Id == "TEST-99");
+
+                // Verify reloading independently from disk
+                var reloaded = manager.LoadFromDirectory(tempPublishDir);
+                Assert.True(reloaded.IsValid);
+                Assert.Equal(publishedBundle.Manifest.BundleSha256, reloaded.Manifest.BundleSha256);
+            }
+            finally
+            {
+                if (Directory.Exists(tempPublishDir))
+                {
+                    Directory.Delete(tempPublishDir, recursive: true);
+                }
+            }
+        }
+
         private static string CopyRulePackToTemp()
         {
             string destination = Path.Combine(Path.GetTempPath(), $"ahu-rulepack-{Guid.NewGuid():N}");

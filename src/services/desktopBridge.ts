@@ -175,6 +175,31 @@ class DesktopBridge {
     }
     return { success: true, version: RULE_PACK_IDENTITY.version, ruleCount: RULES_CATALOG.length };
   }
+
+  public async getRulePack(): Promise<{
+    rules: RuleDefinition[];
+    templateMap: any;
+    approvedMappings: any;
+    manifest: any;
+  }> {
+    if (this.isDesktop) {
+      return this.sendRequest('getRulePack');
+    }
+    return {
+      rules: RULES_CATALOG,
+      templateMap: null,
+      approvedMappings: null,
+      manifest: null
+    };
+  }
+
+  public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
+    if (this.isDesktop) {
+      return this.sendRequest('publishRulePack', payload);
+    }
+    return { success: true };
+  }
 }
 
+export { DesktopBridge };
 export const desktopBridge = new DesktopBridge();

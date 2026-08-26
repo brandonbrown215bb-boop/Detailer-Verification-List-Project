@@ -156,6 +156,100 @@ namespace AHUVerification.Core.Services
             }
         }
 
+        public RulePackBundle PublishToDirectory(
+            string destinationDirectory,
+            string version,
+            List<RuleDefinition> rules,
+            TemplateMap templateMap,
+            JsonElement approvedMappings,
+            string templateXlsxSourcePath)
+        {
+            if (!File.Exists(templateXlsxSourcePath))
+                throw new FileNotFoundException($"Template Excel file not found: {templateXlsxSourcePath}");
+
+            Directory.CreateDirectory(destinationDirectory);
+
+            var writeOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new JsonStringEnumConverter() }
+            };
+
+            string rulesJson = JsonSerializer.Serialize(rules, writeOptions);
+            string templateMapJson = JsonSerializer.Serialize(templateMap, writeOptions);
+            string approvedMappingsJson = JsonSerializer.Serialize(approvedMappings, writeOptions);
+
+            // Normalize line endings to LF
+            rulesJson = rulesJson.Replace("\r\n", "\n").Replace('\r', '\n');
+            templateMapJson = templateMapJson.Replace("\r\n", "\n").Replace('\r', '\n');
+            approvedMappingsJson = approvedMappingsJson.Replace("\r\n", "\n").Replace('\r', '\n');
+
+            string rulesPath = Path.Combine(destinationDirectory, "rules.json");
+            string templateMapPath = Path.Combine(destinationDirectory, "template_map.json");
+            string approvedMappingsPath = Path.Combine(destinationDirectory, "approved_mappings.json");
+            string templateDestPath = Path.Combine(destinationDirectory, "template.xlsx");
+            string manifestPath = Path.Combine(destinationDirectory, "manifest.json");
+
+            File.WriteAllText(rulesPath, rulesJson, new UTF8Encoding(false));
+            File.WriteAllText(templateMapPath, templateMapJson, new UTF8Encoding(false));
+            File.WriteAllText(approvedMappingsPath, approvedMappingsJson, new UTF8Encoding(false));
+
+            if (!string.Equals(Path.GetFullPath(templateXlsxSourcePath), Path.GetFullPath(templateDestPath), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(templateXlsxSourcePath, templateDestPath, true);
+            }
+
+            int activeRules = rules.Count(r => r.IsArchived != true);
+            int archivedRules = rules.Count(r => r.IsArchived == true);
+
+            var actualHashes = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["rules.json"] = ComputeCanonicalJsonSha256(rulesJson),
+                ["template_map.json"] = ComputeCanonicalJsonSha256(templateMapJson),
+                ["approved_mappings.json"] = ComputeCanonicalJsonSha256(approvedMappingsJson),
+                ["template.xlsx"] = ComputeFileSha256(templateDestPath)
+            };
+
+            string bundleSha = ComputeBundleSha256(actualHashes);
+
+            var manifest = new RulePackManifest
+            {
+                Name = "AHU Detailing Verification Rule Pack",
+                Version = version,
+                GeneratedAt = DateTime.UtcNow.ToString("o"),
+                BundleSha256 = bundleSha,
+                Files = new Dictionary<string, RulePackManifestFileEntry>
+                {
+                    ["rules.json"] = new RulePackManifestFileEntry
+                    {
+                        Sha256 = actualHashes["rules.json"],
+                        TotalRules = rules.Count,
+                        ActiveRules = activeRules,
+                        ArchivedRules = archivedRules
+                    },
+                    ["template_map.json"] = new RulePackManifestFileEntry
+                    {
+                        Sha256 = actualHashes["template_map.json"]
+                    },
+                    ["approved_mappings.json"] = new RulePackManifestFileEntry
+                    {
+                        Sha256 = actualHashes["approved_mappings.json"]
+                    },
+                    ["template.xlsx"] = new RulePackManifestFileEntry
+                    {
+                        Sha256 = actualHashes["template.xlsx"]
+                    }
+                }
+            };
+
+            string manifestJson = JsonSerializer.Serialize(manifest, writeOptions);
+            manifestJson = manifestJson.Replace("\r\n", "\n").Replace('\r', '\n');
+            File.WriteAllText(manifestPath, manifestJson, new UTF8Encoding(false));
+
+            // Validate the written package to be 100% sure
+            return LoadFromDirectory(destinationDirectory);
+        }
+
         private static string ComputeCanonicalJsonSha256(string content)
         {
             string canonicalText = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');

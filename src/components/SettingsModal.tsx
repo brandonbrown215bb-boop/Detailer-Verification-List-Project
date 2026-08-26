@@ -171,6 +171,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>OpenXML 3.1.1 Verified</span>
                 </span>
               </div>
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex justify-end">
+                <a
+                  href="/rule-editor.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Open Rule & Logic Editor</span>
+                </a>
+              </div>
             </div>
           </div>
 

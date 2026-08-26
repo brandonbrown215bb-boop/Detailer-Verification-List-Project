@@ -100,6 +100,13 @@ flowchart TD
 - **Pre-Flight Export**: Verification audit with jump links and Draft vs Final deliverable modes.
 - **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and dynamic 22-slot SQ manager.
 
+### 7. Rule & Logic Editor Desktop Studio (`RuleEditor.exe`)
+- **Responsibility**: Dedicated standalone application for engineering team leads to maintain, edit, and archive verification rules.
+- **Visual AST Condition Builder**: No-code visual condition trees with Fact selectors, comparison operators, and compound AND/OR groups.
+- **Fact Dictionary Catalog**: Built-in catalog of domain facts across Unit, Skid, Segment, and Component scopes.
+- **Live Test Sandbox**: Real-time simulation of rule logic against live fact tweaks or imported sample XML models.
+- **Publishing Engine**: Canonical LF-normalized SHA-256 hash generation and automatic `manifest.json` updating.
+
 ## Invariants and Sharp Edges
 
 1. **Excel Deliverable Synthesis**:

@@ -9,4 +9,5 @@ Create numbered ADRs for decisions whose reasons need to survive the implementat
 - [0005 - Dynamic OpenXML Deliverable Synthesis and Scratchpad Sheet Pruning](0005-dynamic-openxml-deliverable-synthesis.md)
 - [0006 - Manual Unit Setup Wizard and Baseline Structural Graph Synthesis](0006-manual-unit-graph-synthesis.md)
 - [0007 - Typed Asynchronous IPC Bridge Architecture between WebView2 and .NET 10](0007-typed-ipc-bridge-protocol.md)
+- [0008 - Standalone Rule & Logic Editor Desktop Studio and Visual AST Authoring](0008-rule-editor-desktop-studio-and-visual-ast-authoring.md)
 
