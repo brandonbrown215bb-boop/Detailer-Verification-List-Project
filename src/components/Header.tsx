@@ -10,6 +10,7 @@ import {
   Laptop,
   Shield,
   Save,
+  SaveAll,
   Home,
   Settings,
   CheckCircle2
@@ -28,6 +29,8 @@ interface HeaderProps {
   onLoadSample: () => void;
   onFileUpload: (file: File) => void;
   onSaveDvl: () => void;
+  onSaveDvlAs: () => void;
+  rulePackVersion: string;
   themeMode: ThemeMode;
   onCycleThemeMode: () => void;
   lastSavedAt?: string;
@@ -46,6 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLoadSample,
   onFileUpload,
   onSaveDvl,
+  onSaveDvlAs,
+  rulePackVersion,
   themeMode,
   onCycleThemeMode,
   lastSavedAt,
@@ -112,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Rule Pack Tag */}
         <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-medium ml-2">
           <Shield className="w-3.5 h-3.5" />
-          <span>Rule Pack v13.1.0</span>
+          <span>Rule Pack v{rulePackVersion}</span>
         </div>
       </div>
 
@@ -162,12 +167,21 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Save .dvl Project */}
         <button
-          onClick={onSaveDvl}
+          onClick={() => onSaveDvl()}
           title="Save self-contained .dvl project file (Ctrl+S)"
           className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 font-medium transition-all"
         >
           <Save className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
           <span className="hidden sm:inline">Save .dvl</span>
+        </button>
+
+        <button
+          onClick={() => onSaveDvlAs()}
+          title="Save a copy to a new .dvl path (Ctrl+Shift+S)"
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 font-medium transition-all"
+        >
+          <SaveAll className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>Save As</span>
         </button>
 
         {/* Resolution Center */}

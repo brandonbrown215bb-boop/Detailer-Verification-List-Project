@@ -1,16 +1,60 @@
 import { saveAs } from 'file-saver';
 import { DvlProjectFile, NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance } from '../types';
+import { RULE_PACK_IDENTITY } from './rulesCatalog';
 
 const AUTOSAVE_KEY = 'ahu_dvl_autosave';
 
-export function createDvlProject(
+async function sha256Hex(content: string): Promise<string> {
+  const bytes = new TextEncoder().encode(content);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function isFullSha256(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+}
+
+export interface DvlIntegrityResult {
+  status: 'verified' | 'unverified';
+  message?: string;
+}
+
+export async function inspectDvlIntegrity(project: DvlProjectFile): Promise<DvlIntegrityResult> {
+  const storedRulePackSha = project.rulePack?.sha256;
+  const storedXmlSha = project.sourceXml?.fileSha256;
+
+  if (!isFullSha256(storedRulePackSha) || !isFullSha256(storedXmlSha)) {
+    return {
+      status: 'unverified',
+      message: 'This project uses legacy placeholder identity metadata. Its contents were loaded, but cannot be verified until the project is saved again.'
+    };
+  }
+
+  const actualXmlSha = await sha256Hex(project.sourceXml.rawXml || '');
+  const problems: string[] = [];
+  if (actualXmlSha !== storedXmlSha.toLowerCase()) {
+    problems.push('the embedded Config.xml hash does not match its contents');
+  }
+  if (
+    project.rulePack.version !== RULE_PACK_IDENTITY.version ||
+    storedRulePackSha.toLowerCase() !== RULE_PACK_IDENTITY.sha256.toLowerCase()
+  ) {
+    problems.push(`the project is pinned to Rule Pack ${project.rulePack.version}, not the active ${RULE_PACK_IDENTITY.version}`);
+  }
+
+  return problems.length === 0
+    ? { status: 'verified' }
+    : { status: 'unverified', message: `This project is unverified because ${problems.join(' and ')}. Review it before relying on export results.` };
+}
+
+export async function createDvlProject(
   graph: NormalizedXmlGraph,
   facts: Record<string, Fact>,
   sqItems: SpecialQuote[],
   checklists: ChecklistInstance[],
   rawXml: string,
   generalComments: string = ''
-): DvlProjectFile {
+): Promise<DvlProjectFile> {
   const author = String(facts['unit.detailer']?.value || 'Detailer');
   const jobName = String(facts['unit.jobName']?.value || 'AHU Project');
   const comNumber = String(facts['unit.comNumber']?.value || 'COM-000000');
@@ -24,12 +68,12 @@ export function createDvlProject(
     jobName,
     comNumber,
     rulePack: {
-      version: '13.1.0',
-      sha256: 'a3f8901c34de2e8b'
+      version: RULE_PACK_IDENTITY.version,
+      sha256: RULE_PACK_IDENTITY.sha256
     },
     sourceXml: {
       fileName: 'Config.xml',
-      fileSha256: 'e89b21cf4a09',
+      fileSha256: await sha256Hex(rawXml),
       schemaVersion: graph.documentVersion || '2018.9.14.1003',
       rawXml
     },

@@ -49,33 +49,34 @@ namespace AHUVerification.App
                 var env = await CoreWebView2Environment.CreateAsync(null, webViewUserData);
                 await _webView.EnsureCoreWebView2Async(env);
 
-                // Configure bridge
+                string appBase = AppContext.BaseDirectory;
+                string rulePackPath = Path.Combine(appBase, "resources", "rulepack");
+                string distFolder = Path.Combine(appBase, "dist");
+
+#if DEBUG
                 string repoRoot = FindRepoRoot();
-                string rulePackPath = Path.Combine(repoRoot, "src", "rulepack");
+                string repositoryRulePack = Path.Combine(repoRoot, "src", "rulepack");
+                string repositoryDist = Path.Combine(repoRoot, "dist");
+                if (Directory.Exists(repositoryRulePack)) rulePackPath = repositoryRulePack;
+                if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
+#endif
+
                 if (!Directory.Exists(rulePackPath))
-                {
-                    rulePackPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "rulepack");
-                }
+                    throw new DirectoryNotFoundException($"Packaged Rule Pack not found: {rulePackPath}");
+                if (!File.Exists(Path.Combine(distFolder, "index.html")))
+                    throw new FileNotFoundException("Packaged web interface not found.", Path.Combine(distFolder, "index.html"));
 
                 _bridgeHandler = new BridgeHandler(this, rulePackPath);
                 _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
 
                 // Configure Virtual Host mapping for built frontend
-                string distFolder = Path.Combine(repoRoot, "dist");
-                if (!Directory.Exists(distFolder))
-                {
-                    distFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dist");
-                }
+                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "ahu-verification.local",
+                    distFolder,
+                    CoreWebView2HostResourceAccessKind.Allow
+                );
 
-                if (Directory.Exists(distFolder))
-                {
-                    _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                        "ahu-verification.local",
-                        distFolder,
-                        CoreWebView2HostResourceAccessKind.Allow
-                    );
-                }
-
+#if DEBUG
                 // Check if Vite dev server is running
                 bool devServerActive = await IsDevServerRunningAsync("http://localhost:5173");
                 if (devServerActive)
@@ -86,6 +87,9 @@ namespace AHUVerification.App
                 {
                     _webView.CoreWebView2.Navigate("https://ahu-verification.local/index.html");
                 }
+#else
+                _webView.CoreWebView2.Navigate("https://ahu-verification.local/index.html");
+#endif
             }
             catch (Exception ex)
             {
@@ -119,6 +123,7 @@ namespace AHUVerification.App
             }
         }
 
+#if DEBUG
         private static async Task<bool> IsDevServerRunningAsync(string url)
         {
             try
@@ -149,5 +154,6 @@ namespace AHUVerification.App
             }
             return Directory.GetCurrentDirectory();
         }
+#endif
     }
 }

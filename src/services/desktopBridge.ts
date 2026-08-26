@@ -1,7 +1,7 @@
-import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, TemplateMap } from '../types';
+import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition } from '../types';
 import { exportToExcel } from './excelExporter';
-import { createDvlProject, saveDvlToFile } from './projectStorage';
-import { RULES_CATALOG, TEMPLATE_MAP } from './rulesCatalog';
+import { saveDvlToFile } from './projectStorage';
+import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog';
 
 declare global {
   interface Window {
@@ -80,7 +80,7 @@ class DesktopBridge {
     return {
       appName: 'AHU Detailing Verification',
       appVersion: '1.0.0 (Browser Preview)',
-      rulePackVersion: '13.1.0',
+      rulePackVersion: RULE_PACK_IDENTITY.version,
       ruleCount: RULES_CATALOG.length,
       isDesktopHost: false
     };
@@ -99,6 +99,16 @@ class DesktopBridge {
     }
     saveDvlToFile(project);
     return { saved: true, path: `${project.jobName}_${project.comNumber}.dvl` };
+  }
+
+  public async saveFileDialog(defaultName: string): Promise<string | null> {
+    if (this.isDesktop) {
+      return this.sendRequest('saveFileDialog', {
+        defaultName,
+        filter: 'DVL Project (*.dvl)|*.dvl'
+      });
+    }
+    return null;
   }
 
   public async exportExcelDeliverable(
@@ -145,7 +155,7 @@ class DesktopBridge {
     if (this.isDesktop) {
       return this.sendRequest('syncRulePack', { remotePath });
     }
-    return { success: true, version: '13.1.0', ruleCount: RULES_CATALOG.length };
+    return { success: true, version: RULE_PACK_IDENTITY.version, ruleCount: RULES_CATALOG.length };
   }
 }
 

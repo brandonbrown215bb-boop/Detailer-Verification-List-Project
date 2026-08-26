@@ -32,7 +32,15 @@ namespace AHUVerification.Tests
             };
 
             var projectManager = new DvlProjectManager();
-            var project = projectManager.CreateProject(graph, facts, sqItems, checklists, xmlContent, "General comment test");
+            var project = projectManager.CreateProject(
+                graph,
+                facts,
+                sqItems,
+                checklists,
+                xmlContent,
+                bundle.Manifest.Version,
+                bundle.Manifest.BundleSha256,
+                "General comment test");
 
             string tempFile = Path.Combine(Path.GetTempPath(), "test_roundtrip.dvl");
             try
@@ -44,6 +52,9 @@ namespace AHUVerification.Tests
                 Assert.Equal(project.JobName, loaded.JobName);
                 Assert.Equal(project.ComNumber, loaded.ComNumber);
                 Assert.Equal(project.SourceXml.FileSha256, loaded.SourceXml.FileSha256);
+                Assert.Equal(64, loaded.SourceXml.FileSha256.Length);
+                Assert.Equal(bundle.Manifest.Version, loaded.RulePack.Version);
+                Assert.Equal(bundle.Manifest.BundleSha256, loaded.RulePack.Sha256);
                 Assert.Equal(project.SqItems.Count, loaded.SqItems.Count);
                 Assert.Equal(project.ChecklistInstances.Count, loaded.ChecklistInstances.Count);
                 Assert.Equal(project.NormalizedGraph.Segments.Count, loaded.NormalizedGraph.Segments.Count);
@@ -52,6 +63,33 @@ namespace AHUVerification.Tests
             finally
             {
                 if (File.Exists(tempFile)) File.Delete(tempFile);
+            }
+        }
+
+        [Fact]
+        public void SaveJsonToFile_RejectsRelativePaths()
+        {
+            var projectManager = new DvlProjectManager();
+            Assert.Throws<ArgumentException>(() => projectManager.SaveJsonToFile("{}", "Project.dvl"));
+        }
+
+        [Fact]
+        public void SaveJsonToFile_ReplacesDestinationWithoutLeavingTemporaryFiles()
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), $"ahu-dvl-{Guid.NewGuid():N}");
+            string targetPath = Path.Combine(tempDirectory, "Project.dvl");
+            var projectManager = new DvlProjectManager();
+            try
+            {
+                projectManager.SaveJsonToFile("{\"revision\":1}", targetPath);
+                projectManager.SaveJsonToFile("{\"revision\":2}", targetPath);
+
+                Assert.Equal("{\"revision\":2}", File.ReadAllText(targetPath));
+                Assert.Empty(Directory.GetFiles(tempDirectory, "*.tmp"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, recursive: true);
             }
         }
     }

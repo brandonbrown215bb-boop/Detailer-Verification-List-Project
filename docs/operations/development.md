@@ -1,7 +1,7 @@
 # Development
 
 ## Prerequisites
-- **.NET 8+ SDK** (C# 12 / .NET 8 / 10)
+- **.NET 10 SDK**
 - **Node.js 20+** & **npm** (for WebView2 TypeScript/Vite frontend bundle)
 - **Windows 10/11 (64-bit)** with Microsoft Edge WebView2 runtime
 
@@ -35,7 +35,13 @@ Or double-clicking `setup.bat` from Windows File Explorer.
   ```powershell
   node scripts/build_rulepack.mjs
   ```
-- **Publish Standalone Desktop Executable**:
+- **Publish Self-Contained Desktop Folder** (includes `dist/` and `resources/rulepack/`):
   ```powershell
-  dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+  npm run build
+  node scripts/build_rulepack.mjs
+  dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/publish/win-x64
   ```
+
+The publish directory is the deployable unit; do not distribute the `.exe` by itself. Confirm that `dist/index.html`, `resources/rulepack/manifest.json`, and all four manifest-declared Rule Pack members are present before release.
+
+The browser development build can generate a SheetJS workbook for workflow preview. Only the desktop OpenXML export is the official verification deliverable.

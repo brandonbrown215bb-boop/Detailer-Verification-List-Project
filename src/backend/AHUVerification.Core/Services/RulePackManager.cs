@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,7 @@ namespace AHUVerification.Core.Services
         public RulePackManifest Manifest { get; set; } = new();
         public List<RuleDefinition> Rules { get; set; } = new();
         public TemplateMap TemplateMap { get; set; } = new();
+        public JsonElement ApprovedMappings { get; set; }
         public string TemplatePath { get; set; } = "";
         public string RootPath { get; set; } = "";
         public bool IsValid { get; set; }
@@ -21,6 +23,14 @@ namespace AHUVerification.Core.Services
 
     public class RulePackManager
     {
+        private static readonly string[] RequiredArtifactNames =
+        {
+            "rules.json",
+            "template_map.json",
+            "approved_mappings.json",
+            "template.xlsx"
+        };
+
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -35,36 +45,61 @@ namespace AHUVerification.Core.Services
             string manifestPath = Path.Combine(directoryPath, "manifest.json");
             string rulesPath = Path.Combine(directoryPath, "rules.json");
             string templateMapPath = Path.Combine(directoryPath, "template_map.json");
+            string approvedMappingsPath = Path.Combine(directoryPath, "approved_mappings.json");
             string templatePath = Path.Combine(directoryPath, "template.xlsx");
 
-            if (!File.Exists(manifestPath) || !File.Exists(rulesPath) || !File.Exists(templateMapPath))
-                throw new FileNotFoundException("Incomplete rule pack bundle: missing manifest, rules, or template_map.");
+            if (!File.Exists(manifestPath))
+                throw new FileNotFoundException("Incomplete rule pack bundle: missing manifest.json.", manifestPath);
+
+            foreach (string artifactName in RequiredArtifactNames)
+            {
+                string artifactPath = Path.Combine(directoryPath, artifactName);
+                if (!File.Exists(artifactPath))
+                    throw new FileNotFoundException($"Incomplete rule pack bundle: missing {artifactName}.", artifactPath);
+            }
 
             string manifestJson = File.ReadAllText(manifestPath, Encoding.UTF8);
             var manifest = JsonSerializer.Deserialize<RulePackManifest>(manifestJson, JsonOptions)
                 ?? throw new InvalidOperationException("Failed to deserialize manifest.json");
 
-            // Hash verification
             string rulesJson = File.ReadAllText(rulesPath, Encoding.UTF8);
             string templateMapJson = File.ReadAllText(templateMapPath, Encoding.UTF8);
+            string approvedMappingsJson = File.ReadAllText(approvedMappingsPath, Encoding.UTF8);
 
-            string rulesSha = ComputeSha256(rulesJson);
-            string mapSha = ComputeSha256(templateMapJson);
-
-            if (manifest.Files.TryGetValue("rules.json", out var rEntry) && !string.IsNullOrEmpty(rEntry.Sha256))
+            var actualHashes = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                if (!string.Equals(rulesSha, rEntry.Sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Hash mismatch for rules.json: expected {rEntry.Sha256}, got {rulesSha}");
+                ["rules.json"] = ComputeCanonicalJsonSha256(rulesJson),
+                ["template_map.json"] = ComputeCanonicalJsonSha256(templateMapJson),
+                ["approved_mappings.json"] = ComputeCanonicalJsonSha256(approvedMappingsJson),
+                ["template.xlsx"] = ComputeFileSha256(templatePath)
+            };
+
+            foreach (string artifactName in RequiredArtifactNames)
+            {
+                if (!manifest.Files.TryGetValue(artifactName, out var entry))
+                    throw new InvalidOperationException($"Manifest is missing the required {artifactName} entry.");
+                if (!IsFullSha256(entry.Sha256))
+                    throw new InvalidOperationException($"Manifest contains an invalid SHA-256 for {artifactName}.");
+                if (!string.Equals(actualHashes[artifactName], entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Hash mismatch for {artifactName}: expected {entry.Sha256}, got {actualHashes[artifactName]}");
             }
+
+            string bundleSha = ComputeBundleSha256(actualHashes);
+            if (!IsFullSha256(manifest.BundleSha256))
+                throw new InvalidOperationException("Manifest contains an invalid bundleSha256.");
+            if (!string.Equals(bundleSha, manifest.BundleSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Rule pack bundle hash mismatch: expected {manifest.BundleSha256}, got {bundleSha}");
 
             var rules = JsonSerializer.Deserialize<List<RuleDefinition>>(rulesJson, JsonOptions) ?? new();
             var templateMap = JsonSerializer.Deserialize<TemplateMap>(templateMapJson, JsonOptions) ?? new();
+            var approvedMappings = JsonSerializer.Deserialize<JsonElement>(approvedMappingsJson, JsonOptions);
 
             return new RulePackBundle
             {
                 Manifest = manifest,
                 Rules = rules,
                 TemplateMap = templateMap,
+                ApprovedMappings = approvedMappings.Clone(),
                 TemplatePath = templatePath,
                 RootPath = directoryPath,
                 IsValid = true
@@ -73,6 +108,7 @@ namespace AHUVerification.Core.Services
 
         public bool SyncFromRemote(string remotePath, string localStagingPath, string activeStorePath, string lkgPath)
         {
+            bool activeMovedToLkg = false;
             try
             {
                 if (!Directory.Exists(remotePath)) return false;
@@ -92,55 +128,67 @@ namespace AHUVerification.Core.Services
                 var staged = LoadFromDirectory(localStagingPath);
                 if (!staged.IsValid) return false;
 
-                // 3. Backup active store to LKG (Last Known Good)
+                // 3. Rename the active store to LKG on the same local volume.
                 if (Directory.Exists(activeStorePath))
                 {
                     if (Directory.Exists(lkgPath))
                         Directory.Delete(lkgPath, true);
-                    Directory.CreateDirectory(lkgPath);
-
-                    foreach (var file in Directory.GetFiles(activeStorePath))
-                    {
-                        string dest = Path.Combine(lkgPath, Path.GetFileName(file));
-                        File.Copy(file, dest, true);
-                    }
+                    Directory.Move(activeStorePath, lkgPath);
+                    activeMovedToLkg = true;
                 }
 
-                // 4. Atomically swap staged into active store
-                if (Directory.Exists(activeStorePath))
-                    Directory.Delete(activeStorePath, true);
-                Directory.CreateDirectory(activeStorePath);
-
-                foreach (var file in Directory.GetFiles(localStagingPath))
-                {
-                    string dest = Path.Combine(activeStorePath, Path.GetFileName(file));
-                    File.Copy(file, dest, true);
-                }
+                // 4. Promote the already-validated staging directory with a rename.
+                Directory.Move(localStagingPath, activeStorePath);
 
                 return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Rule pack sync error: {ex.Message}");
-                // Rollback to LKG if possible
-                if (Directory.Exists(lkgPath))
+                // Roll back only when this attempt moved the previous active pack.
+                if (activeMovedToLkg && Directory.Exists(lkgPath))
                 {
-                    Directory.CreateDirectory(activeStorePath);
-                    foreach (var file in Directory.GetFiles(lkgPath))
-                    {
-                        string dest = Path.Combine(activeStorePath, Path.GetFileName(file));
-                        File.Copy(file, dest, true);
-                    }
+                    if (Directory.Exists(activeStorePath))
+                        Directory.Delete(activeStorePath, true);
+                    Directory.Move(lkgPath, activeStorePath);
                 }
                 return false;
             }
         }
 
-        private static string ComputeSha256(string content)
+        private static string ComputeCanonicalJsonSha256(string content)
+        {
+            string canonicalText = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+            return ComputeSha256(Encoding.UTF8.GetBytes(canonicalText));
+        }
+
+        private static string ComputeBundleSha256(IReadOnlyDictionary<string, string> hashes)
+        {
+            string identity = string.Join("\n", RequiredArtifactNames.Select(name => $"{name}:{hashes[name].ToLowerInvariant()}"));
+            return ComputeSha256(Encoding.UTF8.GetBytes(identity));
+        }
+
+        private static string ComputeFileSha256(string filePath)
+        {
+            using var stream = File.OpenRead(filePath);
+            return ComputeSha256(stream);
+        }
+
+        private static string ComputeSha256(byte[] bytes)
         {
             using var sha = SHA256.Create();
-            byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
-            return Convert.ToHexString(bytes).ToLowerInvariant();
+            return Convert.ToHexString(sha.ComputeHash(bytes)).ToLowerInvariant();
+        }
+
+        private static string ComputeSha256(Stream stream)
+        {
+            using var sha = SHA256.Create();
+            return Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
+        }
+
+        private static bool IsFullSha256(string value)
+        {
+            return !string.IsNullOrEmpty(value) && value.Length == 64 && value.All(Uri.IsHexDigit);
         }
     }
 }

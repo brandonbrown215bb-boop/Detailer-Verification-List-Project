@@ -242,3 +242,8 @@ export interface DvlProjectFile {
   checklistInstances: ChecklistInstance[];
   generalComments: string;
 }
+
+export interface RulePackIdentity {
+  version: string;
+  sha256: string;
+}

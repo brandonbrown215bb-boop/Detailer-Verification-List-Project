@@ -10,9 +10,9 @@ import {
 } from './types';
 import { parseAhuXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
-import { RULES_CATALOG } from './services/rulesCatalog';
+import { RULES_CATALOG, RULE_PACK_IDENTITY } from './services/rulesCatalog';
 import { generateChecklists } from './services/ruleEvaluator';
-import { createDvlProject, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
+import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
 import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
 import { desktopBridge } from './services/desktopBridge';
 import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
@@ -94,6 +94,8 @@ export const AppContent: React.FC = () => {
   const [generalComments, setGeneralComments] = useState<string>(
     'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
   );
+  const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
+  const [projectIntegrityWarning, setProjectIntegrityWarning] = useState<string | null>(null);
 
   // Active view: 'general' or skid ID ('skid-1', 'skid-2', etc.)
   const [activeTab, setActiveTab] = useState<string>('general');
@@ -158,10 +160,18 @@ export const AppContent: React.FC = () => {
   // Autosave when active data changes
   useEffect(() => {
     if (isProjectLoaded && graph && facts && sqItems && checklists) {
-      const proj = createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
-      autosaveToLocal(proj);
-      setAutosavedProject(proj);
-      setLastSavedAt(new Date().toISOString());
+      let cancelled = false;
+      void createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments)
+        .then(proj => {
+          if (cancelled) return;
+          autosaveToLocal(proj);
+          setAutosavedProject(proj);
+          setLastSavedAt(new Date().toISOString());
+        })
+        .catch(error => console.warn('Autosave project creation failed:', error));
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments]);
 
@@ -177,6 +187,8 @@ export const AppContent: React.FC = () => {
       setFacts(newFacts);
       setChecklists(newChecklists);
       setSqItems([]);
+      setCurrentProjectPath(null);
+      setProjectIntegrityWarning(null);
       setActiveTab('general');
       setIsProjectLoaded(true);
     } catch (err: any) {
@@ -185,14 +197,17 @@ export const AppContent: React.FC = () => {
   }, []);
 
   // Handler for loading saved .dvl project
-  const handleOpenDvl = useCallback((project: DvlProjectFile) => {
+  const handleOpenDvl = useCallback(async (project: DvlProjectFile, _rawJson?: string, filePath?: string) => {
     try {
+      const integrity = await inspectDvlIntegrity(project);
       setGraph(project.normalizedGraph);
       setFacts(project.factRegistry);
       setSqItems(project.sqItems || []);
       setChecklists(project.checklistInstances || []);
       setRawXml(project.sourceXml?.rawXml || '');
       setGeneralComments(project.generalComments || '');
+      setCurrentProjectPath(filePath || null);
+      setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
       setActiveTab('general');
       setIsProjectLoaded(true);
     } catch (err: any) {
@@ -210,6 +225,8 @@ export const AppContent: React.FC = () => {
       setSqItems(manual.sqItems);
       setRawXml(manual.rawXml);
       setGeneralComments(manual.generalComments);
+      setCurrentProjectPath(null);
+      setProjectIntegrityWarning(null);
       setActiveTab('general');
       setIsProjectLoaded(true);
     } catch (err: any) {
@@ -264,6 +281,8 @@ export const AppContent: React.FC = () => {
           isCompleted: false
         }
       ]);
+      setCurrentProjectPath(null);
+      setProjectIntegrityWarning(null);
       setActiveTab('general');
       setIsProjectLoaded(true);
     } catch (err: any) {
@@ -359,20 +378,32 @@ export const AppContent: React.FC = () => {
   }, []);
 
   // Save .dvl Project
-  const handleSaveDvl = async () => {
+  const handleSaveDvl = async (forceSaveAs: boolean = false) => {
     if (!graph) return;
-    const project = createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
-    const jobName = facts['unit.jobName']?.value || 'AHU_Project';
-    const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
-    const defaultName = `${jobName}_${comNumber}.dvl`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    try {
+      const project = await createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
+      const jobName = facts['unit.jobName']?.value || 'AHU_Project';
+      const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
+      const defaultName = `${jobName}_${comNumber}.dvl`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
-    if (desktopBridge.isRunningInDesktop()) {
-      const res = await desktopBridge.saveDvl(defaultName, project);
-      if (res.saved) {
-        setExportNotice({ fileName: defaultName, filePath: res.path });
+      if (desktopBridge.isRunningInDesktop()) {
+        let targetPath = forceSaveAs ? null : currentProjectPath;
+        if (!targetPath) {
+          targetPath = await desktopBridge.saveFileDialog(defaultName);
+        }
+        if (!targetPath) return;
+
+        const res = await desktopBridge.saveDvl(targetPath, project);
+        if (res.saved) {
+          setCurrentProjectPath(res.path);
+          setProjectIntegrityWarning(null);
+          setExportNotice({ fileName: res.path.split(/[\\/]/).pop() || defaultName, filePath: res.path });
+        }
+      } else {
+        saveDvlToFile(project);
       }
-    } else {
-      saveDvlToFile(project);
+    } catch (error: any) {
+      alert(`Error saving .dvl project: ${error.message}`);
     }
   };
 
@@ -405,10 +436,10 @@ export const AppContent: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         if (isProjectLoaded) {
           e.preventDefault();
-          handleSaveDvl();
+          void handleSaveDvl(e.shiftKey);
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         if (isProjectLoaded) {
@@ -423,7 +454,7 @@ export const AppContent: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments]);
+  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, currentProjectPath]);
 
   // Cycle Theme Mode handler
   const handleCycleThemeMode = useCallback(() => {
@@ -488,10 +519,19 @@ export const AppContent: React.FC = () => {
           onLoadSample={handleLoadSample}
           onFileUpload={handleFileUpload}
           onSaveDvl={handleSaveDvl}
+          onSaveDvlAs={() => handleSaveDvl(true)}
+          rulePackVersion={RULE_PACK_IDENTITY.version}
           themeMode={themeMode}
           onCycleThemeMode={handleCycleThemeMode}
           lastSavedAt={lastSavedAt || undefined}
         />
+
+        {projectIntegrityWarning && (
+          <div className="bg-amber-100 dark:bg-amber-950/90 border-b border-amber-300 dark:border-amber-700/60 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{projectIntegrityWarning}</span>
+          </div>
+        )}
 
         {/* Export Notification Toast */}
         {exportNotice && (
@@ -510,7 +550,7 @@ export const AppContent: React.FC = () => {
                     className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium transition-colors"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>Open in Excel</span>
+                    <span>{exportNotice.fileName.endsWith('.dvl') ? 'Open File' : 'Open in Excel'}</span>
                   </button>
                   <button
                     onClick={() => desktopBridge.showInExplorer(exportNotice.filePath!)}
@@ -604,7 +644,7 @@ export const AppContent: React.FC = () => {
         onSetThemeMode={setThemeMode}
         detailerName={String(facts['unit.detailer']?.value || 'Detailer')}
         onUpdateDetailerName={(name) => handleUpdateFact('unit.detailer', name)}
-        rulePackVersion="13.1.0"
+        rulePackVersion={RULE_PACK_IDENTITY.version}
         ruleCount={RULES_CATALOG.length}
         lastAutosavedAt={lastSavedAt || undefined}
         onClearAutosave={handleClearAutosave}

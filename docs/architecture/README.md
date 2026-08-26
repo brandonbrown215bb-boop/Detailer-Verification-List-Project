@@ -11,7 +11,7 @@ scope:
 
 ## Purpose
 
-The **AHU Detailing Verification** system is a Windows desktop application (.NET 8 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml`), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official, fully validated `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
+The **AHU Detailing Verification** system is a Windows desktop application (.NET 10 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml`), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
 
 ## Boundaries
 
@@ -56,7 +56,8 @@ flowchart TD
 
 ### 1. Rule Pack & Sync Engine
 - **Responsibility**: Manages declarative rule definitions (`rules.json`), physical Excel mapping coordinates (`template_map.json`), confirmed code mappings (`approved_mappings.json`), and the official Excel template (`template.xlsx`).
-- **Sync**: Atomic background download and hash verification from OneDrive/SharePoint/UNC with Last Known Good (LKG) rollback.
+- **Identity**: Every JSON member is hashed as UTF-8 with LF-normalized line endings, `template.xlsx` is hashed by exact bytes, and `bundleSha256` covers the ordered member hashes.
+- **Sync**: A complete staged pack is verified before directory promotion, with Last Known Good (LKG) rollback.
 
 ### 2. Data Pipeline
 - **Layer 1: Normalized XML Graph (`NormalizedXmlGraph`)**: Pure, uninterpreted structural graph of `Config.xml` (Units, Skids, Bases, Segments, Components/Internals).
@@ -64,13 +65,19 @@ flowchart TD
 - **Scoped Rule Evaluator**: JSON-AST predicate engine evaluating rules across `Unit`, `Skid`, `Segment`, and `Component` scopes to produce `Applicable`, `Not Applicable`, or `Needs Input`.
 
 ### 3. Desktop Application & Persistence (`.dvl`)
-- **Responsibility**: C#/.NET 8 hosting Edge WebView2 interface.
-- **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, and checklist completion states.
+- **Responsibility**: C#/.NET 10 hosting Edge WebView2 interface.
+- **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, checklist completion states, full source XML SHA-256, and pinned Rule Pack bundle identity.
+- **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file.
 
 ### 4. OpenXML Deliverable Patcher
 - **Responsibility**: Generates the final `Detailing Verification List.xlsx` workbook by patching cell values via `DocumentFormat.OpenXml` without altering Excel schemas, data validation dropdowns, or formula recalculation chains.
+- **Boundary**: This desktop OpenXML path is the official deliverable path. Browser SheetJS export is preview-only.
 
-### 5. UI Architecture & Productivity Engine
+### 5. Desktop Delivery
+- **Artifact**: A self-contained `win-x64` publish folder containing the desktop host, `dist/`, and `resources/rulepack/`.
+- **Runtime Resolution**: Release builds load adjacent packaged assets only. Debug builds may use the repository bundle or a running Vite development server.
+
+### 6. UI Architecture & Productivity Engine
 - **Responsibility**: Embedded Vite + TypeScript SPA inside WebView2 container.
 - **Theme**: User configurable (System Default, Dark, Light).
 - **Navigation**: Skid-centric tabs (`General Unit`, `Skid 1..N`) with real-time completion badges.
@@ -92,9 +99,12 @@ flowchart TD
    - Verification rules reference abstract semantic keys (`BASE_LIFTING_LUG_SUPPORT`), never hardcoded Excel cell addresses (`X29`). `template_map.json` translates semantic keys to cell coordinates at patch time.
 5. **Local-First & Offline Resilience**:
    - Application must function 100% offline with pinned local rule packs if remote network shares are unavailable.
+6. **Artifact Completeness**:
+   - A release is incomplete unless `dist/index.html` and every manifest-declared baseline Rule Pack artifact are present beside the executable in the publish folder.
 
 ## Validation
 
 - **Spike Validation**: Completed OpenXML roundtrip verification against `Detailing Verification List.xlsx` confirming 0 schema errors and intact formulas/validations.
 - **Rule Evaluator Verification**: Unit tests against AST evaluation logic across all scope levels.
-- **Roundtrip Project Persistence**: Unit tests verifying `.dvl` save/load fidelity.
+- **Roundtrip Project Persistence**: Unit tests verify `.dvl` save/load fidelity, full Rule Pack identity, source XML identity, and absolute atomic save behavior.
+- **Rule Pack Integrity**: Unit tests reject missing or tampered members and accept JSON line-ending conversion without weakening content hashes.

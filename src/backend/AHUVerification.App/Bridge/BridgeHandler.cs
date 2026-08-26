@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
@@ -60,17 +61,10 @@ namespace AHUVerification.App.Bridge
 
         private void LoadActiveRulePack()
         {
-            try
-            {
-                if (Directory.Exists(_rulePackPath))
-                {
-                    _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to load rule pack: {ex.Message}");
-            }
+            if (!Directory.Exists(_rulePackPath))
+                throw new DirectoryNotFoundException($"Rule pack directory not found: {_rulePackPath}");
+
+            _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
         }
 
         public BridgeResponse Handle(string jsonMessage)
@@ -124,8 +118,8 @@ namespace AHUVerification.App.Bridge
             {
                 appName = "AHU Detailing Verification",
                 appVersion = "1.0.0",
-                rulePackVersion = _activeRulePack?.Manifest.Version ?? "13.1.0",
-                ruleCount = _activeRulePack?.Rules.Count ?? 0,
+                rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
+                ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
                 isDesktopHost = true
             };
         }
@@ -137,7 +131,8 @@ namespace AHUVerification.App.Bridge
             {
                 manifest = _activeRulePack?.Manifest,
                 rules = _activeRulePack?.Rules,
-                templateMap = _activeRulePack?.TemplateMap
+                templateMap = _activeRulePack?.TemplateMap,
+                approvedMappings = _activeRulePack?.ApprovedMappings
             };
         }
 
@@ -211,14 +206,8 @@ namespace AHUVerification.App.Bridge
         {
             string targetPath = payload.GetProperty("filePath").GetString() ?? "";
             string dvlJson = payload.GetProperty("projectJson").GetString() ?? "";
-
-            string? dir = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-            File.WriteAllText(targetPath, dvlJson);
-            return new { saved = true, path = targetPath };
+            _projectManager.SaveJsonToFile(dvlJson, targetPath);
+            return new { saved = true, path = Path.GetFullPath(targetPath) };
         }
 
         private object ExportExcelDeliverable(JsonElement payload)
@@ -320,8 +309,8 @@ namespace AHUVerification.App.Bridge
             return new
             {
                 success,
-                version = _activeRulePack?.Manifest.Version ?? "13.1.0",
-                ruleCount = _activeRulePack?.Rules.Count ?? 0
+                version = _activeRulePack?.Manifest.Version ?? "Unavailable",
+                ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0
             };
         }
     }

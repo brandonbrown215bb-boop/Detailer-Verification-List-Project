@@ -1648,6 +1648,17 @@ function sha256(content) {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
+const rulePackFileOrder = [
+  "rules.json",
+  "template_map.json",
+  "approved_mappings.json",
+  "template.xlsx"
+];
+
+function computeBundleSha256(files) {
+  return sha256(rulePackFileOrder.map(name => `${name}:${files[name].sha256}`).join("\n"));
+}
+
 const targetDirs = ["src/rulepack", "resources/rulepack", "docs/roolz"];
 
 for (const dir of targetDirs) {
@@ -1662,21 +1673,27 @@ for (const dir of targetDirs) {
   fs.writeFileSync(path.join(dir, "approved_mappings.json"), approvedMappingsJson, "utf8");
 
   const templatePath = path.join(dir, "template.xlsx");
-  const templateSha = fs.existsSync(templatePath) ? sha256(fs.readFileSync(templatePath)) : "";
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Cannot build rule pack without ${templatePath}`);
+  }
+  const templateSha = sha256(fs.readFileSync(templatePath));
 
   const activeCount = rules.filter(r => !r.isArchived).length;
   const archivedCount = rules.filter(r => r.isArchived).length;
+
+  const files = {
+    "rules.json": { sha256: sha256(rulesJson), totalRules: rules.length, activeRules: activeCount, archivedRules: archivedCount },
+    "template_map.json": { sha256: sha256(templateMapJson) },
+    "approved_mappings.json": { sha256: sha256(approvedMappingsJson) },
+    "template.xlsx": { sha256: templateSha }
+  };
 
   const manifest = {
     name: "AHU Detailing Verification Rule Pack",
     version: "14.0.0",
     generatedAt: new Date().toISOString(),
-    files: {
-      "rules.json": { sha256: sha256(rulesJson), totalRules: rules.length, activeRules: activeCount, archivedRules: archivedCount },
-      "template_map.json": { sha256: sha256(templateMapJson) },
-      "approved_mappings.json": { sha256: sha256(approvedMappingsJson) },
-      "template.xlsx": { sha256: templateSha }
-    }
+    bundleSha256: computeBundleSha256(files),
+    files
   };
 
   fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");

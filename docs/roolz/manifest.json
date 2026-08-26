@@ -1,7 +1,8 @@
 {
   "name": "AHU Detailing Verification Rule Pack",
   "version": "14.0.0",
-  "generatedAt": "2026-08-25T21:07:11.282Z",
+  "generatedAt": "2026-08-26T02:13:57.885Z",
+  "bundleSha256": "cfe421b9d079b410d09cd9d0ac88aa6e2c06ca3fb946f6c5528347c90a71b47f",
   "files": {
     "rules.json": {
       "sha256": "9253637d6771e9c0f0ea827eb452e1e567b5451111ce7c9a20dc4152460ad45c",

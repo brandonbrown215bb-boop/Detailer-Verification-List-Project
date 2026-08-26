@@ -205,7 +205,7 @@ namespace AHUVerification.Core.Models
     public class TemplateMap
     {
         [JsonPropertyName("templateVersion")]
-        public string TemplateVersion { get; set; } = "13.1.0";
+        public string TemplateVersion { get; set; } = "";
 
         [JsonPropertyName("generalFields")]
         public Dictionary<string, CellCoordinate> GeneralFields { get; set; } = new();
@@ -224,6 +224,12 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("totalRules")]
         public int? TotalRules { get; set; }
+
+        [JsonPropertyName("activeRules")]
+        public int? ActiveRules { get; set; }
+
+        [JsonPropertyName("archivedRules")]
+        public int? ArchivedRules { get; set; }
     }
 
     public class RulePackManifest
@@ -232,10 +238,13 @@ namespace AHUVerification.Core.Models
         public string Name { get; set; } = "";
 
         [JsonPropertyName("version")]
-        public string Version { get; set; } = "13.1.0";
+        public string Version { get; set; } = "";
 
         [JsonPropertyName("generatedAt")]
         public string GeneratedAt { get; set; } = "";
+
+        [JsonPropertyName("bundleSha256")]
+        public string BundleSha256 { get; set; } = "";
 
         [JsonPropertyName("files")]
         public Dictionary<string, RulePackManifestFileEntry> Files { get; set; } = new();

@@ -7,7 +7,7 @@ namespace AHUVerification.Core.Models
     public class RulePackInfo
     {
         [JsonPropertyName("version")]
-        public string Version { get; set; } = "13.1.0";
+        public string Version { get; set; } = "";
 
         [JsonPropertyName("sha256")]
         public string Sha256 { get; set; } = "";

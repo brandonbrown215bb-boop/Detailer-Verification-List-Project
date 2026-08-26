@@ -15,13 +15,14 @@ import {
 } from 'lucide-react';
 import { DvlProjectFile } from '../types';
 import { desktopBridge } from '../services/desktopBridge';
+import { RULES_CATALOG, RULE_PACK_IDENTITY } from '../services/rulesCatalog';
 
 interface HomePageProps {
   autosavedProject: DvlProjectFile | null;
   onResumeAutosave: () => void;
   onClearAutosave: () => void;
   onImportXml: (xmlContent: string) => void;
-  onOpenDvl: (project: DvlProjectFile, rawJson?: string) => void;
+  onOpenDvl: (project: DvlProjectFile, rawJson?: string, filePath?: string) => void | Promise<void>;
   onOpenManualModal: () => void;
   onLoadSample: () => void;
 }
@@ -89,7 +90,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         if (result.isDvl) {
           try {
             const project = JSON.parse(result.content);
-            onOpenDvl(project, result.content);
+            void onOpenDvl(project, result.content, result.filePath);
           } catch (err: any) {
             alert(`Error reading .dvl project: ${err.message}`);
           }
@@ -133,7 +134,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-medium">
           <Shield className="w-3.5 h-3.5" />
-          <span>Rule Pack v13.1.0 (99 Rules)</span>
+          <span>Rule Pack v{RULE_PACK_IDENTITY.version} ({RULES_CATALOG.filter(rule => !rule.isArchived).length} Rules)</span>
         </div>
       </div>
 
