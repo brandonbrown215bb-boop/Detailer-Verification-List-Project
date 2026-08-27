@@ -36,6 +36,30 @@ export function evaluateAstPredicate(
   }
 
   // Evaluator operators
+  if ('>=' in predicate) {
+    const [left, right] = predicate['>='];
+    const leftVal = resolveValue(left);
+    const rightVal = resolveValue(right);
+    const res = Number(leftVal) >= Number(rightVal);
+    return {
+      result: res,
+      needsInput: false,
+      trace: `Evaluated: ${leftVal} >= ${rightVal} (${res ? 'True' : 'False'})`
+    };
+  }
+
+  if ('<=' in predicate) {
+    const [left, right] = predicate['<='];
+    const leftVal = resolveValue(left);
+    const rightVal = resolveValue(right);
+    const res = Number(leftVal) <= Number(rightVal);
+    return {
+      result: res,
+      needsInput: false,
+      trace: `Evaluated: ${leftVal} <= ${rightVal} (${res ? 'True' : 'False'})`
+    };
+  }
+
   if ('>' in predicate) {
     const [left, right] = predicate['>'];
     const leftVal = resolveValue(left);
@@ -45,6 +69,18 @@ export function evaluateAstPredicate(
       result: res,
       needsInput: false,
       trace: `Evaluated: ${leftVal} > ${rightVal} (${res ? 'True' : 'False'})`
+    };
+  }
+
+  if ('<' in predicate) {
+    const [left, right] = predicate['<'];
+    const leftVal = resolveValue(left);
+    const rightVal = resolveValue(right);
+    const res = Number(leftVal) < Number(rightVal);
+    return {
+      result: res,
+      needsInput: false,
+      trace: `Evaluated: ${leftVal} < ${rightVal} (${res ? 'True' : 'False'})`
     };
   }
 
@@ -76,11 +112,28 @@ export function evaluateAstPredicate(
     const [left, right] = predicate['includes'];
     const leftVal = String(resolveValue(left) || '');
     const rightVal = String(resolveValue(right) || '');
-    const res = leftVal.includes(rightVal);
+    const res = leftVal.toLowerCase().includes(rightVal.toLowerCase());
     return {
       result: res,
       needsInput: false,
       trace: `Evaluated: "${leftVal}" includes "${rightVal}" (${res ? 'True' : 'False'})`
+    };
+  }
+
+  if ('in' in predicate) {
+    const [left, right] = predicate['in'];
+    const leftVal = resolveValue(left);
+    const rightList: any[] = Array.isArray(right)
+      ? right
+      : String(resolveValue(right) || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+    const res = rightList.some(item => String(item).trim().toLowerCase() === String(leftVal).trim().toLowerCase());
+    return {
+      result: res,
+      needsInput: false,
+      trace: `Evaluated: ${JSON.stringify(leftVal)} in [${rightList.join(', ')}] (${res ? 'True' : 'False'})`
     };
   }
 
@@ -98,6 +151,35 @@ export function evaluateAstPredicate(
       }
     }
     return { result: true, needsInput: false, trace: traces.join(' AND ') };
+  }
+
+  if ('or' in predicate) {
+    const subPredicates = predicate['or'] as ASTPredicate[];
+    const traces: string[] = [];
+    let hasTrue = false;
+    let anyNeedsInput = false;
+    let needsInputTrace = '';
+
+    for (const sub of subPredicates) {
+      const subEval = evaluateAstPredicate(sub, context, [], factRegistry);
+      if (subEval.needsInput) {
+        anyNeedsInput = true;
+        needsInputTrace = subEval.trace;
+      }
+      traces.push(subEval.trace);
+      if (subEval.result) {
+        hasTrue = true;
+        break;
+      }
+    }
+
+    if (hasTrue) {
+      return { result: true, needsInput: false, trace: traces.join(' OR ') };
+    }
+    if (anyNeedsInput) {
+      return { result: false, needsInput: true, trace: needsInputTrace };
+    }
+    return { result: false, needsInput: false, trace: traces.join(' OR ') };
   }
 
   return { result: true, needsInput: false, trace: 'Default true' };

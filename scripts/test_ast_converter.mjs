@@ -1,6 +1,5 @@
 import assert from 'assert';
 
-// Mock implementations matching astConverter logic for node test verification
 function leafToAst(leaf) {
   if (!leaf.factKey) return undefined;
   const varRef = { var: leaf.factKey };
@@ -40,6 +39,24 @@ function leafToAst(leaf) {
   }
 }
 
+function subGroupToAst(group) {
+  if (!group.children || group.children.length === 0) return undefined;
+
+  const convertedChildren = group.children
+    .map(child => {
+      if (child.type === 'condition') {
+        return leafToAst(child);
+      } else {
+        return subGroupToAst(child);
+      }
+    })
+    .filter(Boolean);
+
+  if (convertedChildren.length === 0) return undefined;
+  if (group.logicalOperator === 'or') return { or: convertedChildren };
+  return { and: convertedChildren };
+}
+
 function visualTreeToAst(root) {
   if (!root.children || root.children.length === 0) return undefined;
 
@@ -48,23 +65,25 @@ function visualTreeToAst(root) {
       if (child.type === 'condition') {
         return leafToAst(child);
       } else {
-        return visualTreeToAst(child);
+        return subGroupToAst(child);
       }
     })
     .filter(Boolean);
 
   if (convertedChildren.length === 0) return undefined;
-  if (convertedChildren.length === 1 && root.logicalOperator === 'and') return convertedChildren[0];
+  if (convertedChildren.length === 1 && root.logicalOperator === 'and' && root.children[0].type === 'condition') {
+    return convertedChildren[0];
+  }
   if (root.logicalOperator === 'or') return { or: convertedChildren };
   return { and: convertedChildren };
 }
 
 function parseLeaf(predicate) {
   const operators = [
-    { key: '>', op: '>' },
     { key: '>=', op: '>=' },
-    { key: '<', op: '<' },
     { key: '<=', op: '<=' },
+    { key: '>', op: '>' },
+    { key: '<', op: '<' },
     { key: '===', op: '===' },
     { key: '==', op: '===' },
     { key: '!==', op: '!==' },
@@ -89,11 +108,30 @@ function parseLeaf(predicate) {
       if (factKey) {
         if (op === '===' && value === true) return { type: 'condition', factKey, operator: 'is_true', value: true };
         if (op === '===' && value === false) return { type: 'condition', factKey, operator: 'is_false', value: false };
+        if (op === '!==' && value === null) return { type: 'condition', factKey, operator: 'is_defined', value: null };
         return { type: 'condition', factKey, operator: op, value };
       }
     }
   }
   return undefined;
+}
+
+function parseSubPredicate(sub) {
+  if ('and' in sub && Array.isArray(sub.and)) {
+    return {
+      type: 'group',
+      logicalOperator: 'and',
+      children: sub.and.map(parseSubPredicate).filter(Boolean)
+    };
+  }
+  if ('or' in sub && Array.isArray(sub.or)) {
+    return {
+      type: 'group',
+      logicalOperator: 'or',
+      children: sub.or.map(parseSubPredicate).filter(Boolean)
+    };
+  }
+  return parseLeaf(sub);
 }
 
 function astToVisualTree(predicate) {
@@ -102,12 +140,12 @@ function astToVisualTree(predicate) {
 
   if ('and' in predicate && Array.isArray(predicate.and)) {
     root.logicalOperator = 'and';
-    root.children = predicate.and.map(parseLeaf).filter(Boolean);
+    root.children = predicate.and.map(parseSubPredicate).filter(Boolean);
     return root;
   }
   if ('or' in predicate && Array.isArray(predicate.or)) {
     root.logicalOperator = 'or';
-    root.children = predicate.or.map(parseLeaf).filter(Boolean);
+    root.children = predicate.or.map(parseSubPredicate).filter(Boolean);
     return root;
   }
 
@@ -154,18 +192,53 @@ assert.deepStrictEqual(ast2, {
 }, 'Test 2 Failed: Compound AND AST');
 console.log('✓ Test 2: Compound AND converts to AST');
 
-// Test 3: AST to Visual Tree Roundtrip
-const parsedTree = astToVisualTree(ast2);
-assert.strictEqual(parsedTree.logicalOperator, 'and');
-assert.strictEqual(parsedTree.children.length, 2);
-assert.strictEqual(parsedTree.children[0].factKey, 'unit.washdown');
-assert.strictEqual(parsedTree.children[0].operator, 'is_true');
-assert.strictEqual(parsedTree.children[1].factKey, 'unit.totalStaticPressure');
-console.log('✓ Test 3: AST to Visual Tree roundtrip matches');
+// Test 3: Nested Component / SubGroup Conversion
+const nestedSubGroup = {
+  type: 'group',
+  logicalOperator: 'or',
+  children: [
+    { type: 'condition', factKey: 'unit.shellType', operator: '===', value: 'ThermalBreak' },
+    { type: 'condition', factKey: 'unit.shellType', operator: '===', value: 'Custom' }
+  ]
+};
+const treeWithNested = {
+  type: 'group',
+  logicalOperator: 'and',
+  children: [
+    { type: 'condition', factKey: 'unit.unitType', operator: '===', value: 'Outdoor' },
+    nestedSubGroup
+  ]
+};
+const astNested = visualTreeToAst(treeWithNested);
+assert.deepStrictEqual(astNested, {
+  and: [
+    { '===': [{ var: 'unit.unitType' }, 'Outdoor'] },
+    {
+      or: [
+        { '===': [{ var: 'unit.shellType' }, 'ThermalBreak'] },
+        { '===': [{ var: 'unit.shellType' }, 'Custom'] }
+      ]
+    }
+  ]
+}, 'Test 3 Failed: Nested group AST conversion');
+console.log('✓ Test 3: Nested group converts cleanly to nested AST');
 
-// Test 4: Required Facts Extraction
-const facts = extractRequiredFacts(parsedTree);
-assert.deepStrictEqual(facts, ['unit.totalStaticPressure', 'unit.washdown'], 'Test 4 Failed: Fact extraction');
-console.log('✓ Test 4: Required facts correctly derived');
+// Test 4: Nested Group AST to Visual Tree Roundtrip
+const parsedNestedTree = astToVisualTree(astNested);
+assert.strictEqual(parsedNestedTree.logicalOperator, 'and');
+assert.strictEqual(parsedNestedTree.children.length, 2);
+assert.strictEqual(parsedNestedTree.children[0].type, 'condition');
+assert.strictEqual(parsedNestedTree.children[0].factKey, 'unit.unitType');
+assert.strictEqual(parsedNestedTree.children[1].type, 'group');
+assert.strictEqual(parsedNestedTree.children[1].logicalOperator, 'or');
+assert.strictEqual(parsedNestedTree.children[1].children.length, 2);
+assert.strictEqual(parsedNestedTree.children[1].children[0].factKey, 'unit.shellType');
+console.log('✓ Test 4: Nested group AST parses back into intact visual tree');
+
+// Test 5: Required Facts Extraction with Nested Groups
+const facts = extractRequiredFacts(parsedNestedTree);
+assert.deepStrictEqual(facts, ['unit.shellType', 'unit.unitType'], 'Test 5 Failed: Fact extraction');
+console.log('✓ Test 5: Required facts extracted across nested groups');
 
 console.log('\nAll AST converter tests passed successfully!');
+

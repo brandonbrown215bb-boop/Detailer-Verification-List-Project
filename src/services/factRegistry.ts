@@ -80,6 +80,18 @@ export function extractFactsFromGraph(
     );
   }
 
+  if (orderRev?.productType) {
+    facts['unit.productType'] = createFact(
+      'unit.productType',
+      'Product Type',
+      'Order & Identity',
+      orderRev.productType.trim(),
+      'Known',
+      'Authoritative',
+      '/root:OrderRevision/productType'
+    );
+  }
+
 
 
   const savedDetailer = typeof localStorage !== 'undefined' ? localStorage.getItem('dvl_detailer_name') : null;

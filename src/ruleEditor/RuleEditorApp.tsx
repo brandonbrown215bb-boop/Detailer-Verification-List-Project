@@ -374,6 +374,7 @@ export const RuleEditorApp: React.FC = () => {
         <div className="flex-1 h-full p-4 overflow-hidden bg-slate-950">
           {selectedRule ? (
             <RuleFormView
+              key={selectedRule.id}
               rule={selectedRule}
               onUpdate={handleUpdateRule}
               onClone={handleCloneRule}

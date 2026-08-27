@@ -92,6 +92,20 @@ namespace AHUVerification.Core.Services
                 );
             }
 
+            bool hasProductType = !string.IsNullOrWhiteSpace(orderRev?.ProductType);
+            if (hasProductType)
+            {
+                facts["unit.productType"] = CreateFact(
+                    "unit.productType",
+                    "Product Type",
+                    "Order & Identity",
+                    orderRev!.ProductType,
+                    FactStatus.Known,
+                    FactConfidence.Authoritative,
+                    "/root:OrderRevision/productType"
+                );
+            }
+
             facts["unit.detailer"] = CreateFact(
                 "unit.detailer",
                 "Detailer Name",

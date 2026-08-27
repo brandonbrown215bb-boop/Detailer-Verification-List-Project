@@ -52,7 +52,7 @@ namespace AHUVerification.Tests
             Assert.Equal(FactConfidence.Authoritative, facts["unit.orderNumber"].Confidence);
 
             // COM # remains manual entry
-            Assert.Equal("COM-842910", facts["unit.comNumber"].Value);
+            Assert.Null(facts["unit.comNumber"].Value);
             Assert.Equal("Enter COM# from MAPICS (e.g. COM-123456)", facts["unit.comNumber"].PromptNote);
 
             Assert.True(facts.ContainsKey("unit.tag"));

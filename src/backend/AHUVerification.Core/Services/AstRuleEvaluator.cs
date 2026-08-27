@@ -60,6 +60,36 @@ namespace AHUVerification.Core.Services
             Dictionary<string, object?> context,
             Dictionary<string, Fact> factRegistry)
         {
+            if (predicate.TryGetValue(">=", out var gteElement) && gteElement.ValueKind == JsonValueKind.Array && gteElement.GetArrayLength() >= 2)
+            {
+                var left = ResolveValue(gteElement[0], context);
+                var right = ResolveValue(gteElement[1], context);
+                double leftNum = ToDouble(left);
+                double rightNum = ToDouble(right);
+                bool res = leftNum >= rightNum;
+                return new EvalResult
+                {
+                    Result = res,
+                    NeedsInput = false,
+                    Trace = $"Evaluated: {leftNum} >= {rightNum} ({(res ? "True" : "False")})"
+                };
+            }
+
+            if (predicate.TryGetValue("<=", out var lteElement) && lteElement.ValueKind == JsonValueKind.Array && lteElement.GetArrayLength() >= 2)
+            {
+                var left = ResolveValue(lteElement[0], context);
+                var right = ResolveValue(lteElement[1], context);
+                double leftNum = ToDouble(left);
+                double rightNum = ToDouble(right);
+                bool res = leftNum <= rightNum;
+                return new EvalResult
+                {
+                    Result = res,
+                    NeedsInput = false,
+                    Trace = $"Evaluated: {leftNum} <= {rightNum} ({(res ? "True" : "False")})"
+                };
+            }
+
             if (predicate.TryGetValue(">", out var gtElement) && gtElement.ValueKind == JsonValueKind.Array && gtElement.GetArrayLength() >= 2)
             {
                 var left = ResolveValue(gtElement[0], context);
@@ -72,6 +102,21 @@ namespace AHUVerification.Core.Services
                     Result = res,
                     NeedsInput = false,
                     Trace = $"Evaluated: {leftNum} > {rightNum} ({(res ? "True" : "False")})"
+                };
+            }
+
+            if (predicate.TryGetValue("<", out var ltElement) && ltElement.ValueKind == JsonValueKind.Array && ltElement.GetArrayLength() >= 2)
+            {
+                var left = ResolveValue(ltElement[0], context);
+                var right = ResolveValue(ltElement[1], context);
+                double leftNum = ToDouble(left);
+                double rightNum = ToDouble(right);
+                bool res = leftNum < rightNum;
+                return new EvalResult
+                {
+                    Result = res,
+                    NeedsInput = false,
+                    Trace = $"Evaluated: {leftNum} < {rightNum} ({(res ? "True" : "False")})"
                 };
             }
 
@@ -114,6 +159,37 @@ namespace AHUVerification.Core.Services
                 };
             }
 
+            if (predicate.TryGetValue("in", out var inElement) && inElement.ValueKind == JsonValueKind.Array && inElement.GetArrayLength() >= 2)
+            {
+                var left = ResolveValue(inElement[0], context);
+                var right = inElement[1];
+                bool res = false;
+                if (right.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in right.EnumerateArray())
+                    {
+                        var itemVal = ResolveValue(item, context);
+                        if (ValuesEqual(left, itemVal))
+                        {
+                            res = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    var rightStr = (ResolveValue(right, context) ?? "").ToString() ?? "";
+                    var items = rightStr.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s));
+                    res = items.Any(item => ValuesEqual(left, item));
+                }
+                return new EvalResult
+                {
+                    Result = res,
+                    NeedsInput = false,
+                    Trace = $"Evaluated: {left} in {right} ({(res ? "True" : "False")})"
+                };
+            }
+
             if (predicate.TryGetValue("and", out var andElement) && andElement.ValueKind == JsonValueKind.Array)
             {
                 var traces = new List<string>();
@@ -134,6 +210,47 @@ namespace AHUVerification.Core.Services
                     }
                 }
                 return new EvalResult { Result = true, NeedsInput = false, Trace = string.Join(" AND ", traces) };
+            }
+
+            if (predicate.TryGetValue("or", out var orElement) && orElement.ValueKind == JsonValueKind.Array)
+            {
+                var traces = new List<string>();
+                bool hasTrue = false;
+                bool anyNeedsInput = false;
+                string needsInputTrace = "";
+
+                foreach (var sub in orElement.EnumerateArray())
+                {
+                    if (sub.ValueKind == JsonValueKind.Object)
+                    {
+                        var subDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(sub.GetRawText());
+                        if (subDict != null)
+                        {
+                            var subEval = EvaluateElement(subDict, context, factRegistry);
+                            if (subEval.NeedsInput)
+                            {
+                                anyNeedsInput = true;
+                                needsInputTrace = subEval.Trace;
+                            }
+                            traces.Add(subEval.Trace);
+                            if (subEval.Result)
+                            {
+                                hasTrue = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (hasTrue)
+                {
+                    return new EvalResult { Result = true, NeedsInput = false, Trace = string.Join(" OR ", traces) };
+                }
+                if (anyNeedsInput)
+                {
+                    return new EvalResult { Result = false, NeedsInput = true, Trace = needsInputTrace };
+                }
+                return new EvalResult { Result = false, NeedsInput = false, Trace = string.Join(" OR ", traces) };
             }
 
             return new EvalResult { Result = true, NeedsInput = false, Trace = "Default true" };

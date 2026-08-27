@@ -19,7 +19,7 @@ export function visualTreeToAst(root: VisualConditionGroup): ASTPredicate | unde
       if (child.type === 'condition') {
         return leafToAst(child);
       } else {
-        return visualTreeToAst(child);
+        return subGroupToAst(child);
       }
     })
     .filter(Boolean) as ASTPredicate[];
@@ -28,11 +28,37 @@ export function visualTreeToAst(root: VisualConditionGroup): ASTPredicate | unde
     return undefined;
   }
 
-  if (convertedChildren.length === 1 && root.logicalOperator === 'and') {
+  if (convertedChildren.length === 1 && root.logicalOperator === 'and' && root.children[0].type === 'condition') {
     return convertedChildren[0];
   }
 
   if (root.logicalOperator === 'or') {
+    return { or: convertedChildren };
+  }
+
+  return { and: convertedChildren };
+}
+
+function subGroupToAst(group: VisualConditionGroup): ASTPredicate | undefined {
+  if (!group.children || group.children.length === 0) {
+    return undefined;
+  }
+
+  const convertedChildren = group.children
+    .map(child => {
+      if (child.type === 'condition') {
+        return leafToAst(child);
+      } else {
+        return subGroupToAst(child);
+      }
+    })
+    .filter(Boolean) as ASTPredicate[];
+
+  if (convertedChildren.length === 0) {
+    return undefined;
+  }
+
+  if (group.logicalOperator === 'or') {
     return { or: convertedChildren };
   }
 
@@ -141,10 +167,10 @@ function parseSubPredicate(sub: ASTPredicate): VisualConditionNode | undefined {
 
 function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
   const operators: Array<{ key: string; op: ComparisonOperator }> = [
-    { key: '>', op: '>' },
     { key: '>=', op: '>=' },
-    { key: '<', op: '<' },
     { key: '<=', op: '<=' },
+    { key: '>', op: '>' },
+    { key: '<', op: '<' },
     { key: '===', op: '===' },
     { key: '==', op: '===' },
     { key: '!==', op: '!==' },
@@ -167,12 +193,15 @@ function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
       }
 
       if (factKey) {
-        // Special case booleans
+        // Special case booleans and defined
         if (op === '===' && value === true) {
           return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_true', value: true };
         }
         if (op === '===' && value === false) {
           return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_false', value: false };
+        }
+        if (op === '!==' && value === null) {
+          return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_defined', value: null };
         }
 
         return {

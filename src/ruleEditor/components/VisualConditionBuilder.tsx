@@ -20,12 +20,17 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const [jsonString, setJsonString] = useState<string>('');
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const lastEmittedAstJsonRef = React.useRef<string>(predicate ? JSON.stringify(predicate) : '');
 
   // Sync internal tree when incoming predicate changes from external source (like selecting a different rule)
   useEffect(() => {
-    const newTree = astToVisualTree(predicate);
-    setTree(newTree);
-    setJsonString(predicate ? JSON.stringify(predicate, null, 2) : '{\n  // Standard check (Always applicable)\n}');
+    const incomingJson = predicate ? JSON.stringify(predicate) : '';
+    if (incomingJson !== lastEmittedAstJsonRef.current) {
+      lastEmittedAstJsonRef.current = incomingJson;
+      const newTree = astToVisualTree(predicate);
+      setTree(newTree);
+      setJsonString(predicate ? JSON.stringify(predicate, null, 2) : '{\n  // Standard check (Always applicable)\n}');
+    }
   }, [predicate]);
 
   const availableFacts = getFactsByScope(scope);
@@ -33,7 +38,9 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
   const notifyChange = (updatedTree: VisualConditionGroup) => {
     setTree(updatedTree);
     const ast = visualTreeToAst(updatedTree);
-    setJsonString(ast ? JSON.stringify(ast, null, 2) : '');
+    const astJson = ast ? JSON.stringify(ast) : '';
+    lastEmittedAstJsonRef.current = astJson;
+    setJsonString(ast ? JSON.stringify(ast, null, 2) : '{\n  // Standard check (Always applicable)\n}');
     setJsonError(null);
 
     // Collect required facts
@@ -79,11 +86,23 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
   };
 
   const handleAddSubGroup = (groupId: string) => {
+    const defaultFact = availableFacts[0]?.key || 'unit.shellType';
+    const factDef = getFactDefinition(defaultFact);
+    const defaultVal = factDef?.sampleValue ?? 'ThermalBreak';
+
     const newGroup: VisualConditionGroup = {
       type: 'group',
       id: generateNodeId(),
       logicalOperator: 'and',
-      children: []
+      children: [
+        {
+          type: 'condition',
+          id: generateNodeId(),
+          factKey: defaultFact,
+          operator: '===',
+          value: defaultVal
+        }
+      ]
     };
 
     const updateGroup = (group: VisualConditionGroup): VisualConditionGroup => {
@@ -171,7 +190,9 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
     setJsonString(text);
     if (!text.trim() || text.includes('Standard check')) {
       setJsonError(null);
-      setTree({ type: 'group', id: generateNodeId(), logicalOperator: 'and', children: [] });
+      const emptyTree: VisualConditionGroup = { type: 'group', id: generateNodeId(), logicalOperator: 'and', children: [] };
+      setTree(emptyTree);
+      lastEmittedAstJsonRef.current = '';
       onChange(undefined, []);
       return;
     }
@@ -181,6 +202,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
       const newTree = astToVisualTree(parsed);
       setTree(newTree);
       setJsonError(null);
+      lastEmittedAstJsonRef.current = JSON.stringify(parsed);
 
       const facts = new Set<string>();
       function collect(node: VisualConditionNode) {
@@ -273,7 +295,15 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
 
         {group.children.length === 0 ? (
           <div className="py-4 text-center text-xs text-slate-500 bg-slate-950/40 rounded border border-dashed border-slate-800">
-            No conditions in this group. Rule is <strong className="text-emerald-400">Always Applicable (Standard Check)</strong>.
+            {isRoot ? (
+              <>
+                No conditions in this group. Rule is <strong className="text-emerald-400">Always Applicable (Standard Check)</strong>.
+              </>
+            ) : (
+              <>
+                No conditions in this nested group. Click <strong className="text-blue-400">+ Add Condition</strong> above or remove this group.
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
