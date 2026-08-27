@@ -298,13 +298,10 @@ export const RuleEditorApp: React.FC = () => {
     };
 
     // If running in desktop host WebView2, use native bridge IPC
-    if ((window as any).chrome?.webview) {
-      const response = await (window as any).chrome.webview.hostObjects.bridge.PublishRulePack(
-        JSON.stringify(payload)
-      );
-      const resObj = JSON.parse(response);
-      if (!resObj.success) {
-        throw new Error(resObj.error || 'Desktop publish failed');
+    if (desktopBridge.isRunningInDesktop()) {
+      const res = await desktopBridge.publishRulePack(payload);
+      if (res && (res as any).success === false) {
+        throw new Error((res as any).error || 'Desktop publish failed');
       }
     }
 

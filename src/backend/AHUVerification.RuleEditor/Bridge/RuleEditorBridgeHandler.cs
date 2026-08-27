@@ -157,8 +157,10 @@ namespace AHUVerification.RuleEditor.Bridge
             {
                 // Look for repository fallback
                 string repoRoot = FindRepoRoot();
-                string fallback = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
-                if (File.Exists(fallback)) templatePath = fallback;
+                string fallbackRes = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
+                string fallbackSrc = Path.Combine(repoRoot, "src", "rulepack", "template.xlsx");
+                if (File.Exists(fallbackRes)) templatePath = fallbackRes;
+                else if (File.Exists(fallbackSrc)) templatePath = fallbackSrc;
             }
 
             // 1. Publish directly into local packaged rule pack directory
@@ -189,9 +191,14 @@ namespace AHUVerification.RuleEditor.Bridge
             if (payload.TryGetProperty("targetPath", out var targetProp) && !string.IsNullOrWhiteSpace(targetProp.GetString()))
             {
                 string targetDir = targetProp.GetString()!;
-                if (Directory.Exists(targetDir))
+                try
                 {
+                    Directory.CreateDirectory(targetDir);
                     _rulePackManager.PublishToDirectory(targetDir, version, rules, templateMap, approvedMappings, templatePath);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Failed to publish to distribution folder '{targetDir}': {ex.Message}", ex);
                 }
             }
 

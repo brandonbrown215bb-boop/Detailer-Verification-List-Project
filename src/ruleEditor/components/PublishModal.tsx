@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RuleDiffItem } from '../types';
 import { CheckCircle2, AlertCircle, ArrowRight, Upload, Folder, X, ShieldCheck, Tag } from 'lucide-react';
+import { desktopBridge } from '../../services/desktopBridge';
 
 interface PublishModalProps {
   isOpen: boolean;
@@ -266,6 +267,20 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 placeholder="e.g. \\share\Engineering\RulePacks or C:\Users\...\OneDrive\AHU_Rules"
                 className="w-full text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
+              {desktopBridge.isRunningInDesktop() && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const folder = await desktopBridge.selectFolderDialog();
+                    if (folder) setTargetPath(folder);
+                  }}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1.5 flex-shrink-0 transition-colors"
+                  title="Browse target folder..."
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  Browse
+                </button>
+              )}
             </div>
           </div>
 

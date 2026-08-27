@@ -193,6 +193,14 @@ class DesktopBridge {
     };
   }
 
+  public async selectFolderDialog(): Promise<string | null> {
+    if (this.isDesktop) {
+      const res = await this.sendRequest<{ folderPath: string }>('selectFolderDialog');
+      return res?.folderPath || null;
+    }
+    return null;
+  }
+
   public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
     if (this.isDesktop) {
       return this.sendRequest('publishRulePack', payload);
