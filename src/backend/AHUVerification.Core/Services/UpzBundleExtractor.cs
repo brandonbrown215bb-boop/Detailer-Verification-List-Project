@@ -34,6 +34,11 @@ namespace AHUVerification.Core.Services
             if (File.Exists(Path.Combine(baseDir, "unpack32.exe")))
                 return baseDir;
 
+            // Check repository relative paths
+            string repoAppBin = Path.Combine(baseDir, "..", "..", "..", "..", "src", "backend", "AHUVerification.App", "resources", "bin");
+            if (Directory.Exists(repoAppBin) && File.Exists(Path.Combine(repoAppBin, "unpack32.exe")))
+                return Path.GetFullPath(repoAppBin);
+
             // Check repository / dev fallback locations
             string devPath = @"C:\Users\jbrow263\source\repos\JCI.MOM.Legacy\SolutionSource\BoundaryUpz";
             if (Directory.Exists(devPath) && File.Exists(Path.Combine(devPath, "unpack32.exe")))

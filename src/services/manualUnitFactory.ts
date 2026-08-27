@@ -682,11 +682,15 @@ export function createManualUnit(config: ManualUnitConfig): {
       unitType: config.unitType || 'Outdoor',
       brandOption: 'YORKCustom',
       unitConstructionType: 'Standard',
+      shippingProtection: 'ShrinkWrap',
       washdown: false,
       knockdown: false,
       hasUTL: false,
+      lipHeight: 0,
       isSeismic: false,
+      noa: false,
       noaRating: 'N/A',
+      thermalBreak: casingMaterials.housingStyle === 'ThermalBreak',
       primaryAccessSide: 'Left',
       defaultUnitBaseHeight: defaultBaseHeight,
       materials: casingMaterials
@@ -695,12 +699,11 @@ export function createManualUnit(config: ManualUnitConfig): {
       hasSlopedRoof: config.unitType === 'Outdoor',
       roofSlope: 0.25,
       roofSlopeHighSide: 'Internal',
+      roofPeak: config.unitType === 'Outdoor' ? 'Center' : 'Flat',
       roofPeakZDim: 97
     },
     curbOptions: {
-      hasCurbRest: config.unitType === 'Outdoor',
-      hasCurb: false,
-      curbHeight: 0
+      hasCurbRest: config.unitType === 'Outdoor'
     },
     skids,
     bases,

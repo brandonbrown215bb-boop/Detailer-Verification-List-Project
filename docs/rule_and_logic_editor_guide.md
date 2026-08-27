@@ -121,50 +121,50 @@ Every verification rule is defined using the internal `RuleDefinition` contract:
 
 ### 2.3 Fact Dictionary Catalog
 
-The visual condition builder integrates domain facts across 4 scopes:
+The visual condition builder integrates domain facts across Unit, Skid, Segment, Component, and Opening scopes:
 
 | Fact Key | Scope | Data Type | Units / Enum Options | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `unit.shellType` | `Unit` | `enum` | `ThermalBreak`, `Standard`, `CustomThermalBreak` | Casing profile and thermal break construction. |
-| `unit.unitType` | `Unit` | `enum` | `Outdoor`, `Indoor` | Installation environment. |
-| `unit.wallThickness` | `Unit` | `number` | `inches` (e.g. `2`, `3`, `4`) | Nominal casing wall thickness. |
+| `unit.unitType` | `Unit` | `string` | `Outdoor`, `Indoor` | Installation environment. |
+| `unit.shellType` | `Unit` | `string` | `ThermalBreak`, `Standard` | Casing profile and thermal break construction. |
+| `unit.thermalBreak` | `Unit` | `boolean` | `true`, `false` | Thermal-break framing profile parameter. |
 | `unit.baseHeight` | `Unit` | `number` | `inches` (e.g. `6`, `8`, `10`, `12`) | Structural base channel height. |
-| `unit.thermalBreak` | `Unit` | `enum` | `Yes`, `No` | Thermal-break framing profile parameter. |
+| `unit.lipHeight` | `Unit` | `number` | `inches` (e.g. `2.0`, `0.0`) | Base perimeter upturned lip height. |
+| `unit.hasUTL` | `Unit` | `boolean` | `true`, `false` | Base perimeter upturned lip presence (`lipHeight > 0`). |
+| `unit.curbrest` | `Unit` | `boolean` | `true`, `false` | Roof curb rest mounting configuration. |
+| `unit.isTiered` | `Unit` | `boolean` | `true`, `false` | Tiered unit topology (segments atop segments without bases). |
+| `unit.isStacked` | `Unit` | `boolean` | `true`, `false` | Stacked unit topology (distinct upper base). |
+| `unit.hasFloorDrains` | `Unit` | `boolean` | `true`, `false` | Floor drain cutouts present in unit. |
 | `unit.knockdown` | `Unit` | `boolean` | `true`, `false` | Disassembled field-assembled unit flag (KD). |
-| `unit.washdown` | `Unit` | `boolean` | `true`, `false` | Hygienic washdown / sloped floor construction. |
-| `unit.hasUTL` | `Unit` | `boolean` | `true`, `false` | Base perimeter upturned lip presence. |
-| `unit.isSeismic` | `Unit` | `boolean` | `true`, `false` | Structural seismic calculation requirement. |
-| `unit.unitConstructionType` | `Unit` | `enum` | `Standard`, `IBC`, `OSHPD`, `NOA` | Governing structural specification. |
-| `unit.noa` | `Unit` | `enum` | `NOA`, `N/A` | Miami-Dade hurricane wind certification. |
+| `unit.shippingProtection` | `Unit` | `string` | `ShrinkWrap`, `Tarp`, `Crate` | Shipping protection packaging type. |
+| `unit.noa` | `Unit` | `boolean` | `true`, `false` | Florida / Miami-Dade NOA hurricane wind load certification. |
+| `unit.isSeismic` | `Unit` | `boolean` | `true`, `false` | Structural seismic calculation requirement (IBC/OSHPD). |
+| `unit.deflectionTest` | `Unit` | `string` | `None`, `StandardDeflection`, `CustomDeflection` | Deflection structural test specification. |
 | `unit.totalStaticPressure` | `Unit` | `number` | `in. w.g.` (e.g. `2.5`) | Design total static pressure (TSP). |
-| `unit.floorMaterial` | `Unit` | `enum` | `Galvanized`, `Aluminum`, `Aluminum Diamond Plate`, `Stainless 304`, `Stainless 316` | Floor skin sheet metal type. |
-| `unit.floorMaterialGauge` | `Unit` | `number` | `ga` (e.g. `14`, `16`) | Floor metal thickness gauge. |
-| `unit.exteriorMaterial` | `Unit` | `enum` | `Galvanized`, `Pre-Painted`, `Aluminum`, `Stainless 304`, `Stainless 316` | Outer skin metal type. |
-| `unit.interiorMaterial` | `Unit` | `enum` | `Galvanized`, `Aluminum`, `Perforated Galvanized`, `Stainless 304`, `Stainless 316` | Inner liner sheet metal type. |
-| `unit.insulationType` | `Unit` | `enum` | `Injected Foam (R-13)`, `Injected Foam (R-20)`, `Fiberglass`, `Mineral Wool` | Panel core insulation material. |
-| `unit.slopedRoof` | `Unit` | `boolean` | `true`, `false` | Sloped roof for rain runoff. |
-| `unit.roofSlope` | `Unit` | `number` | `in/ft` (e.g. `0.25`) | Roof pitch slope. |
-| `unit.curbrest` | `Unit` | `enum` | `Yes`, `No` | Roof curb rest mounting. |
-| `unit.brandOption` | `Unit` | `enum` | `York Custom AHU`, `Solution XT`, `AirMatrix` | Product family brand series. |
-| `skid.weight` | `Skid` | `number` | `lbs` (e.g. `4500`) | Total shipping weight for lifting calculations. |
+| `casing.thicknessFront` | `Unit` | `number` | `inches` (e.g. `2.0`, `3.0`, `4.0`) | Front wall casing thickness. |
+| `casing.thicknessTop` | `Unit` | `number` | `inches` (e.g. `2.0`, `3.0`, `4.0`) | Roof top casing thickness. |
+| `casing.exteriorMaterial` | `Unit` | `string` | `STL GALV PPC`, `STL GALV`, `ALUM`, `SS304`, `SS316` | Outer skin metal material. |
+| `casing.exteriorGauge` | `Unit` | `number` | `ga` (e.g. `18`, `16`) | Outer skin metal gauge. |
+| `casing.interiorMaterial` | `Unit` | `string` | `STL GALV`, `ALUM`, `SS304`, `SS316`, `PERF GALV` | Inner liner sheet metal material. |
+| `casing.interiorGauge` | `Unit` | `number` | `ga` (e.g. `22`, `20`, `18`) | Inner liner sheet metal gauge. |
+| `casing.floorMaterial` | `Unit` | `string` | `STL GALV`, `ALUM`, `ALUM TREAD`, `SS304`, `SS316` | Floor skin sheet metal material. |
+| `casing.floorGauge` | `Unit` | `number` | `ga` (e.g. `16`, `14`, `12`) | Floor metal thickness gauge. |
+| `casing.insulationType` | `Unit` | `string` | `Foam`, `Fiberglass`, `MineralWool` | Panel core insulation material. |
+| `roof.hasSlopedRoof` | `Unit` | `boolean` | `true`, `false` | Sloped roof for rain runoff. |
+| `roof.roofPeak` | `Unit` | `string` | `Center`, `Left`, `Right`, `Flat` | Roof peak high side position. |
+| `roof.roofSlope` | `Unit` | `number` | `in/ft` (e.g. `0.25`) | Roof pitch slope. |
+| `skid.weight` | `Skid` | `number` | `lbs` (e.g. `4500`) | Aggregate shipping skid weight for lifting calculations. |
 | `skid.segmentCount` | `Skid` | `number` | `count` (e.g. `3`) | Number of casing segments on this base skid. |
-| `skid.length` | `Skid` | `number` | `inches` | Total length of skid base steel. |
-| `skid.width` | `Skid` | `number` | `inches` | Total width across skid base. |
-| `skid.height` | `Skid` | `number` | `inches` | Overall height from bottom of channel to roof. |
 | `skid.hasDrainPan` | `Skid` | `boolean` | `true`, `false` | Drain pan presence on this skid. |
-| `skid.hasFans` | `Skid` | `boolean` | `true`, `false` | Supply, return, or exhaust fans on this skid. |
-| `skid.hasCoils` | `Skid` | `boolean` | `true`, `false` | Heating or cooling coils on this skid. |
-| `skid.hasFilters` | `Skid` | `boolean` | `true`, `false` | Filter banks/racks on this skid. |
-| `skid.hasHeatWheel` | `Skid` | `boolean` | `true`, `false` | Energy recovery wheel on this skid. |
-| `skid.hasBaseSteel` | `Skid` | `boolean` | `true`, `false` | Structural steel channel base presence. |
-| `segment.typeCode` | `Segment` | `enum` | `FS`, `FR`, `FE`, `CC`, `HC`, `FF`, `AF`, `RF`, `HF`, `IP`, `DP`, `MB`, `XA`, `HW`, `HX`, `EH`, `PC` | Two-letter AHU segment functional code. |
-| `segment.airPressureType` | `Segment` | `enum` | `Positive`, `Negative` | Static pressure regime. |
-| `segment.airVolume` | `Segment` | `number` | `CFM` | Design airflow volume. |
-| `segment.hasMotorRemovalRail` | `Segment` | `boolean` | `true`, `false` | Overhead motor removal trolley beam presence. |
-| `motorControl.motorControlType` | `Component` | `enum` | `VFD`, `Starter`, `DisconnectOnly` | Motor starter / drive package. |
-| `motorControl.fla` | `Component` | `number` | `Amps` (e.g. `28.5`) | Motor full load amperes. |
-| `motorControl.hp` | `Component` | `number` | `HP` (e.g. `20`) | Motor horsepower. |
-| `motorControl.voltage` | `Component` | `number` | `Volts` (e.g. `460`) | Motor supply voltage. |
+| `skid.hasFans` | `Skid` | `boolean` | `true`, `false` | Fans present on this skid. |
+| `skid.hasCoils` | `Skid` | `boolean` | `true`, `false` | Heating or cooling coils present on this skid. |
+| `skid.hasFilters` | `Skid` | `boolean` | `true`, `false` | Filter banks present on this skid. |
+| `skid.hasHeatWheel` | `Skid` | `boolean` | `true`, `false` | Energy recovery heat wheel on this skid. |
+| `skid.hasSubFloor` | `Skid` | `boolean` | `true`, `false` | Base subfloor presence on this skid. |
+| `skid.floorDrainCount` | `Skid` | `number` | `count` | Number of floor drains on this skid. |
+| `door.totalCount` | `Unit` | `number` | `count` | Total access doors on unit. |
+| `damper.totalCount` | `Unit` | `number` | `count` | Total dampers on unit. |
+| `floorDrain.totalCount` | `Unit` | `number` | `count` | Total floor drains on unit. |
 
 ---
 

@@ -25,6 +25,116 @@ export interface Fact<T = any> {
   }>;
 }
 
+export interface UnitDoor {
+  id: string;
+  segmentId: string;
+  unitSide: string;
+  width: number;
+  height: number;
+  swing: string;
+  hingeSide: string;
+  hasWindow: boolean;
+  hasViewPort: boolean;
+  latchType: string;
+  doorType: string;
+}
+
+export interface UnitDamper {
+  id: string;
+  segmentId: string;
+  unitSide: string;
+  width: number;
+  height: number;
+  depth: number;
+  damperType: string;
+  actuatorType: string;
+  bladeType: string;
+  hasAttachedLouver: boolean;
+}
+
+export interface UnitFloorDrain {
+  id: string;
+  segmentId: string;
+  unitSide: string;
+  type: string;
+  pipingMaterial: string;
+  connectionDiameter: number;
+  holeDiameter: number;
+  connectionSide: string;
+  geometry: { x: number; y: number; z: number; xLength: number; yLength: number; zLength: number };
+}
+
+export interface UnitDuctOpening {
+  id: string;
+  segmentId: string;
+  unitSide: string;
+  width: number;
+  height: number;
+  shape: string;
+  airType: string;
+  ductType: string;
+}
+
+export interface UnitDrainPanOpening {
+  id: string;
+  segmentId: string;
+  width: number;
+  length: number;
+  depth: number;
+}
+
+export interface FanConfig {
+  isFanArray: boolean;
+  arrayQtyHeight: number;
+  arrayQtyWidth: number;
+  arrayGrid: string;
+  hasRedundancy: boolean;
+  hasStand: boolean;
+  hasDualFanSeparationWall: boolean;
+  hasMotorRemovalRail: boolean;
+  isolationType: string;
+  fanCount: number;
+  motorHp: number;
+  voltage: number;
+}
+
+export interface CoilConfig {
+  bulkheadMaterial: string;
+  hasStackingRack: boolean;
+  stackingRackMaterial: string;
+  dripPanMaterial: string;
+  staggeredOverlap: number;
+  connectionHand: string;
+  coilCount: number;
+}
+
+export interface FilterConfig {
+  filterType: string;
+  loadMethod: string;
+  bulkheadMaterial: string;
+  gaugeType: string;
+  gaugeDoorId: string;
+  gaugeMountingType: string;
+}
+
+export interface HeatWheelConfig {
+  vendor: string;
+  model: string;
+  wheelType: string;
+  mediaType: string;
+  hasPurge: boolean;
+  allowVariableSpeed: boolean;
+  wheelDiameter: number;
+  recoveryPercentCFM: number;
+}
+
+export interface TestingOptions {
+  deflectionTest: string;
+  leakageTest: string;
+  fanVibrationTest: string;
+  requireCustomerWitness: boolean;
+}
+
 export interface UnitBase {
   id: string;
   materialType: string;
@@ -36,16 +146,21 @@ export interface UnitBase {
   housingStyle: string;
   hasSubFloor: boolean;
   subFloorMaterial: string;
+  subFloorMaterialType?: string;
+  subFloorMaterialGauge?: number;
+  subFloorPaintType?: string;
+  floorAttachmentType?: string;
+  isUpperBase?: boolean;
   dimensions: { x: number; y: number; z: number; xLength: number; yLength: number; zLength: number };
 }
 
 export interface Segment {
   id: string;
-  tag: string;                  // e.g. segment_IP, segment_HW, segment_CC
-  typeCode: string;             // IP, FF, XA, HW, FE, PC, RF, HC, CC, FR, FS, DP, AT, MB
-  name: string;                 // Human friendly: "Inlet Plenum", "Cooling Coil", etc.
+  tag: string;
+  typeCode: string;
+  name: string;
   weight: number;
-  airPressureType: string;      // Positive / Negative
+  airPressureType: string;
   airVolume: number;
   handOrientation: string;
   dimensions: { x: number; y: number; z: number; xLength: number; yLength: number; zLength: number };
@@ -54,14 +169,34 @@ export interface Segment {
     exteriorGauge: number;
     interiorMaterial: string;
     interiorGauge: number;
+    floorMaterial?: string;
+    floorGauge?: number;
+    floorGaugeString?: string;
     housingThickness: number;
+    housingThicknessFront?: number;
+    housingThicknessTop?: number;
     housingStyle: string;
     insulationType: string;
+    exteriorPaintType?: string;
+    interiorPaintType?: string;
+    floorPaintType?: string;
   };
-  internals: string[];          // Extracted internal features
+  internals: string[];
   hasFrontChannel: boolean;
   hasRearChannel: boolean;
   hasMotorRemovalRail: boolean;
+  isTiered?: boolean;
+  tierLevel?: number;
+  elevationY?: number;
+  doors?: UnitDoor[];
+  dampers?: UnitDamper[];
+  floorDrains?: UnitFloorDrain[];
+  ductOpenings?: UnitDuctOpening[];
+  drainPanOpenings?: UnitDrainPanOpening[];
+  fanConfig?: FanConfig;
+  coilConfig?: CoilConfig;
+  filterConfig?: FilterConfig;
+  heatWheelConfig?: HeatWheelConfig;
 }
 
 export interface ShippingSkid {
@@ -70,8 +205,8 @@ export interface ShippingSkid {
   name: string;
   segmentIds: string[];
   baseIds: string[];
-  calculatedWeight: number;     // Sum of segments on this skid
-  authoritativeWeight?: number; // Authoritative skid weight if provided
+  calculatedWeight: number;
+  authoritativeWeight?: number;
   isWeightConfirmed: boolean;
   dimensions: { length: number; width: number; height: number };
 }
@@ -94,16 +229,24 @@ export interface NormalizedXmlGraph {
   generatingSoftware: string;
   unitWeight: number;
   totalStaticPressure: number;
+  isTiered?: boolean;
+  isStacked?: boolean;
+  isStackedTopUnit?: boolean;
+  hasFloorDrains?: boolean;
   dimensions: { length: number; width: number; height: number };
   unitOptions: {
     unitType: string;
     brandOption: string;
     unitConstructionType: string;
+    shippingProtection?: string;
     washdown: boolean;
     knockdown: boolean;
     hasUTL: boolean;
-    isSeismic: boolean | null;
-    noaRating: string | null;
+    lipHeight?: number;
+    isSeismic: boolean;
+    noa: boolean;
+    noaRating?: string | null;
+    thermalBreak?: boolean;
     primaryAccessSide: string;
     defaultUnitBaseHeight: number;
     materials: {
@@ -113,25 +256,34 @@ export interface NormalizedXmlGraph {
       interiorMaterialGauge: number;
       floorMaterialType: string;
       floorMaterialGauge: number;
+      floorMaterialGaugeString?: string;
       housingStyle: string;
       insulationType: string;
+      exteriorPaintType?: string;
+      interiorPaintType?: string;
+      floorPaintType?: string;
+      housingThicknessFront?: number;
+      housingThicknessTop?: number;
     };
   };
   roofOptions: {
     hasSlopedRoof: boolean;
     roofSlope: number;
     roofSlopeHighSide: string;
+    roofPeak?: string;
     roofPeakZDim: number;
   };
   curbOptions: {
     hasCurbRest: boolean;
-    hasCurb: boolean;
-    curbHeight: number;
   };
+  testingOptions?: TestingOptions;
   skids: ShippingSkid[];
   bases: UnitBase[];
   segments: Segment[];
   motorControls: MotorControl[];
+  doors?: UnitDoor[];
+  dampers?: UnitDamper[];
+  floorDrains?: UnitFloorDrain[];
 }
 
 export interface SpecialQuote {

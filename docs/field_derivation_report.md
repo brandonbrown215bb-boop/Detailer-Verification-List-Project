@@ -46,38 +46,46 @@ flowchart TD
 
 ---
 
-## 2. Comparison Matrix: Manual Setup vs. XML / UPZ Ingestion
+## 2. Fact Taxonomy & Provenance Catalog
 
-| Field Key | Label | Category | Manual Setup Origin & Logic | Ingestion Source Pointer & Logic | Status | Confidence | Target Excel Cell |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `unit.jobName` | Job Name | Order & Identity | Wizard Input: `config.jobName` | UPZ: `/root:OrderRevision/jobName`<br/>XML: Default `"Medical Center Phase 3"` | `Known` | `Authoritative` | `Verification List!D5` |
-| `unit.orderNumber` | Order Number | Order & Identity | Wizard Input: N/A | UPZ: `/root:OrderRevision/orderNumber`<br/>XML: Prompted | `Known` | `Authoritative` | Context / Header |
-| `unit.tag` | Unit Tag | Order & Identity | Wizard Input: N/A | UPZ: `/root:OrderRevision/tagList/tag`<br/>XML: Prompted | `Known` | `Authoritative` | Context / Header |
-| `unit.productType` | Product Type | Order & Identity | Wizard Input: `config.productType` (`SolutionYC`) | UPZ: `/root:OrderRevision/productType`<br/>XML: `/root:AHU/unitOptions/unitType` | `Known` | `Authoritative` | Context / Header |
-| `unit.comNumber` | COM # | Order & Identity | Wizard Input: `config.comNumber` (Default: "COM-100001") | Default: `"COM-842910"` (Manual Entry from MAPICS Order Packet) | `Known` | `Authoritative` | `Verification List!D6` |
-| `unit.detailer` | Detailer Name | Order & Identity | Wizard Input: `config.detailerName` (Default: "Detailer") | Default: `"Tanner Dean"` (Current detailer profile) | `Known` | `Authoritative` | `Verification List!D3` |
-| `unit.date` | Verification Date | Order & Identity | Current ISO Date (`YYYY-MM-DD`) | Current UTC ISO Date (`YYYY-MM-DD`) | `Known` | `Authoritative` | `Verification List!D4` |
-| `unit.shellType` | Shell Type | Geometry & Casing | Wizard Input: `config.housingStyle` (`ThermalBreak` / `Standard`) | `/root:AHU/unitOptions/defaultConstructionOptions/housingStyle` | `Known` | `Authoritative` | `Verification List!D7` |
-| `unit.unitType` | Unit Type | Geometry & Casing | Wizard Input: `config.unitType` (`Outdoor` / `Indoor`) | `/root:AHU/unitOptions/unitType` | `Known` | `Authoritative` | `Verification List!D8` |
-| `unit.baseHeight` | Base Height (in) | Geometry & Casing | Wizard Input: `config.baseHeight` (Default: `10.0`) | `/root:AHU/unitOptions/defaultUnitBaseHeight` (Fallback: `10`) | `Known` | `Authoritative` | `Verification List!D9` |
-| `unit.wallThickness` | Wall Thickness (in) | Geometry & Casing | Wizard Input: `config.wallThickness` (Default: `2.0`) | `/root:AHU/unitOptions/defaultConstructionOptions/surfaceDetail_Front/housingThickness` | `Derived` | `Authoritative` | `Verification List!D10` |
-| `unit.thermalBreak` | Thermal Break | Geometry & Casing | Derived: `housingStyle === 'ThermalBreak' ? 'Yes' : 'No'` | Derived: `housingStyle.includes('ThermalBreak') ? 'Yes' : 'No'` | `Derived` | `Authoritative` | `Verification List!D11` |
-| `unit.roofPeak` | Roof Peak (in) | Geometry & Casing | Derived: `unitType === 'Outdoor' ? '97" (0.25"/ft)' : 'Flat'` | Derived: `hasSlopedRoof ? '${roofPeakZDim}" (${roofSlope}"/ft)' : 'Flat'` | `Derived` | `Authoritative` | `Verification List!D12` |
-| `unit.curbrest` | Curbrest Option | Geometry & Casing | Derived: `unitType === 'Outdoor' ? 'Yes' : 'No'` | `/root:AHU/curbOptions/hasCurbRest` | `Known` | `Authoritative` | `Verification List!D13` |
-| `unit.noa` | Notice of Acceptance | Ratings & Options | Default: `'N/A'` | Derived from `unitConstructionType`: If `'NOA'` -> `'NOA'`; if recognized (`Standard`/`IBC`/`OSHPD`) -> `'N/A'`; else `'Unknown'` | `Derived` / `Unknown` | `Authoritative` / `RequiresConfirmation` | `Verification List!D14` |
-| `unit.isSeismic` | Seismic Certification | Ratings & Options | Default: `false` | Derived from `unitConstructionType`: If `'IBC'` or `'OSHPD'` -> `true`; if `'Standard'`/`'NOA'` -> `false`; else `Unknown` | `Derived` / `Unknown` | `Authoritative` / `RequiresConfirmation` | `Verification List!D15` |
-| `unit.location` | Installation Location | Ratings & Options | Derived: `unitType === 'Outdoor' ? 'Rooftop / Exterior' : 'Mechanical Room'` | Derived: `unitType === 'Outdoor' ? 'Rooftop / Exterior' : 'Mechanical Room'` | `Derived` | `Authoritative` | `Verification List!D16` |
-| `unit.knockdown` | Knockdown Construction | Ratings & Options | Default: `false` (`'No'`) | `/root:AHU/unitOptions/knockdown` (`'Yes'` / `'No'`) | `Known` | `Authoritative` | `Verification List!D17` |
-| `unit.utl` | Upturned Lip (UTL) | Geometry & Casing | Default: `false` (`'No'`) | Derived: Scans all `unitBase/upturnedLipHeight` > 0. If found -> `'Yes (2.0" Lip)'`, else `'No'` | `Derived` | `Authoritative` | `Verification List!D18` |
-| `unit.linerMaterial` | Liner Material | Materials & Gauges | Default: `'STL GALV'` | `/root:AHU/unitOptions/defaultConstructionOptions/interiorMaterialType` | `Known` | `Authoritative` | `Verification List!D19` |
-| `unit.linerGauge` | Liner Gauge | Materials & Gauges | Default: `22` | `/root:AHU/unitOptions/defaultConstructionOptions/interiorMaterialGauge` | `Known` | `Authoritative` | `Verification List!F19` |
-| `unit.skinMaterial` | Skin Material | Materials & Gauges | Default: `'STL GALV PPC'` | `/root:AHU/unitOptions/defaultConstructionOptions/exteriorMaterialType` | `Known` | `Authoritative` | `Verification List!D20` |
-| `unit.skinGauge` | Skin Gauge | Materials & Gauges | Default: `18` | `/root:AHU/unitOptions/defaultConstructionOptions/exteriorMaterialGauge` | `Known` | `Authoritative` | `Verification List!F20` |
-| `unit.floorMaterial` | Floor Material | Materials & Gauges | Default: `'STL GALV'` | `/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialType` | `Known` | `Authoritative` | `Verification List!D21` |
-| `unit.floorGauge` | Floor Gauge | Materials & Gauges | Default: `16` | `/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialGauge` | `Known` | `Authoritative` | `Verification List!F21` |
-| `unit.totalWeight` | Total Unit Weight | Geometry & Casing | Derived: `skidCount * 3500` lbs | `/root:AHU/unitWeight` | `Known` | `Authoritative` | Overview Banner / Context |
-| `unit.totalStaticPressure` | Total Static Pressure | Geometry & Casing | Default: `2.5` in.w.g. | `/root:AHU/totalStaticPressure` | `Known` | `Authoritative` | Overview Banner / Context |
-| `generalComments` | Additional Comments | Paperwork / Comments | Initialized with: `'Manual verification project created.'` | Initialized empty or populated during audit | `ManuallyOverridden` | `Authoritative` | `Verification List!D22` |
+| Field Key | Label | Category | Data Type | Ingestion Source & Logic | Status | Confidence |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `unit.jobName` | Job Name | Order & Identity | `string` | UPZ: `/root:OrderRevision/jobName`<br/>XML: Default `"Medical Center Phase 3"` | `Known` | `Authoritative` |
+| `unit.orderNumber` | Order Number | Order & Identity | `string` | UPZ: `/root:OrderRevision/orderNumber` | `Known` | `Authoritative` |
+| `unit.tag` | Unit Tag | Order & Identity | `string` | UPZ: `/root:OrderRevision/tagList/tag` | `Known` | `Authoritative` |
+| `unit.productType` | Product Type | Order & Identity | `string` | UPZ: `/root:OrderRevision/productType` | `Known` | `Authoritative` |
+| `unit.comNumber` | COM # | Order & Identity | `string` | Manual Entry from MAPICS Order Packet | `Unknown` | `RequiresConfirmation` |
+| `unit.detailer` | Detailer Name | Order & Identity | `string` | Current detailer profile (e.g. `"Tanner Dean"`) | `Known` | `Authoritative` |
+| `unit.date` | Verification Date | Order & Identity | `string` | Current ISO Date (`YYYY-MM-DD`) | `Known` | `Authoritative` |
+| `unit.unitType` | Unit Type | Housing & Materials | `string` | `/root:AHU/unitOptions/unitType` (`"Outdoor"` / `"Indoor"`) | `Known` | `Authoritative` |
+| `unit.shellType` | Shell Type | Housing & Materials | `string` | `/root:AHU/unitOptions/defaultConstructionOptions/housingStyle` | `Known` | `Authoritative` |
+| `unit.thermalBreak` | Thermal Break | Housing & Materials | `boolean` | Derived: `housingStyle.Contains("ThermalBreak")` | `Derived` | `Authoritative` |
+| `unit.knockdown` | Knockdown Construction | Housing & Materials | `boolean` | `/root:AHU/unitOptions/knockdown` | `Known` | `Authoritative` |
+| `unit.shippingProtection` | Shipping Protection | Housing & Materials | `string` | `/root:AHU/unitOptions/shippingProtection` (`"ShrinkWrap"`) | `Known` | `Authoritative` |
+| `casing.thicknessFront` | Front Wall Thickness | Housing & Materials | `number` | `/root:AHU/unitOptions/defaultConstructionOptions/housingThicknessFront` (e.g. `2.0`) | `Known` | `Authoritative` |
+| `casing.thicknessTop` | Roof Casing Thickness | Housing & Materials | `number` | `/root:AHU/unitOptions/defaultConstructionOptions/housingThicknessTop` (e.g. `2.0`) | `Known` | `Authoritative` |
+| `casing.exteriorMaterial` | Skin Material | Housing & Materials | `string` | `/root:AHU/unitOptions/defaultConstructionOptions/exteriorMaterialType` | `Known` | `Authoritative` |
+| `casing.exteriorGauge` | Skin Gauge | Housing & Materials | `number` | `/root:AHU/unitOptions/defaultConstructionOptions/exteriorMaterialGauge` | `Known` | `Authoritative` |
+| `casing.interiorMaterial` | Liner Material | Housing & Materials | `string` | `/root:AHU/unitOptions/defaultConstructionOptions/interiorMaterialType` | `Known` | `Authoritative` |
+| `casing.interiorGauge` | Liner Gauge | Housing & Materials | `number` | `/root:AHU/unitOptions/defaultConstructionOptions/interiorMaterialGauge` | `Known` | `Authoritative` |
+| `casing.floorMaterial` | Floor Material | Housing & Materials | `string` | `/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialType` | `Known` | `Authoritative` |
+| `casing.floorGauge` | Floor Gauge | Housing & Materials | `number` | `/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialGauge` | `Known` | `Authoritative` |
+| `casing.insulationType` | Insulation Type | Housing & Materials | `string` | `/root:AHU/unitOptions/defaultConstructionOptions/insulationType` (`"Foam"`) | `Known` | `Authoritative` |
+| `roof.hasSlopedRoof` | Has Sloped Roof | Housing & Materials | `boolean` | `/root:AHU/roofOptions/hasSlopedRoof` | `Known` | `Authoritative` |
+| `roof.roofPeak` | Roof Peak Style | Housing & Materials | `string` | Mapped from `roofSlopeHighSide`: `'Center'`, `'Left'`, `'Right'`, `'Flat'` | `Derived` | `Authoritative` |
+| `roof.roofSlope` | Roof Slope (in/ft) | Housing & Materials | `number` | `/root:AHU/roofOptions/roofSlope` (e.g. `0.25`) | `Known` | `Authoritative` |
+| `unit.baseHeight` | Base Height (in) | Baserail & Skid | `number` | `/root:AHU/unitOptions/defaultUnitBaseHeight` (e.g. `10.0`) | `Known` | `Authoritative` |
+| `unit.lipHeight` | Upturned Lip Height (in) | Baserail & Skid | `number` | Max of all `unitBase/upturnedLipHeight` (e.g. `2.0` or `0.0`) | `Known` | `Authoritative` |
+| `unit.hasUTL` | Has Upturned Lip | Baserail & Skid | `boolean` | Derived: `unit.lipHeight > 0` | `Derived` | `Authoritative` |
+| `unit.curbrest` | Curbrest Option | Baserail & Skid | `boolean` | `/root:AHU/curbOptions/hasCurbRest` | `Known` | `Authoritative` |
+| `unit.isTiered` | Is Tiered Unit | Baserail & Skid | `boolean` | Derived: upper segment deck without independent base | `Derived` | `Authoritative` |
+| `unit.isStacked` | Is Stacked Unit | Baserail & Skid | `boolean` | Derived: unit base elevated atop lower segment | `Derived` | `Authoritative` |
+| `unit.hasFloorDrains` | Has Floor Drains | Baserail & Skid | `boolean` | Derived: presence of `<floorDrain>` openings | `Derived` | `Authoritative` |
+| `unit.noa` | Notice of Acceptance | Ratings & Options | `boolean` | Derived: `unitConstructionType == "NOA"` | `Derived` | `Authoritative` |
+| `unit.isSeismic` | Seismic Certification | Ratings & Options | `boolean` | Derived: `unitConstructionType` is `"IBC"` or `"OSHPD"` | `Derived` | `Authoritative` |
+| `unit.deflectionTest` | Deflection Test Spec | Ratings & Options | `string` | `/root:AHU/testingOptions/deflectionTest` | `Known` | `Authoritative` |
+| `unit.totalWeight` | Total Unit Weight (lbs) | Ratings & Options | `number` | `/root:AHU/unitWeight` | `Known` | `Authoritative` |
+| `unit.totalStaticPressure` | Total Static Pressure | Ratings & Options | `number` | `/root:AHU/totalStaticPressure` (in.w.g.) | `Known` | `Authoritative` |
 
 ---
 

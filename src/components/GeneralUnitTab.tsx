@@ -193,14 +193,15 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     'unit.shellType',
     'unit.thermalBreak',
     'unit.baseHeight',
-    'unit.wallThickness',
-    'unit.roofPeak',
+    'unit.lipHeight',
     'unit.curbrest',
-    'unit.utl',
+    'unit.isTiered',
+    'unit.isStacked',
+    'roof.roofPeak',
     'unit.knockdown',
+    'unit.shippingProtection',
     'unit.noa',
     'unit.isSeismic',
-    'unit.location',
     'unit.totalStaticPressure'
   ];
 
@@ -209,6 +210,9 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     if (!fact) return null;
 
     const isDetailerField = key === 'unit.detailer';
+    const displayValue = typeof fact.value === 'boolean'
+      ? (fact.value ? 'Yes' : 'No')
+      : (fact.value !== null && fact.value !== undefined ? String(fact.value) : '');
 
     return (
       <div
@@ -247,7 +251,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           ) : (
             <input
               type="text"
-              value={fact.value !== null && fact.value !== undefined ? String(fact.value) : ''}
+              value={displayValue}
               placeholder={fact.promptNote || 'Enter value...'}
               onChange={(e) => onUpdateFact(key, e.target.value)}
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner"

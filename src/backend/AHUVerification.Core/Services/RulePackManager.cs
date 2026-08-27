@@ -21,6 +21,16 @@ namespace AHUVerification.Core.Services
         public bool IsValid { get; set; }
     }
 
+    public class RulePackUpdateCheckResult
+    {
+        public bool HasUpdate { get; set; }
+        public string CurrentVersion { get; set; } = "";
+        public string RemoteVersion { get; set; } = "";
+        public string RemoteBundleSha256 { get; set; } = "";
+        public int RemoteRuleCount { get; set; }
+        public string? Error { get; set; }
+    }
+
     public class RulePackManager
     {
         private static readonly string[] RequiredArtifactNames =
@@ -104,6 +114,74 @@ namespace AHUVerification.Core.Services
                 RootPath = directoryPath,
                 IsValid = true
             };
+        }
+
+        public RulePackUpdateCheckResult CheckRemoteUpdate(string remotePath, string currentVersion, string currentBundleSha256)
+        {
+            if (string.IsNullOrWhiteSpace(remotePath) || !Directory.Exists(remotePath))
+            {
+                return new RulePackUpdateCheckResult
+                {
+                    HasUpdate = false,
+                    CurrentVersion = currentVersion,
+                    Error = $"Remote directory does not exist or is inaccessible: {remotePath}"
+                };
+            }
+
+            string remoteManifestPath = Path.Combine(remotePath, "manifest.json");
+            if (!File.Exists(remoteManifestPath))
+            {
+                return new RulePackUpdateCheckResult
+                {
+                    HasUpdate = false,
+                    CurrentVersion = currentVersion,
+                    Error = "Remote directory is missing manifest.json"
+                };
+            }
+
+            try
+            {
+                string manifestJson = File.ReadAllText(remoteManifestPath, Encoding.UTF8);
+                var manifest = JsonSerializer.Deserialize<RulePackManifest>(manifestJson, JsonOptions);
+                if (manifest == null || string.IsNullOrWhiteSpace(manifest.Version) || string.IsNullOrWhiteSpace(manifest.BundleSha256))
+                {
+                    return new RulePackUpdateCheckResult
+                    {
+                        HasUpdate = false,
+                        CurrentVersion = currentVersion,
+                        Error = "Remote manifest.json is invalid"
+                    };
+                }
+
+                int totalRules = 0;
+                if (manifest.Files != null && manifest.Files.TryGetValue("rules.json", out var rulesFileEntry))
+                {
+                    totalRules = (rulesFileEntry.ActiveRules.HasValue && rulesFileEntry.ActiveRules.Value > 0)
+                        ? rulesFileEntry.ActiveRules.Value
+                        : (rulesFileEntry.TotalRules ?? 0);
+                }
+
+                bool hasUpdate = !string.Equals(manifest.BundleSha256, currentBundleSha256, StringComparison.OrdinalIgnoreCase) ||
+                                 !string.Equals(manifest.Version, currentVersion, StringComparison.OrdinalIgnoreCase);
+
+                return new RulePackUpdateCheckResult
+                {
+                    HasUpdate = hasUpdate,
+                    CurrentVersion = currentVersion,
+                    RemoteVersion = manifest.Version,
+                    RemoteBundleSha256 = manifest.BundleSha256,
+                    RemoteRuleCount = totalRules
+                };
+            }
+            catch (Exception ex)
+            {
+                return new RulePackUpdateCheckResult
+                {
+                    HasUpdate = false,
+                    CurrentVersion = currentVersion,
+                    Error = $"Failed to read remote manifest: {ex.Message}"
+                };
+            }
         }
 
         public bool SyncFromRemote(string remotePath, string localStagingPath, string activeStorePath, string lkgPath)

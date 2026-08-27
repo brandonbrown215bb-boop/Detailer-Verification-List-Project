@@ -25,7 +25,7 @@ namespace AHUVerification.Tests
 
             // Derived Facts
             Assert.True(facts.ContainsKey("unit.thermalBreak"));
-            Assert.Equal("Yes", facts["unit.thermalBreak"].Value);
+            Assert.Equal(true, facts["unit.thermalBreak"].Value);
             Assert.Equal(FactStatus.Derived, facts["unit.thermalBreak"].Status);
 
             // Derived Facts from Config.xml (unitConstructionType = Standard)
@@ -35,7 +35,7 @@ namespace AHUVerification.Tests
             Assert.Equal(FactConfidence.Authoritative, facts["unit.isSeismic"].Confidence);
 
             Assert.True(facts.ContainsKey("unit.noa"));
-            Assert.Equal("N/A", facts["unit.noa"].Value);
+            Assert.Equal(false, facts["unit.noa"].Value);
             Assert.Equal(FactStatus.Derived, facts["unit.noa"].Status);
             Assert.Equal(FactConfidence.Authoritative, facts["unit.noa"].Confidence);
 
@@ -56,8 +56,8 @@ namespace AHUVerification.Tests
             var facts = extractor.ExtractFacts(graph);
 
             // Override
-            extractor.OverrideFact(facts, "unit.linerMaterial", "Stainless Steel 304", "Tanner Dean", "Custom corrosive requirement");
-            var fact = facts["unit.linerMaterial"];
+            extractor.OverrideFact(facts, "casing.interiorMaterial", "Stainless Steel 304", "Tanner Dean", "Custom corrosive requirement");
+            var fact = facts["casing.interiorMaterial"];
 
             Assert.Equal("Stainless Steel 304", fact.Value);
             Assert.Equal(FactStatus.ManuallyOverridden, fact.Status);
@@ -67,9 +67,9 @@ namespace AHUVerification.Tests
             Assert.Equal("STL GALV", fact.OverrideHistory[0].PreviousValue);
 
             // Revert
-            extractor.RevertFact(facts, "unit.linerMaterial");
-            Assert.Equal("STL GALV", facts["unit.linerMaterial"].Value);
-            Assert.Equal(FactStatus.Known, facts["unit.linerMaterial"].Status);
+            extractor.RevertFact(facts, "casing.interiorMaterial");
+            Assert.Equal("STL GALV", facts["casing.interiorMaterial"].Value);
+            Assert.Equal(FactStatus.Known, facts["casing.interiorMaterial"].Status);
         }
 
         [Fact]

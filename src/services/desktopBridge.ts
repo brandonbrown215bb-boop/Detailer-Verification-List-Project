@@ -169,11 +169,46 @@ class DesktopBridge {
     }
   }
 
-  public async syncRulePack(remotePath: string): Promise<{ success: boolean; version: string; ruleCount: number }> {
+  public async checkRulePackUpdate(remotePath: string): Promise<{
+    hasUpdate: boolean;
+    currentVersion: string;
+    remoteVersion: string;
+    remoteBundleSha256: string;
+    remoteRuleCount: number;
+    error?: string;
+  }> {
+    if (this.isDesktop) {
+      return this.sendRequest('checkRulePackUpdate', { remotePath });
+    }
+    return {
+      hasUpdate: false,
+      currentVersion: RULE_PACK_IDENTITY.version,
+      remoteVersion: RULE_PACK_IDENTITY.version,
+      remoteBundleSha256: RULE_PACK_IDENTITY.sha256,
+      remoteRuleCount: RULES_CATALOG.length
+    };
+  }
+
+  public async syncRulePack(remotePath: string): Promise<{
+    success: boolean;
+    version: string;
+    bundleSha256?: string;
+    ruleCount: number;
+    rules?: RuleDefinition[];
+    templateMap?: any;
+    approvedMappings?: any;
+    manifest?: any;
+  }> {
     if (this.isDesktop) {
       return this.sendRequest('syncRulePack', { remotePath });
     }
-    return { success: true, version: RULE_PACK_IDENTITY.version, ruleCount: RULES_CATALOG.length };
+    return {
+      success: true,
+      version: RULE_PACK_IDENTITY.version,
+      bundleSha256: RULE_PACK_IDENTITY.sha256,
+      ruleCount: RULES_CATALOG.length,
+      rules: RULES_CATALOG
+    };
   }
 
   public async getRulePack(): Promise<{

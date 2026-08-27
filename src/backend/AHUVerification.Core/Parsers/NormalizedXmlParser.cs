@@ -44,7 +44,9 @@ namespace AHUVerification.Core.Parsers
             ["VC"] = "Vertical Coil",
             ["VE"] = "Vertical Economizer",
             ["VB"] = "Vestibule / Corridor",
-            ["VP"] = "Vertical Plenum"
+            ["VESTIBULE"] = "Vestibule / Corridor",
+            ["VP"] = "Vertical Plenum",
+            ["AB"] = "Air Blender"
         };
 
         public NormalizedXmlGraph Parse(string xmlContent)
@@ -100,9 +102,10 @@ namespace AHUVerification.Core.Parsers
                 graph.UnitOptions.UnitType = GetChildText(unitOptNode, "unitType", "Outdoor");
                 graph.UnitOptions.BrandOption = GetChildText(unitOptNode, "brandOption", "YORKCustom");
                 graph.UnitOptions.UnitConstructionType = GetChildText(unitOptNode, "unitConstructionType", "Standard");
+                graph.UnitOptions.ShippingProtection = GetChildText(unitOptNode, "shippingProtection", "ShrinkWrap");
                 graph.UnitOptions.IsSeismic = graph.UnitOptions.UnitConstructionType.Equals("IBC", StringComparison.OrdinalIgnoreCase) ||
                                               graph.UnitOptions.UnitConstructionType.Equals("OSHPD", StringComparison.OrdinalIgnoreCase);
-                graph.UnitOptions.NoaRating = graph.UnitOptions.UnitConstructionType.Equals("NOA", StringComparison.OrdinalIgnoreCase) ? "NOA" : "N/A";
+                graph.UnitOptions.Noa = graph.UnitOptions.UnitConstructionType.Equals("NOA", StringComparison.OrdinalIgnoreCase);
                 graph.UnitOptions.Washdown = GetChildBool(unitOptNode, "washdown", false);
                 graph.UnitOptions.Knockdown = GetChildBool(unitOptNode, "knockdown", false);
                 graph.UnitOptions.PrimaryAccessSide = GetChildText(unitOptNode, "primaryAccessSide", "Left");
@@ -116,9 +119,25 @@ namespace AHUVerification.Core.Parsers
                     graph.UnitOptions.Materials.InteriorMaterialType = GetChildText(constOptNode, "interiorMaterialType", "STL GALV");
                     graph.UnitOptions.Materials.InteriorMaterialGauge = GetChildInt(constOptNode, "interiorMaterialGauge", 22);
                     graph.UnitOptions.Materials.FloorMaterialType = GetChildText(constOptNode, "floorMaterialType", "STL GALV");
-                    graph.UnitOptions.Materials.FloorMaterialGauge = GetChildInt(constOptNode, "floorMaterialGauge", 16);
+                    
+                    string floorGaugeRaw = GetChildText(constOptNode, "floorMaterialGauge", "16");
+                    graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
+                    graph.UnitOptions.Materials.FloorMaterialGauge = int.TryParse(floorGaugeRaw, out int fgInt) ? fgInt : 16;
+
                     graph.UnitOptions.Materials.HousingStyle = GetChildText(constOptNode, "housingStyle", "ThermalBreak");
+                    graph.UnitOptions.ThermalBreak = graph.UnitOptions.Materials.HousingStyle.Contains("ThermalBreak", StringComparison.OrdinalIgnoreCase);
                     graph.UnitOptions.Materials.InsulationType = GetChildText(constOptNode, "insulationType", "Foam");
+
+                    graph.UnitOptions.Materials.ExteriorPaintType = GetChildText(constOptNode, "exteriorPaintType", "None");
+                    graph.UnitOptions.Materials.InteriorPaintType = GetChildText(constOptNode, "interiorPaintType", "None");
+                    graph.UnitOptions.Materials.FloorPaintType = GetChildText(constOptNode, "floorPaintType", "None");
+
+                    graph.UnitOptions.Materials.HousingThicknessFront = GetChildDouble(constOptNode, "housingThicknessFront", 2.0);
+                    graph.UnitOptions.Materials.HousingThicknessRear = GetChildDouble(constOptNode, "housingThicknessRear", 2.0);
+                    graph.UnitOptions.Materials.HousingThicknessTop = GetChildDouble(constOptNode, "housingThicknessTop", 2.0);
+                    graph.UnitOptions.Materials.HousingThicknessBottom = GetChildDouble(constOptNode, "housingThicknessBottom", 0.0);
+                    graph.UnitOptions.Materials.HousingThicknessLeft = GetChildDouble(constOptNode, "housingThicknessLeft", 2.0);
+                    graph.UnitOptions.Materials.HousingThicknessRight = GetChildDouble(constOptNode, "housingThicknessRight", 2.0);
                 }
             }
 
@@ -128,7 +147,18 @@ namespace AHUVerification.Core.Parsers
             {
                 graph.RoofOptions.HasSlopedRoof = GetChildBool(roofNode, "hasSlopedRoof", true);
                 graph.RoofOptions.RoofSlope = GetChildDouble(roofNode, "roofSlope", 0.25);
-                graph.RoofOptions.RoofSlopeHighSide = GetChildText(roofNode, "roofSlopeHighSide", "Internal");
+                string highSide = GetChildText(roofNode, "roofSlopeHighSide", "Internal");
+                graph.RoofOptions.RoofSlopeHighSide = highSide;
+                
+                if (highSide.Equals("Internal", StringComparison.OrdinalIgnoreCase))
+                    graph.RoofOptions.RoofPeak = "Center";
+                else if (highSide.Equals("Left", StringComparison.OrdinalIgnoreCase))
+                    graph.RoofOptions.RoofPeak = "Left";
+                else if (highSide.Equals("Right", StringComparison.OrdinalIgnoreCase))
+                    graph.RoofOptions.RoofPeak = "Right";
+                else
+                    graph.RoofOptions.RoofPeak = graph.RoofOptions.HasSlopedRoof ? "Center" : "Flat";
+
                 graph.RoofOptions.RoofPeakZDim = GetChildDouble(roofNode, "roofPeakZDim", 97);
             }
 
@@ -137,12 +167,20 @@ namespace AHUVerification.Core.Parsers
             if (curbNode != null)
             {
                 graph.CurbOptions.HasCurbRest = GetChildBool(curbNode, "hasCurbRest", true);
-                graph.CurbOptions.HasCurb = GetChildBool(curbNode, "hasCurb", false);
-                graph.CurbOptions.CurbHeight = GetChildDouble(curbNode, "curbHeight", 0);
             }
 
-            // Unit Bases (search inside unitBaseList or descendants)
-            bool detectedUtl = false;
+            // Testing Options
+            var testNode = FindElement(root, "testingOptions");
+            if (testNode != null)
+            {
+                graph.TestingOptions.DeflectionTest = GetChildText(testNode, "deflectionTest", "None");
+                graph.TestingOptions.LeakageTest = GetChildText(testNode, "leakageTest", "None");
+                graph.TestingOptions.FanVibrationTest = GetChildText(testNode, "fanVibrationTest", "None");
+                graph.TestingOptions.RequireCustomerWitness = GetChildBool(testNode, "requireCustomerWitness", false);
+            }
+
+            // Unit Bases
+            double maxLipHeight = 0;
             var baseList = FindElement(root, "unitBaseList");
             var baseNodes = baseList != null ? FindElements(baseList, "unitBase") : FindDescendants(root, "unitBase");
             int baseIdx = 1;
@@ -150,10 +188,15 @@ namespace AHUVerification.Core.Parsers
             {
                 var geom = FindElement(b, "geometry");
                 double lipHeight = GetChildDouble(b, "upturnedLipHeight", 0);
-                if (lipHeight > 0) detectedUtl = true;
+                if (lipHeight > maxLipHeight) maxLipHeight = lipHeight;
 
                 double height = geom != null ? GetChildDouble(geom, "yLength", 10) : 10;
-                string subfloorMat = $"{GetChildText(b, "subFloorMaterialType", "STL GALV")} {GetChildInt(b, "subFloorMaterialGauge", 22)}ga";
+                double by = geom != null ? GetChildDouble(geom, "y", 0) : 0;
+                bool isUpperBase = by > 15;
+
+                string subMatType = GetChildText(b, "subFloorMaterialType", "STL GALV");
+                int subGauge = GetChildInt(b, "subFloorMaterialGauge", 22);
+                string subfloorMat = $"{subMatType} {subGauge}ga";
 
                 graph.Bases.Add(new UnitBase
                 {
@@ -167,13 +210,19 @@ namespace AHUVerification.Core.Parsers
                     HousingStyle = GetChildText(b, "housingStyle", "ThermalBreak"),
                     HasSubFloor = GetChildBool(b, "hasSubFloor", true),
                     SubFloorMaterial = subfloorMat,
+                    SubFloorMaterialType = subMatType,
+                    SubFloorMaterialGauge = subGauge,
+                    SubFloorPaintType = GetChildText(b, "subFloorPaintType", "None"),
+                    FloorAttachmentType = GetChildText(b, "floorAttachmentType", "StitchWeld"),
+                    IsUpperBase = isUpperBase,
                     Dimensions = ParseDimensions(geom)
                 });
                 baseIdx++;
             }
-            graph.UnitOptions.HasUTL = detectedUtl;
+            graph.UnitOptions.LipHeight = maxLipHeight;
+            graph.UnitOptions.HasUTL = maxLipHeight > 0;
 
-            // Segments (inside segmentList)
+            // Segments
             var segListNode = FindElement(root, "segmentList");
             var segMap = new Dictionary<string, Segment>(StringComparer.OrdinalIgnoreCase);
             if (segListNode != null)
@@ -181,7 +230,7 @@ namespace AHUVerification.Core.Parsers
                 int segIdx = 1;
                 foreach (var segEl in segListNode.Elements())
                 {
-                    string tag = segEl.Name.LocalName; // e.g. segment_IP
+                    string tag = segEl.Name.LocalName; // e.g. segment_IP, segment_CC
                     string typeCode = tag.Replace("segment_", "", StringComparison.OrdinalIgnoreCase).ToUpperInvariant();
                     string id = GetChildText(segEl, "segmentID", $"seg-{segIdx}");
                     double weight = GetChildDouble(segEl, "weight", 0);
@@ -189,9 +238,20 @@ namespace AHUVerification.Core.Parsers
                     double airVolume = GetChildDouble(segEl, "airVolume", 0);
                     string handOrientation = GetChildText(segEl, "handOrientation", "FrontToRear");
                     var geom = FindElement(segEl, "geometry");
+                    var parsedGeom = ParseDimensions(geom);
+
+                    // Check elevation for tiered placement
+                    double defaultBaseH = graph.UnitOptions.DefaultUnitBaseHeight > 0 ? graph.UnitOptions.DefaultUnitBaseHeight : 10;
+                    bool isUpperDeck = parsedGeom.Y > defaultBaseH + 10;
+                    bool hasBaseBelowAtSameY = graph.Bases.Any(b => Math.Abs(b.Dimensions.Y - parsedGeom.Y) < 5);
+                    bool isTiered = isUpperDeck && !hasBaseBelowAtSameY;
+                    int tierLevel = isTiered ? 2 : 1;
 
                     var constOpt = FindElement(segEl, "constructionOptions");
                     var frontSurf = constOpt != null ? FindElement(constOpt, "surfaceDetail_Front") : null;
+
+                    string segFloorGaugeRaw = frontSurf != null ? GetChildText(frontSurf, "floorMaterialGauge", graph.UnitOptions.Materials.FloorMaterialGaugeString) : graph.UnitOptions.Materials.FloorMaterialGaugeString;
+                    int segFloorGaugeInt = int.TryParse(segFloorGaugeRaw, out int sfg) ? sfg : graph.UnitOptions.Materials.FloorMaterialGauge;
 
                     var casing = new CasingDetail
                     {
@@ -199,46 +259,142 @@ namespace AHUVerification.Core.Parsers
                         ExteriorGauge = frontSurf != null ? GetChildInt(frontSurf, "exteriorMaterialGauge", graph.UnitOptions.Materials.ExteriorMaterialGauge) : graph.UnitOptions.Materials.ExteriorMaterialGauge,
                         InteriorMaterial = frontSurf != null ? GetChildText(frontSurf, "interiorMaterialType", graph.UnitOptions.Materials.InteriorMaterialType) : graph.UnitOptions.Materials.InteriorMaterialType,
                         InteriorGauge = frontSurf != null ? GetChildInt(frontSurf, "interiorMaterialGauge", graph.UnitOptions.Materials.InteriorMaterialGauge) : graph.UnitOptions.Materials.InteriorMaterialGauge,
-                        HousingThickness = frontSurf != null ? GetChildDouble(frontSurf, "housingThickness", 2) : 2,
+                        FloorMaterial = graph.UnitOptions.Materials.FloorMaterialType,
+                        FloorGauge = segFloorGaugeInt,
+                        FloorGaugeString = segFloorGaugeRaw,
+                        HousingThickness = frontSurf != null ? GetChildDouble(frontSurf, "housingThickness", graph.UnitOptions.Materials.HousingThicknessFront) : graph.UnitOptions.Materials.HousingThicknessFront,
+                        HousingThicknessFront = graph.UnitOptions.Materials.HousingThicknessFront,
+                        HousingThicknessTop = graph.UnitOptions.Materials.HousingThicknessTop,
                         HousingStyle = constOpt != null ? GetChildText(constOpt, "housingStyle", graph.UnitOptions.Materials.HousingStyle) : graph.UnitOptions.Materials.HousingStyle,
-                        InsulationType = constOpt != null ? GetChildText(constOpt, "insulationType", graph.UnitOptions.Materials.InsulationType) : graph.UnitOptions.Materials.InsulationType
+                        InsulationType = constOpt != null ? GetChildText(constOpt, "insulationType", graph.UnitOptions.Materials.InsulationType) : graph.UnitOptions.Materials.InsulationType,
+                        ExteriorPaintType = graph.UnitOptions.Materials.ExteriorPaintType,
+                        InteriorPaintType = graph.UnitOptions.Materials.InteriorPaintType,
+                        FloorPaintType = graph.UnitOptions.Materials.FloorPaintType
                     };
 
-                    // Detect internals
-                    var internals = new List<string>();
-                    var coilEls = FindDescendants(segEl, "coil");
-                    if (coilEls.Any() || tag.Equals("segment_CC", StringComparison.OrdinalIgnoreCase) || tag.Equals("segment_HC", StringComparison.OrdinalIgnoreCase))
+                    // Component sub-tree parsing
+                    FanConfig? fanConfig = null;
+                    var segFanNode = FindElement(segEl, "segmentConfig_Fan");
+                    if (segFanNode != null)
                     {
-                        if (coilEls.Any())
+                        int qH = GetChildInt(segFanNode, "fanArrayQtyHeight", 1);
+                        int qW = GetChildInt(segFanNode, "fanArrayQtyWidth", 1);
+                        var fanNodes = FindDescendants(segFanNode, "fan");
+                        double maxHp = 0;
+                        double volt = 460;
+                        foreach (var fn in fanNodes)
                         {
-                            foreach (var coil in coilEls)
-                            {
-                                string bh = GetChildText(coil, "coilBulkheadMaterial", "");
-                                string cType = GetChildText(coil, "coilType", "Coil");
-                                internals.Add(string.IsNullOrEmpty(bh) ? cType : $"{cType} ({bh} Bulkhead)");
-                            }
+                            double hp = GetChildDouble(fn, "motorHorsePower", 0);
+                            if (hp > maxHp) maxHp = hp;
+                            volt = GetChildDouble(fn, "voltage", 460);
                         }
-                        else
+
+                        fanConfig = new FanConfig
                         {
-                            internals.Add(tag.Equals("segment_CC", StringComparison.OrdinalIgnoreCase) ? "Cooling Coil Wall" : "Heating Coil Wall");
-                        }
+                            IsFanArray = GetChildBool(segFanNode, "isFanArray", false) || (qH * qW > 1),
+                            ArrayQtyHeight = qH,
+                            ArrayQtyWidth = qW,
+                            ArrayGrid = $"{qH}x{qW}",
+                            HasRedundancy = GetChildBool(segFanNode, "hasFanRedundancy", false),
+                            HasStand = GetChildBool(segFanNode, "hasFanStand", false),
+                            HasDualFanSeparationWall = GetChildBool(segFanNode, "hasDualFanSeparationWall", false),
+                            HasMotorRemovalRail = GetChildBool(segFanNode, "hasMotorRemovalRail", false),
+                            IsolationType = GetChildText(segFanNode, "fanFlowIsolationType", "None"),
+                            FanCount = fanNodes.Count > 0 ? fanNodes.Count : (qH * qW),
+                            MotorHp = maxHp,
+                            Voltage = volt
+                        };
                     }
 
-                    var fanEls = FindDescendants(segEl, "fan");
-                    if (fanEls.Any() || tag.Equals("segment_FS", StringComparison.OrdinalIgnoreCase) || tag.Equals("segment_FE", StringComparison.OrdinalIgnoreCase) || tag.Equals("segment_FR", StringComparison.OrdinalIgnoreCase))
+                    CoilConfig? coilConfig = null;
+                    var segCoilNode = FindElement(segEl, "segmentConfig_Coil");
+                    if (segCoilNode != null)
+                    {
+                        var coilNodes = FindDescendants(segCoilNode, "coil");
+                        string hand = "Right";
+                        if (coilNodes.Count > 0)
+                        {
+                            hand = GetChildText(coilNodes[0], "connectionHand", "Right");
+                        }
+
+                        coilConfig = new CoilConfig
+                        {
+                            BulkheadMaterial = GetChildText(segCoilNode, "coilBulkheadMaterial", "STL GALV"),
+                            HasStackingRack = GetChildBool(segCoilNode, "hasCoilStackingRack", false),
+                            StackingRackMaterial = GetChildText(segCoilNode, "coilStackingRackMaterialType", ""),
+                            DripPanMaterial = GetChildText(segCoilNode, "dripPanMaterialType", "StainlessSteel_304"),
+                            StaggeredOverlap = GetChildDouble(segCoilNode, "staggeredCoilOverlap", 0),
+                            ConnectionHand = hand,
+                            CoilCount = coilNodes.Count > 0 ? coilNodes.Count : 1
+                        };
+                    }
+
+                    FilterConfig? filterConfig = null;
+                    var segFilterNode = FindElement(segEl, "segmentConfig_Filter");
+                    if (segFilterNode != null)
+                    {
+                        filterConfig = new FilterConfig
+                        {
+                            FilterType = typeCode.Contains("RF") ? "RigidFilter" : (typeCode.Contains("AF") ? "AngleFilter" : "FlatFilter"),
+                            LoadMethod = GetChildText(segFilterNode, "loadMethod", "FrontLoad"),
+                            BulkheadMaterial = GetChildText(segFilterNode, "bulkheadMaterialType", "STL GALV"),
+                            GaugeType = GetChildText(segFilterNode, "combinedGaugeType", "None"),
+                            GaugeDoorId = GetChildText(segFilterNode, "combinedGaugeDoorID", ""),
+                            GaugeMountingType = GetChildText(segFilterNode, "combinedGaugeMountingType", "")
+                        };
+                    }
+
+                    HeatWheelConfig? heatWheelConfig = null;
+                    var segWheelNode = FindElement(segEl, "segmentConfig_HeatWheel");
+                    if (segWheelNode != null)
+                    {
+                        heatWheelConfig = new HeatWheelConfig
+                        {
+                            Vendor = GetChildText(segWheelNode, "vendor", ""),
+                            Model = GetChildText(segWheelNode, "model", ""),
+                            WheelType = GetChildText(segWheelNode, "wheelType", "Enthalpy"),
+                            MediaType = GetChildText(segWheelNode, "wheelMedia", "MolecularSieve"),
+                            HasPurge = GetChildBool(segWheelNode, "hasPurge", false),
+                            AllowVariableSpeed = GetChildBool(segWheelNode, "allowVariableSpeed", false),
+                            WheelDiameter = GetChildDouble(segWheelNode, "wheelDiameter", 0),
+                            RecoveryPercentCFM = GetChildDouble(segWheelNode, "recoveryPercentCFM", 0)
+                        };
+                    }
+
+                    // Build friendly internals summary
+                    var internals = new List<string>();
+                    if (coilConfig != null)
+                    {
+                        internals.Add($"Coil ({coilConfig.BulkheadMaterial} Bulkhead)");
+                    }
+                    else if (tag.Equals("segment_CC", StringComparison.OrdinalIgnoreCase))
+                    {
+                        internals.Add("Cooling Coil Wall");
+                    }
+                    else if (tag.Equals("segment_HC", StringComparison.OrdinalIgnoreCase))
+                    {
+                        internals.Add("Heating Coil Wall");
+                    }
+
+                    if (fanConfig != null)
+                    {
+                        internals.Add(fanConfig.IsFanArray ? $"Fan Array ({fanConfig.ArrayGrid})" : "Fan Array / Wall");
+                    }
+                    else if (tag.Equals("segment_FS", StringComparison.OrdinalIgnoreCase) || tag.Equals("segment_FE", StringComparison.OrdinalIgnoreCase) || tag.Equals("segment_FR", StringComparison.OrdinalIgnoreCase))
                     {
                         internals.Add("Fan Array / Wall");
                     }
-                    if (tag.Equals("segment_HW", StringComparison.OrdinalIgnoreCase)) internals.Add("Heat Recovery Wheel");
+
+                    if (heatWheelConfig != null || tag.Equals("segment_HW", StringComparison.OrdinalIgnoreCase)) internals.Add("Heat Recovery Wheel");
                     if (tag.Equals("segment_AT", StringComparison.OrdinalIgnoreCase)) internals.Add("Sound Attenuator Baffles");
                     if (tag.Equals("segment_MB", StringComparison.OrdinalIgnoreCase)) internals.Add("Mixing Dampers");
                     if (tag.Equals("segment_PC", StringComparison.OrdinalIgnoreCase)) internals.Add("Pipe Chase Enclosure");
-                    if (tag.Contains("FF", StringComparison.OrdinalIgnoreCase) || tag.Contains("RF", StringComparison.OrdinalIgnoreCase) || tag.Contains("AF", StringComparison.OrdinalIgnoreCase))
+                    if (filterConfig != null || tag.Contains("FF", StringComparison.OrdinalIgnoreCase) || tag.Contains("RF", StringComparison.OrdinalIgnoreCase) || tag.Contains("AF", StringComparison.OrdinalIgnoreCase))
                     {
                         internals.Add("Filter Rack / Wall");
                     }
 
-                    string friendlyName = SegmentNames.TryGetValue(typeCode, out var fn) ? fn : $"Segment {typeCode}";
+                    string friendlyName = SegmentNames.TryGetValue(typeCode, out var friendlyVal) ? friendlyVal : $"Segment {typeCode}";
 
                     var segment = new Segment
                     {
@@ -250,12 +406,19 @@ namespace AHUVerification.Core.Parsers
                         AirPressureType = airPressureType,
                         AirVolume = airVolume,
                         HandOrientation = handOrientation,
-                        Dimensions = ParseDimensions(geom),
+                        Dimensions = parsedGeom,
                         Casing = casing,
                         Internals = internals,
                         HasFrontChannel = GetChildBool(segEl, "hasFrontChannel", false),
                         HasRearChannel = GetChildBool(segEl, "hasRearChannel", false),
-                        HasMotorRemovalRail = GetChildBool(segEl, "hasMotorRemovalRail", false)
+                        HasMotorRemovalRail = GetChildBool(segEl, "hasMotorRemovalRail", false),
+                        IsTiered = isTiered,
+                        TierLevel = tierLevel,
+                        ElevationY = parsedGeom.Y,
+                        FanConfig = fanConfig,
+                        CoilConfig = coilConfig,
+                        FilterConfig = filterConfig,
+                        HeatWheelConfig = heatWheelConfig
                     };
 
                     graph.Segments.Add(segment);
@@ -264,7 +427,146 @@ namespace AHUVerification.Core.Parsers
                 }
             }
 
-            // Shipping Skids (inside shippingSkidList)
+            // Parse Opening List (<openingList>)
+            var openingListNode = FindElement(root, "openingList");
+            if (openingListNode != null)
+            {
+                int opIdx = 1;
+                bool isFloorAl = graph.UnitOptions.Materials.FloorMaterialType.Contains("AL", StringComparison.OrdinalIgnoreCase);
+                double defaultDrainHoleDia = isFloorAl ? 3.125 : 1.50;
+
+                foreach (var opEl in openingListNode.Elements())
+                {
+                    string opType = GetChildText(opEl, "openingType", "Standard");
+                    string segId = GetChildText(opEl, "segmentID", "");
+                    string side = GetChildText(opEl, "unitSide", "Front");
+                    var opGeom = ParseDimensions(FindElement(opEl, "geometry"));
+
+                    double width = Math.Max(opGeom.XLength, opGeom.ZLength);
+                    double height = opGeom.YLength;
+
+                    // 1. Doors
+                    var doorListEl = FindElement(opEl, "doorList");
+                    var doorEl = doorListEl != null ? FindElement(doorListEl, "door") : null;
+                    if (doorEl != null || opType.Equals("Door", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var door = new UnitDoor
+                        {
+                            Id = doorEl != null ? GetChildText(doorEl, "doorID", $"door-{opIdx}") : $"door-{opIdx}",
+                            SegmentId = segId,
+                            UnitSide = side,
+                            Width = width > 0 ? width : 24.0,
+                            Height = height > 0 ? height : 72.0,
+                            Swing = doorEl != null ? GetChildText(doorEl, "swingDirection", "Out") : "Out",
+                            HingeSide = doorEl != null ? GetChildText(doorEl, "doorHingeType", "Left") : "Left",
+                            HasWindow = doorEl != null && GetChildBool(doorEl, "hasWindow", false),
+                            HasViewPort = doorEl != null && GetChildBool(doorEl, "hasViewPort", false),
+                            LatchType = doorEl != null ? GetChildText(doorEl, "doorLatchType", "Standard") : "Standard",
+                            DoorType = doorEl != null ? GetChildText(doorEl, "doorType", "Standard") : "Standard"
+                        };
+                        graph.Doors.Add(door);
+                        if (segMap.TryGetValue(segId, out var seg))
+                        {
+                            seg.Doors.Add(door);
+                        }
+                    }
+
+                    // 2. Dampers
+                    var damperListEl = FindElement(opEl, "damperList");
+                    var damperEl = damperListEl != null ? FindElement(damperListEl, "damper") : null;
+                    if (damperEl != null)
+                    {
+                        var damper = new UnitDamper
+                        {
+                            Id = GetChildText(damperEl, "damper_MOMID", $"damper-{opIdx}"),
+                            SegmentId = segId,
+                            UnitSide = side,
+                            Width = width,
+                            Height = height,
+                            Depth = GetChildDouble(damperEl, "damperDepth", 0),
+                            DamperType = GetChildText(damperEl, "damperType", "Standard"),
+                            ActuatorType = GetChildText(damperEl, "actuatorType", "None"),
+                            BladeType = GetChildText(damperEl, "bladeType", "Airfoil"),
+                            HasAttachedLouver = GetChildBool(damperEl, "louverHasAttachedDamper", false)
+                        };
+                        graph.Dampers.Add(damper);
+                        if (segMap.TryGetValue(segId, out var seg))
+                        {
+                            seg.Dampers.Add(damper);
+                        }
+                    }
+
+                    // 3. Floor Drains
+                    var fdListEl = FindElement(opEl, "floorDrainList");
+                    var fdEl = fdListEl != null ? FindElement(fdListEl, "floorDrain") : null;
+                    if (fdEl != null || opType.Equals("FloorDrain", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fd = new UnitFloorDrain
+                        {
+                            Id = fdEl != null ? GetChildText(fdEl, "floorDrain_MOMID", $"fd-{opIdx}") : $"fd-{opIdx}",
+                            SegmentId = segId,
+                            UnitSide = side,
+                            Type = fdEl != null ? GetChildText(fdEl, "floorDrainType", "Standard") : "Standard",
+                            PipingMaterial = fdEl != null ? GetChildText(fdEl, "pipingMaterial", "StainlessSteel") : "StainlessSteel",
+                            ConnectionDiameter = fdEl != null ? GetChildDouble(fdEl, "connectionDiameter", 1.25) : 1.25,
+                            HoleDiameter = defaultDrainHoleDia,
+                            ConnectionSide = fdEl != null ? GetChildText(fdEl, "connectionSide", "Left") : "Left",
+                            Geometry = opGeom
+                        };
+                        graph.FloorDrains.Add(fd);
+                        if (segMap.TryGetValue(segId, out var seg))
+                        {
+                            seg.FloorDrains.Add(fd);
+                        }
+                    }
+
+                    // 4. Duct Openings
+                    if (opType.Equals("Standard", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var duct = new UnitDuctOpening
+                        {
+                            Id = $"duct-{opIdx}",
+                            SegmentId = segId,
+                            UnitSide = side,
+                            Width = width,
+                            Height = height,
+                            Shape = GetChildText(opEl, "shape", "Rectangle"),
+                            AirType = GetChildText(opEl, "airType", "Supply"),
+                            DuctType = GetChildText(opEl, "ductType", "Sleeved")
+                        };
+                        if (segMap.TryGetValue(segId, out var seg))
+                        {
+                            seg.DuctOpenings.Add(duct);
+                        }
+                    }
+
+                    // 5. Drain Pan Openings
+                    if (opType.Equals("DrainPan", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var dpOp = new UnitDrainPanOpening
+                        {
+                            Id = $"dpan-{opIdx}",
+                            SegmentId = segId,
+                            Width = width,
+                            Length = opGeom.XLength > 0 ? opGeom.XLength : opGeom.ZLength,
+                            Depth = opGeom.YLength
+                        };
+                        if (segMap.TryGetValue(segId, out var seg))
+                        {
+                            seg.DrainPanOpenings.Add(dpOp);
+                        }
+                    }
+
+                    opIdx++;
+                }
+            }
+
+            // Set unit-level aggregations
+            graph.IsTiered = graph.Segments.Any(s => s.IsTiered);
+            graph.IsStacked = graph.Bases.Any(b => b.IsUpperBase);
+            graph.HasFloorDrains = graph.FloorDrains.Count > 0;
+
+            // Shipping Skids
             var skidList = FindElement(root, "shippingSkidList");
             var skidNodes = skidList != null ? FindElements(skidList, "shippingSkid") : FindDescendants(root, "shippingSkid");
             int skidIdx = 1;
@@ -306,7 +608,7 @@ namespace AHUVerification.Core.Parsers
                     SegmentIds = segRefs,
                     BaseIds = baseRefs,
                     CalculatedWeight = skidCalcWeight,
-                    AuthoritativeWeight = null, // Strict weight rule: requires confirmation
+                    AuthoritativeWeight = null,
                     IsWeightConfirmed = false,
                     Dimensions = new SkidDimensions
                     {
@@ -318,7 +620,7 @@ namespace AHUVerification.Core.Parsers
                 skidIdx++;
             }
 
-            // Motor Controls (inside motorControlList)
+            // Motor Controls
             var mcList = FindElement(root, "motorControlList");
             var mcNodes = mcList != null ? FindElements(mcList, "motorControl") : FindDescendants(root, "motorControl");
             int mcIdx = 1;

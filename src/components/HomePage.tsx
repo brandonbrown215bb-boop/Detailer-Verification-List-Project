@@ -22,6 +22,8 @@ interface HomePageProps {
   onOpenDvl: (project: DvlProjectFile, rawJson?: string, filePath?: string) => void | Promise<void>;
   onOpenManualModal: () => void;
   onLoadSample: () => void;
+  rulePackVersion?: string;
+  ruleCount?: number;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -31,7 +33,9 @@ export const HomePage: React.FC<HomePageProps> = ({
   onImportXml,
   onOpenDvl,
   onOpenManualModal,
-  onLoadSample
+  onLoadSample,
+  rulePackVersion = RULE_PACK_IDENTITY.version,
+  ruleCount = RULES_CATALOG.filter(rule => !rule.isArchived).length
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,7 +162,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-medium">
           <Shield className="w-3.5 h-3.5" />
-          <span>Rule Pack v{RULE_PACK_IDENTITY.version} ({RULES_CATALOG.filter(rule => !rule.isArchived).length} Rules)</span>
+          <span>Rule Pack v{rulePackVersion} ({ruleCount} Rules)</span>
         </div>
       </div>
 

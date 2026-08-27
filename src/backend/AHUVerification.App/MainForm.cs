@@ -50,19 +50,40 @@ namespace AHUVerification.App
                 await _webView.EnsureCoreWebView2Async(env);
 
                 string appBase = AppContext.BaseDirectory;
-                string rulePackPath = Path.Combine(appBase, "resources", "rulepack");
                 string distFolder = Path.Combine(appBase, "dist");
+                string packagedRulePack = Path.Combine(appBase, "resources", "rulepack");
+                string localActiveRulePack = Path.Combine(localData, "active_rulepack");
+
+                string rulePackPath = packagedRulePack;
+
+                // Priority 1: Synced active_rulepack from LocalApplicationData if present and valid
+                if (Directory.Exists(localActiveRulePack) && File.Exists(Path.Combine(localActiveRulePack, "manifest.json")))
+                {
+                    try
+                    {
+                        var testManager = new AHUVerification.Core.Services.RulePackManager();
+                        var testBundle = testManager.LoadFromDirectory(localActiveRulePack);
+                        if (testBundle.IsValid)
+                        {
+                            rulePackPath = localActiveRulePack;
+                        }
+                    }
+                    catch
+                    {
+                        // Fall back to baseline packaged rulepack
+                    }
+                }
 
 #if DEBUG
                 string repoRoot = FindRepoRoot();
                 string repositoryRulePack = Path.Combine(repoRoot, "src", "rulepack");
                 string repositoryDist = Path.Combine(repoRoot, "dist");
-                if (Directory.Exists(repositoryRulePack)) rulePackPath = repositoryRulePack;
+                if (Directory.Exists(repositoryRulePack) && !Directory.Exists(localActiveRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
 #endif
 
                 if (!Directory.Exists(rulePackPath))
-                    throw new DirectoryNotFoundException($"Packaged Rule Pack not found: {rulePackPath}");
+                    throw new DirectoryNotFoundException($"Rule Pack directory not found: {rulePackPath}");
                 if (!File.Exists(Path.Combine(distFolder, "index.html")))
                     throw new FileNotFoundException("Packaged web interface not found.", Path.Combine(distFolder, "index.html"));
 

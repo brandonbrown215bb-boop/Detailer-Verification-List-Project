@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using Xunit;
 using AHUVerification.Core.Parsers;
+using AHUVerification.Core.Services;
 
 namespace AHUVerification.Tests
 {
@@ -47,6 +48,70 @@ namespace AHUVerification.Tests
             Assert.True(graph.Skids[0].SegmentIds.Count > 0);
             Assert.True(graph.Skids[0].CalculatedWeight > 0);
             Assert.Null(graph.Skids[0].AuthoritativeWeight); // Strict weight semantics
+
+            // Openings & Doors
+            Assert.True(graph.Doors.Count > 0);
+            Assert.True(graph.Dampers.Count > 0);
+        }
+
+        [Fact]
+        public void Parse_OpeningScheduleAndComponents_ExtractsStructuredData()
+        {
+            string xmlPath = TestPathHelper.GetRepoPath("Config.xml");
+            string xmlContent = File.ReadAllText(xmlPath);
+            var parser = new NormalizedXmlParser();
+            var graph = parser.Parse(xmlContent);
+
+            // Verify Doors
+            var door = graph.Doors.FirstOrDefault();
+            Assert.NotNull(door);
+            Assert.True(door.Width > 0);
+            Assert.True(door.Height > 0);
+
+            // Verify Dampers
+            var damper = graph.Dampers.FirstOrDefault();
+            Assert.NotNull(damper);
+            Assert.False(string.IsNullOrEmpty(damper.DamperType));
+
+            // Verify Testing Options
+            Assert.NotNull(graph.TestingOptions);
+
+            // Verify Segment Component configs
+            var coilSeg = graph.Segments.FirstOrDefault(s => s.CoilConfig != null);
+            if (coilSeg != null)
+            {
+                Assert.NotNull(coilSeg.CoilConfig.BulkheadMaterial);
+            }
+        }
+
+        [Fact]
+        public void Parse_All18UpzExamples_ExtractsWithoutExceptions()
+        {
+            string upzDir = TestPathHelper.GetRepoPath("UPZ_Unit_Examples");
+            if (!Directory.Exists(upzDir)) return;
+
+            var extractor = new UpzBundleExtractor();
+            var parser = new NormalizedXmlParser();
+            var factExtractor = new FactExtractor();
+
+            foreach (var upzFile in Directory.GetFiles(upzDir, "*.upz"))
+            {
+                var bundle = extractor.Extract(upzFile);
+                Assert.NotNull(bundle);
+                Assert.False(string.IsNullOrWhiteSpace(bundle.RawConfigXml));
+
+                var graph = parser.Parse(bundle.RawConfigXml);
+                Assert.NotNull(graph);
+                Assert.True(graph.Segments.Count > 0);
+
+                var facts = factExtractor.ExtractFacts(graph, bundle.OrderRevision);
+                Assert.NotNull(facts);
+                Assert.True(facts.ContainsKey("unit.thermalBreak"));
+                Assert.True(facts.ContainsKey("unit.noa"));
+                Assert.True(facts.ContainsKey("unit.isTiered"));
+                Assert.True(facts.ContainsKey("unit.isStacked"));
+                Assert.True(facts.ContainsKey("unit.hasFloorDrains"));
+            }
         }
     }
 }

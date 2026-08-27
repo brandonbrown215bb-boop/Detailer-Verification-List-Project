@@ -102,7 +102,9 @@ namespace AHUVerification.App.Bridge
                     "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
                     "openFile" => OpenFile(req.Payload),
                     "showInExplorer" => ShowInExplorer(req.Payload),
+                    "checkRulePackUpdate" => CheckRulePackUpdate(req.Payload),
                     "syncRulePack" => SyncRulePack(req.Payload),
+                    "selectFolderDialog" => ShowSelectFolderDialog(),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
@@ -354,6 +356,43 @@ namespace AHUVerification.App.Bridge
             return new { shown = true };
         }
 
+        private object CheckRulePackUpdate(JsonElement payload)
+        {
+            string remotePath = payload.GetProperty("remotePath").GetString() ?? "";
+            string currentVersion = _activeRulePack?.Manifest.Version ?? "0.0.0";
+            string currentBundleSha = _activeRulePack?.Manifest.BundleSha256 ?? "";
+
+            var result = _rulePackManager.CheckRemoteUpdate(remotePath, currentVersion, currentBundleSha);
+            return new
+            {
+                hasUpdate = result.HasUpdate,
+                currentVersion = result.CurrentVersion,
+                remoteVersion = result.RemoteVersion,
+                remoteBundleSha256 = result.RemoteBundleSha256,
+                remoteRuleCount = result.RemoteRuleCount,
+                error = result.Error
+            };
+        }
+
+        private object? ShowSelectFolderDialog()
+        {
+            string? selectedPath = null;
+            _parentForm.Invoke(new Action(() =>
+            {
+                using var dialog = new FolderBrowserDialog
+                {
+                    Description = "Select Central Rule Pack Distribution Folder"
+                };
+
+                if (dialog.ShowDialog(_parentForm) == DialogResult.OK)
+                {
+                    selectedPath = dialog.SelectedPath;
+                }
+            }));
+
+            return selectedPath != null ? new { folderPath = selectedPath } : null;
+        }
+
         private object SyncRulePack(JsonElement payload)
         {
             string remotePath = payload.GetProperty("remotePath").GetString() ?? "";
@@ -372,7 +411,12 @@ namespace AHUVerification.App.Bridge
             {
                 success,
                 version = _activeRulePack?.Manifest.Version ?? "Unavailable",
-                ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0
+                bundleSha256 = _activeRulePack?.Manifest.BundleSha256 ?? "",
+                ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
+                rules = _activeRulePack?.Rules,
+                templateMap = _activeRulePack?.TemplateMap,
+                approvedMappings = _activeRulePack?.ApprovedMappings,
+                manifest = _activeRulePack?.Manifest
             };
         }
     }

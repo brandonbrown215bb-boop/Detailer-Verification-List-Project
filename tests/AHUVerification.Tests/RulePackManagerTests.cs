@@ -142,6 +142,32 @@ namespace AHUVerification.Tests
             }
         }
 
+        [Fact]
+        public void CheckRemoteUpdate_DetectsNewerVersionAndMissingRemote()
+        {
+            var manager = new RulePackManager();
+            string baselinePath = TestPathHelper.GetRepoPath("src/rulepack");
+            var baseline = manager.LoadFromDirectory(baselinePath);
+
+            // 1. Identical directory check -> No update
+            var noUpdateRes = manager.CheckRemoteUpdate(baselinePath, baseline.Manifest.Version, baseline.Manifest.BundleSha256);
+            Assert.False(noUpdateRes.HasUpdate);
+            Assert.Null(noUpdateRes.Error);
+            Assert.Equal(baseline.Manifest.Version, noUpdateRes.RemoteVersion);
+
+            // 2. Outdated local version comparison -> Has update
+            var hasUpdateRes = manager.CheckRemoteUpdate(baselinePath, "13.0.0", "old-sha-placeholder");
+            Assert.True(hasUpdateRes.HasUpdate);
+            Assert.Null(hasUpdateRes.Error);
+            Assert.Equal(baseline.Manifest.Version, hasUpdateRes.RemoteVersion);
+            Assert.Equal(baseline.Manifest.BundleSha256, hasUpdateRes.RemoteBundleSha256);
+
+            // 3. Inaccessible path -> Error
+            var missingRes = manager.CheckRemoteUpdate(@"Z:\NonExistentShare\RulePacks", "14.0.0", baseline.Manifest.BundleSha256);
+            Assert.False(missingRes.HasUpdate);
+            Assert.NotNull(missingRes.Error);
+        }
+
         private static string CopyRulePackToTemp()
         {
             string destination = Path.Combine(Path.GetTempPath(), $"ahu-rulepack-{Guid.NewGuid():N}");

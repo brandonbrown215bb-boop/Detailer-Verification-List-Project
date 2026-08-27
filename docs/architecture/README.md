@@ -72,8 +72,9 @@ flowchart TD
 
 ### 2. Ingestion & Data Pipeline
 - **Package Decompression (`UpzBundleExtractor`)**: When provided a `.upz` bundle, the host invokes the bundled `unpack32.exe` / `ywunpack.dll` in an isolated temp directory to extract `Config.xml`, `OrderRev.xml`, and `Manifest.xml`.
-- **Layer 1: Normalized XML Graph (`NormalizedXmlGraph`)**: Pure, uninterpreted structural graph of `Config.xml` (Units, Skids, Bases, Segments, Components/Internals). Also synthesized cleanly for manual unit configurations without XML.
-- **Layer 2: Provenance-Aware Fact Registry (`FactRegistry`)**: Strongly-typed business facts with 4-state status (`Known`, `Derived`, `Unknown`, `ManuallyOverridden`) and confidence flags (`Authoritative`, `RequiresConfirmation`). Order-level facts (`unit.jobName`, `unit.orderNumber`, `unit.tag`, `unit.productType`) are populated authoritatively from `OrderRev.xml`, while `unit.comNumber` (COM #) remains an explicit manual entry field for detailers.
+- **Layer 1: Normalized XML Graph (`NormalizedXmlGraph`)**: Pure, uninterpreted structural graph of `Config.xml` representing the authoritative unit baseline. Captures complete opening schedules (`UnitDoor`, `UnitDamper`, `UnitFloorDrain`), component sub-trees (`FanConfig`, `CoilConfig`, `FilterConfig`, `HeatWheelConfig`), per-face casing details, decimal floor gauges, and upper-deck elevations. Also synthesized cleanly for manual unit configurations without XML.
+- **Layer 2: Provenance-Aware Fact Registry (`FactRegistry`)**: Strongly-typed business facts with 4-state status (`Known`, `Derived`, `Unknown`, `ManuallyOverridden`) and confidence flags (`Authoritative`, `RequiresConfirmation`). Features 50+ domain facts across Order & Identity, Baserail & Skid, Housing & Materials, Opening Schedule, Components, and Ratings. Order-level facts (`unit.jobName`, `unit.orderNumber`, `unit.tag`, `unit.productType`) are populated authoritatively from `OrderRev.xml`, while `unit.comNumber` (COM #) remains an explicit manual entry field for detailers.
+- **Structural Topology (Tiered vs. Stacked)**: Distinguishes tiered units (`unit.isTiered`, `segment.isTiered`, `segment.tierLevel` $\ge 2$—segments on top of other segments without independent unit bases) from stacked units (`unit.isStacked`, `base.isUpperBase`—unit bases elevated atop lower segments).
 - **Scoped Rule Evaluator**: JSON-AST predicate engine evaluating rules across `Unit`, `Skid`, `Segment`, and `Component` scopes to produce `Applicable`, `Not Applicable`, or `Needs Input`.
 
 ### 3. Desktop Host & Typed Asynchronous IPC Bridge
@@ -98,12 +99,12 @@ flowchart TD
 - **Navigation**: Skid-centric tabs (`General Unit`, `Skid 1..N`) with real-time completion badges.
 - **Fact Resolution**: Inline quick-resolve popovers + global Resolution Center modal.
 - **Pre-Flight Export**: Verification audit with jump links and Draft vs Final deliverable modes.
-- **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and dynamic 22-slot SQ manager.
+- **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and dynamic unbounded SQ manager (detailer-managed from MAPICS).
 
 ### 7. Rule & Logic Editor Desktop Studio (`RuleEditor.exe`)
 - **Responsibility**: Dedicated standalone application for engineering team leads to maintain, edit, and archive verification rules.
 - **Visual AST Condition Builder**: No-code visual condition trees with Fact selectors, comparison operators, and compound AND/OR groups.
-- **Fact Dictionary Catalog**: Built-in catalog of domain facts across Unit, Skid, Segment, and Component scopes.
+- **Fact Dictionary Catalog**: Built-in catalog of domain facts across Unit, Skid, Segment, Component, and Opening scopes.
 - **Live Test Sandbox**: Real-time simulation of rule logic against live fact tweaks or imported sample XML models.
 - **Publishing Engine**: Canonical LF-normalized SHA-256 hash generation and automatic `manifest.json` updating.
 

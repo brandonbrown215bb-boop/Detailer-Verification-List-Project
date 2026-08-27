@@ -45,11 +45,41 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("floorMaterialGauge")]
         public int FloorMaterialGauge { get; set; } = 16;
 
+        [JsonPropertyName("floorMaterialGaugeString")]
+        public string FloorMaterialGaugeString { get; set; } = "16";
+
         [JsonPropertyName("housingStyle")]
         public string HousingStyle { get; set; } = "ThermalBreak";
 
         [JsonPropertyName("insulationType")]
         public string InsulationType { get; set; } = "Foam";
+
+        [JsonPropertyName("exteriorPaintType")]
+        public string ExteriorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("interiorPaintType")]
+        public string InteriorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("floorPaintType")]
+        public string FloorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("housingThicknessFront")]
+        public double HousingThicknessFront { get; set; } = 2.0;
+
+        [JsonPropertyName("housingThicknessRear")]
+        public double HousingThicknessRear { get; set; } = 2.0;
+
+        [JsonPropertyName("housingThicknessTop")]
+        public double HousingThicknessTop { get; set; } = 2.0;
+
+        [JsonPropertyName("housingThicknessBottom")]
+        public double HousingThicknessBottom { get; set; } = 0.0;
+
+        [JsonPropertyName("housingThicknessLeft")]
+        public double HousingThicknessLeft { get; set; } = 2.0;
+
+        [JsonPropertyName("housingThicknessRight")]
+        public double HousingThicknessRight { get; set; } = 2.0;
     }
 
     public class UnitOptions
@@ -63,6 +93,9 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("unitConstructionType")]
         public string UnitConstructionType { get; set; } = "Standard";
 
+        [JsonPropertyName("shippingProtection")]
+        public string ShippingProtection { get; set; } = "ShrinkWrap";
+
         [JsonPropertyName("washdown")]
         public bool Washdown { get; set; }
 
@@ -72,11 +105,17 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("hasUTL")]
         public bool HasUTL { get; set; }
 
-        [JsonPropertyName("isSeismic")]
-        public bool? IsSeismic { get; set; }
+        [JsonPropertyName("lipHeight")]
+        public double LipHeight { get; set; }
 
-        [JsonPropertyName("noaRating")]
-        public string? NoaRating { get; set; }
+        [JsonPropertyName("isSeismic")]
+        public bool IsSeismic { get; set; }
+
+        [JsonPropertyName("noa")]
+        public bool Noa { get; set; }
+
+        [JsonPropertyName("thermalBreak")]
+        public bool ThermalBreak { get; set; } = true;
 
         [JsonPropertyName("primaryAccessSide")]
         public string PrimaryAccessSide { get; set; } = "Left";
@@ -97,7 +136,10 @@ namespace AHUVerification.Core.Models
         public double RoofSlope { get; set; } = 0.25;
 
         [JsonPropertyName("roofSlopeHighSide")]
-        public string RoofSlopeHighSide { get; set; } = "Internal";
+        public string RoofSlopeHighSide { get; set; } = "Center";
+
+        [JsonPropertyName("roofPeak")]
+        public string RoofPeak { get; set; } = "Center";
 
         [JsonPropertyName("roofPeakZDim")]
         public double RoofPeakZDim { get; set; } = 97;
@@ -107,12 +149,276 @@ namespace AHUVerification.Core.Models
     {
         [JsonPropertyName("hasCurbRest")]
         public bool HasCurbRest { get; set; } = true;
+    }
 
-        [JsonPropertyName("hasCurb")]
-        public bool HasCurb { get; set; }
+    public class TestingOptions
+    {
+        [JsonPropertyName("deflectionTest")]
+        public string DeflectionTest { get; set; } = "None";
 
-        [JsonPropertyName("curbHeight")]
-        public double CurbHeight { get; set; }
+        [JsonPropertyName("leakageTest")]
+        public string LeakageTest { get; set; } = "None";
+
+        [JsonPropertyName("fanVibrationTest")]
+        public string FanVibrationTest { get; set; } = "None";
+
+        [JsonPropertyName("requireCustomerWitness")]
+        public bool RequireCustomerWitness { get; set; }
+    }
+
+    public class UnitDoor
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("segmentId")]
+        public string SegmentId { get; set; } = "";
+
+        [JsonPropertyName("unitSide")]
+        public string UnitSide { get; set; } = "Front";
+
+        [JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public double Height { get; set; }
+
+        [JsonPropertyName("swing")]
+        public string Swing { get; set; } = "Out";
+
+        [JsonPropertyName("hingeSide")]
+        public string HingeSide { get; set; } = "Left";
+
+        [JsonPropertyName("hasWindow")]
+        public bool HasWindow { get; set; }
+
+        [JsonPropertyName("hasViewPort")]
+        public bool HasViewPort { get; set; }
+
+        [JsonPropertyName("latchType")]
+        public string LatchType { get; set; } = "Standard";
+
+        [JsonPropertyName("doorType")]
+        public string DoorType { get; set; } = "Standard";
+    }
+
+    public class UnitDamper
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("segmentId")]
+        public string SegmentId { get; set; } = "";
+
+        [JsonPropertyName("unitSide")]
+        public string UnitSide { get; set; } = "Front";
+
+        [JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public double Height { get; set; }
+
+        [JsonPropertyName("depth")]
+        public double Depth { get; set; }
+
+        [JsonPropertyName("damperType")]
+        public string DamperType { get; set; } = "Standard";
+
+        [JsonPropertyName("actuatorType")]
+        public string ActuatorType { get; set; } = "None";
+
+        [JsonPropertyName("bladeType")]
+        public string BladeType { get; set; } = "Airfoil";
+
+        [JsonPropertyName("hasAttachedLouver")]
+        public bool HasAttachedLouver { get; set; }
+    }
+
+    public class UnitFloorDrain
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("segmentId")]
+        public string SegmentId { get; set; } = "";
+
+        [JsonPropertyName("unitSide")]
+        public string UnitSide { get; set; } = "Bottom";
+
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "Standard";
+
+        [JsonPropertyName("pipingMaterial")]
+        public string PipingMaterial { get; set; } = "StainlessSteel";
+
+        [JsonPropertyName("connectionDiameter")]
+        public double ConnectionDiameter { get; set; } = 1.25;
+
+        [JsonPropertyName("holeDiameter")]
+        public double HoleDiameter { get; set; } = 1.50;
+
+        [JsonPropertyName("connectionSide")]
+        public string ConnectionSide { get; set; } = "Left";
+
+        [JsonPropertyName("geometry")]
+        public Dimensions Geometry { get; set; } = new();
+    }
+
+    public class UnitDuctOpening
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("segmentId")]
+        public string SegmentId { get; set; } = "";
+
+        [JsonPropertyName("unitSide")]
+        public string UnitSide { get; set; } = "Front";
+
+        [JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public double Height { get; set; }
+
+        [JsonPropertyName("shape")]
+        public string Shape { get; set; } = "Rectangle";
+
+        [JsonPropertyName("airType")]
+        public string AirType { get; set; } = "Supply";
+
+        [JsonPropertyName("ductType")]
+        public string DuctType { get; set; } = "Sleeved";
+    }
+
+    public class UnitDrainPanOpening
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("segmentId")]
+        public string SegmentId { get; set; } = "";
+
+        [JsonPropertyName("width")]
+        public double Width { get; set; }
+
+        [JsonPropertyName("length")]
+        public double Length { get; set; }
+
+        [JsonPropertyName("depth")]
+        public double Depth { get; set; }
+    }
+
+    public class FanConfig
+    {
+        [JsonPropertyName("isFanArray")]
+        public bool IsFanArray { get; set; }
+
+        [JsonPropertyName("arrayQtyHeight")]
+        public int ArrayQtyHeight { get; set; } = 1;
+
+        [JsonPropertyName("arrayQtyWidth")]
+        public int ArrayQtyWidth { get; set; } = 1;
+
+        [JsonPropertyName("arrayGrid")]
+        public string ArrayGrid { get; set; } = "1x1";
+
+        [JsonPropertyName("hasRedundancy")]
+        public bool HasRedundancy { get; set; }
+
+        [JsonPropertyName("hasStand")]
+        public bool HasStand { get; set; }
+
+        [JsonPropertyName("hasDualFanSeparationWall")]
+        public bool HasDualFanSeparationWall { get; set; }
+
+        [JsonPropertyName("hasMotorRemovalRail")]
+        public bool HasMotorRemovalRail { get; set; }
+
+        [JsonPropertyName("isolationType")]
+        public string IsolationType { get; set; } = "None";
+
+        [JsonPropertyName("fanCount")]
+        public int FanCount { get; set; } = 1;
+
+        [JsonPropertyName("motorHp")]
+        public double MotorHp { get; set; }
+
+        [JsonPropertyName("voltage")]
+        public double Voltage { get; set; } = 460;
+    }
+
+    public class CoilConfig
+    {
+        [JsonPropertyName("bulkheadMaterial")]
+        public string BulkheadMaterial { get; set; } = "STL GALV";
+
+        [JsonPropertyName("hasStackingRack")]
+        public bool HasStackingRack { get; set; }
+
+        [JsonPropertyName("stackingRackMaterial")]
+        public string StackingRackMaterial { get; set; } = "";
+
+        [JsonPropertyName("dripPanMaterial")]
+        public string DripPanMaterial { get; set; } = "StainlessSteel_304";
+
+        [JsonPropertyName("staggeredOverlap")]
+        public double StaggeredOverlap { get; set; }
+
+        [JsonPropertyName("connectionHand")]
+        public string ConnectionHand { get; set; } = "Right";
+
+        [JsonPropertyName("coilCount")]
+        public int CoilCount { get; set; } = 1;
+    }
+
+    public class FilterConfig
+    {
+        [JsonPropertyName("filterType")]
+        public string FilterType { get; set; } = "FlatFilter";
+
+        [JsonPropertyName("loadMethod")]
+        public string LoadMethod { get; set; } = "FrontLoad";
+
+        [JsonPropertyName("bulkheadMaterial")]
+        public string BulkheadMaterial { get; set; } = "STL GALV";
+
+        [JsonPropertyName("gaugeType")]
+        public string GaugeType { get; set; } = "None";
+
+        [JsonPropertyName("gaugeDoorId")]
+        public string GaugeDoorId { get; set; } = "";
+
+        [JsonPropertyName("gaugeMountingType")]
+        public string GaugeMountingType { get; set; } = "";
+    }
+
+    public class HeatWheelConfig
+    {
+        [JsonPropertyName("vendor")]
+        public string Vendor { get; set; } = "";
+
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = "";
+
+        [JsonPropertyName("wheelType")]
+        public string WheelType { get; set; } = "Enthalpy";
+
+        [JsonPropertyName("mediaType")]
+        public string MediaType { get; set; } = "MolecularSieve";
+
+        [JsonPropertyName("hasPurge")]
+        public bool HasPurge { get; set; }
+
+        [JsonPropertyName("allowVariableSpeed")]
+        public bool AllowVariableSpeed { get; set; }
+
+        [JsonPropertyName("wheelDiameter")]
+        public double WheelDiameter { get; set; }
+
+        [JsonPropertyName("recoveryPercentCFM")]
+        public double RecoveryPercentCFM { get; set; }
     }
 
     public class UnitBase
@@ -147,6 +453,21 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("subFloorMaterial")]
         public string SubFloorMaterial { get; set; } = "STL GALV 22ga";
 
+        [JsonPropertyName("subFloorMaterialType")]
+        public string SubFloorMaterialType { get; set; } = "STL GALV";
+
+        [JsonPropertyName("subFloorMaterialGauge")]
+        public int SubFloorMaterialGauge { get; set; } = 22;
+
+        [JsonPropertyName("subFloorPaintType")]
+        public string SubFloorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("floorAttachmentType")]
+        public string FloorAttachmentType { get; set; } = "StitchWeld";
+
+        [JsonPropertyName("isUpperBase")]
+        public bool IsUpperBase { get; set; }
+
         [JsonPropertyName("dimensions")]
         public Dimensions Dimensions { get; set; } = new();
     }
@@ -165,14 +486,38 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("interiorGauge")]
         public int InteriorGauge { get; set; } = 22;
 
+        [JsonPropertyName("floorMaterial")]
+        public string FloorMaterial { get; set; } = "STL GALV";
+
+        [JsonPropertyName("floorGauge")]
+        public int FloorGauge { get; set; } = 16;
+
+        [JsonPropertyName("floorGaugeString")]
+        public string FloorGaugeString { get; set; } = "16";
+
         [JsonPropertyName("housingThickness")]
         public double HousingThickness { get; set; } = 2;
+
+        [JsonPropertyName("housingThicknessFront")]
+        public double HousingThicknessFront { get; set; } = 2;
+
+        [JsonPropertyName("housingThicknessTop")]
+        public double HousingThicknessTop { get; set; } = 2;
 
         [JsonPropertyName("housingStyle")]
         public string HousingStyle { get; set; } = "ThermalBreak";
 
         [JsonPropertyName("insulationType")]
         public string InsulationType { get; set; } = "Foam";
+
+        [JsonPropertyName("exteriorPaintType")]
+        public string ExteriorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("interiorPaintType")]
+        public string InteriorPaintType { get; set; } = "None";
+
+        [JsonPropertyName("floorPaintType")]
+        public string FloorPaintType { get; set; } = "None";
     }
 
     public class Segment
@@ -218,6 +563,42 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("hasMotorRemovalRail")]
         public bool HasMotorRemovalRail { get; set; }
+
+        [JsonPropertyName("isTiered")]
+        public bool IsTiered { get; set; }
+
+        [JsonPropertyName("tierLevel")]
+        public int TierLevel { get; set; } = 1;
+
+        [JsonPropertyName("elevationY")]
+        public double ElevationY { get; set; }
+
+        [JsonPropertyName("doors")]
+        public List<UnitDoor> Doors { get; set; } = new();
+
+        [JsonPropertyName("dampers")]
+        public List<UnitDamper> Dampers { get; set; } = new();
+
+        [JsonPropertyName("floorDrains")]
+        public List<UnitFloorDrain> FloorDrains { get; set; } = new();
+
+        [JsonPropertyName("ductOpenings")]
+        public List<UnitDuctOpening> DuctOpenings { get; set; } = new();
+
+        [JsonPropertyName("drainPanOpenings")]
+        public List<UnitDrainPanOpening> DrainPanOpenings { get; set; } = new();
+
+        [JsonPropertyName("fanConfig")]
+        public FanConfig? FanConfig { get; set; }
+
+        [JsonPropertyName("coilConfig")]
+        public CoilConfig? CoilConfig { get; set; }
+
+        [JsonPropertyName("filterConfig")]
+        public FilterConfig? FilterConfig { get; set; }
+
+        [JsonPropertyName("heatWheelConfig")]
+        public HeatWheelConfig? HeatWheelConfig { get; set; }
     }
 
     public class SkidDimensions
@@ -321,6 +702,18 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("totalStaticPressure")]
         public double TotalStaticPressure { get; set; }
 
+        [JsonPropertyName("isTiered")]
+        public bool IsTiered { get; set; }
+
+        [JsonPropertyName("isStacked")]
+        public bool IsStacked { get; set; }
+
+        [JsonPropertyName("isStackedTopUnit")]
+        public bool IsStackedTopUnit { get; set; }
+
+        [JsonPropertyName("hasFloorDrains")]
+        public bool HasFloorDrains { get; set; }
+
         [JsonPropertyName("dimensions")]
         public UnitDimensions Dimensions { get; set; } = new();
 
@@ -333,6 +726,9 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("curbOptions")]
         public CurbOptions CurbOptions { get; set; } = new();
 
+        [JsonPropertyName("testingOptions")]
+        public TestingOptions TestingOptions { get; set; } = new();
+
         [JsonPropertyName("skids")]
         public List<ShippingSkid> Skids { get; set; } = new();
 
@@ -344,5 +740,14 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("motorControls")]
         public List<MotorControl> MotorControls { get; set; } = new();
+
+        [JsonPropertyName("doors")]
+        public List<UnitDoor> Doors { get; set; } = new();
+
+        [JsonPropertyName("dampers")]
+        public List<UnitDamper> Dampers { get; set; } = new();
+
+        [JsonPropertyName("floorDrains")]
+        public List<UnitFloorDrain> FloorDrains { get; set; } = new();
     }
 }

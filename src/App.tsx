@@ -7,7 +7,8 @@ import {
   CheckStatus,
   DvlProjectFile,
   ThemeMode,
-  UpzBundle
+  UpzBundle,
+  RuleDefinition
 } from './types';
 import { parseAhuXml, parseOrderRevXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
@@ -126,6 +127,63 @@ export const AppContent: React.FC = () => {
   // Export success toast state
   const [exportNotice, setExportNotice] = useState<{ fileName: string; filePath?: string } | null>(null);
 
+  // Dynamic Rule Pack State
+  const [activeRules, setActiveRules] = useState<RuleDefinition[]>(RULES_CATALOG);
+  const [rulePackIdentity, setRulePackIdentity] = useState(RULE_PACK_IDENTITY);
+  const [centralRulePackPath, setCentralRulePackPath] = useState<string>(() => {
+    return localStorage.getItem('dvl_central_rulepack_path') || '';
+  });
+  const [rulePackNotice, setRulePackNotice] = useState<string | null>(null);
+
+  // Initial rule pack fetch from desktop host & automatic startup sync
+  useEffect(() => {
+    if (desktopBridge.isRunningInDesktop()) {
+      desktopBridge.getRulePack().then(pack => {
+        if (pack && pack.rules && pack.rules.length > 0) {
+          setActiveRules(pack.rules);
+          if (pack.manifest) {
+            setRulePackIdentity({
+              version: pack.manifest.version,
+              sha256: pack.manifest.bundleSha256
+            });
+          }
+        }
+      }).catch(err => console.warn('Failed to load initial rule pack from bridge:', err));
+
+      const centralPath = localStorage.getItem('dvl_central_rulepack_path');
+      const autoSync = localStorage.getItem('dvl_auto_sync_rulepack') !== 'false';
+      if (centralPath && autoSync) {
+        desktopBridge.checkRulePackUpdate(centralPath).then(async updateInfo => {
+          if (updateInfo.hasUpdate && !updateInfo.error) {
+            const syncResult = await desktopBridge.syncRulePack(centralPath);
+            if (syncResult.success && syncResult.rules) {
+              setActiveRules(syncResult.rules);
+              setRulePackIdentity({
+                version: syncResult.version,
+                sha256: syncResult.bundleSha256 || ''
+              });
+              setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules)`);
+            }
+          }
+        }).catch(err => console.warn('Rule pack auto-sync check failed:', err));
+      }
+    }
+  }, []);
+
+  const handleRulePackUpdated = useCallback((updatedBundle: any) => {
+    if (updatedBundle && updatedBundle.rules) {
+      setActiveRules(updatedBundle.rules);
+      setRulePackIdentity({
+        version: updatedBundle.version,
+        sha256: updatedBundle.bundleSha256 || ''
+      });
+      setRulePackNotice(`Rule Pack updated to v${updatedBundle.version} (${updatedBundle.ruleCount} active rules)`);
+      if (graph && facts) {
+        setChecklists(prev => generateChecklists(updatedBundle.rules, graph, facts, prev));
+      }
+    }
+  }, [graph, facts]);
+
   // Prompt for Detailer Name on first launch if blank
   useEffect(() => {
     const savedDetailer = localStorage.getItem('dvl_detailer_name');
@@ -191,21 +249,21 @@ export const AppContent: React.FC = () => {
     if (!graph) return;
     setFacts(prev => {
       const updated = overrideFact(prev, key, value, author, note);
-      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
+      const newChecklists = generateChecklists(activeRules, graph, updated, checklists);
       setChecklists(newChecklists);
       return updated;
     });
-  }, [graph, checklists]);
+  }, [graph, checklists, activeRules]);
 
   const handleRevertFact = useCallback((key: string) => {
     if (!graph) return;
     setFacts(prev => {
       const reverted = revertFact(prev, key);
-      const newChecklists = generateChecklists(RULES_CATALOG, graph, reverted, checklists);
+      const newChecklists = generateChecklists(activeRules, graph, reverted, checklists);
       setChecklists(newChecklists);
       return reverted;
     });
-  }, [graph, checklists]);
+  }, [graph, checklists, activeRules]);
 
   // Handler for loading new XML or UPZ bundle
   const loadXmlData = useCallback((xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
@@ -218,7 +276,7 @@ export const AppContent: React.FC = () => {
       }
 
       const newFacts = extractFactsFromGraph(newGraph, orderRev);
-      const newChecklists = generateChecklists(RULES_CATALOG, newGraph, newFacts);
+      const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
 
       const meta = {
         fileName: sourceFileName || (bundle ? 'bundle.upz' : 'Config.xml'),
@@ -312,7 +370,7 @@ export const AppContent: React.FC = () => {
     try {
       const newGraph = parseAhuXml(SAMPLE_CONFIG_XML);
       const newFacts = extractFactsFromGraph(newGraph);
-      const newChecklists = generateChecklists(RULES_CATALOG, newGraph, newFacts);
+      const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
 
       setRawXml(SAMPLE_CONFIG_XML);
       setGraph(newGraph);
@@ -343,20 +401,20 @@ export const AppContent: React.FC = () => {
     } catch (err: any) {
       alert(`Error loading sample: ${err.message}`);
     }
-  }, []);
+  }, [activeRules]);
 
   // Reset all manual changes handler
   const handleResetAllChanges = useCallback(() => {
     if (!graph) return;
     try {
       const freshFacts = extractFactsFromGraph(graph, sourceMetadata.orderRevision);
-      const freshChecklists = generateChecklists(RULES_CATALOG, graph, freshFacts);
+      const freshChecklists = generateChecklists(activeRules, graph, freshFacts);
       setFacts(freshFacts);
       setChecklists(freshChecklists);
     } catch (err: any) {
       alert(`Error resetting changes: ${err.message}`);
     }
-  }, [graph, sourceMetadata]);
+  }, [graph, sourceMetadata, activeRules]);
 
   // Handler for opening files (.xml or .dvl) from Header
   const handleFileUpload = (file: File) => {
@@ -393,12 +451,12 @@ export const AppContent: React.FC = () => {
         updated = overrideFact(updated, 'unit.knockdown', false, 'Detailer', 'Factory Assembled');
       }
 
-      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
+      const newChecklists = generateChecklists(activeRules, graph, updated, checklists);
       setChecklists(newChecklists);
       return updated;
     });
     setIsResolutionOpen(false);
-  }, [graph, checklists]);
+  }, [graph, checklists, activeRules]);
 
   // Checklist Update Handlers
   const handleUpdateChecklistStatus = useCallback((instanceKey: string, status: CheckStatus) => {
@@ -474,7 +532,7 @@ export const AppContent: React.FC = () => {
       exportFacts,
       sqItems,
       checklists,
-      RULES_CATALOG,
+      activeRules,
       graph,
       generalComments,
       defaultName,
@@ -533,6 +591,8 @@ export const AppContent: React.FC = () => {
           onOpenDvl={handleOpenDvl}
           onOpenManualModal={() => setIsManualModalOpen(true)}
           onLoadSample={handleLoadSample}
+          rulePackVersion={rulePackIdentity.version}
+          ruleCount={activeRules.filter(r => !r.isArchived).length}
         />
 
         <ManualUnitModal
@@ -598,7 +658,7 @@ export const AppContent: React.FC = () => {
           onFileUpload={handleFileUpload}
           onSaveDvl={handleSaveDvl}
           onSaveDvlAs={() => handleSaveDvl(true)}
-          rulePackVersion={RULE_PACK_IDENTITY.version}
+          rulePackVersion={rulePackIdentity.version}
           themeMode={themeMode}
           onCycleThemeMode={handleCycleThemeMode}
           lastSavedAt={lastSavedAt || undefined}
@@ -610,6 +670,22 @@ export const AppContent: React.FC = () => {
           <div className="bg-amber-100 dark:bg-amber-950/90 border-b border-amber-300 dark:border-amber-700/60 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{projectIntegrityWarning}</span>
+          </div>
+        )}
+
+        {/* Rule Pack Update Notice Toast */}
+        {rulePackNotice && (
+          <div className="bg-indigo-100 dark:bg-indigo-950/90 border-b border-indigo-300 dark:border-indigo-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2.5 text-xs text-indigo-900 dark:text-indigo-200 font-medium">
+              <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>{rulePackNotice}</span>
+            </div>
+            <button
+              onClick={() => setRulePackNotice(null)}
+              className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -673,7 +749,7 @@ export const AppContent: React.FC = () => {
               segments={graph.segments}
               bases={graph.bases}
               checklists={checklists}
-              rules={RULES_CATALOG}
+              rules={activeRules}
               sqItems={sqItems}
               facts={facts}
               onUpdateChecklistStatus={handleUpdateChecklistStatus}
@@ -687,7 +763,7 @@ export const AppContent: React.FC = () => {
               segments={graph.segments}
               bases={graph.bases}
               checklists={checklists}
-              rules={RULES_CATALOG}
+              rules={activeRules}
               sqItems={sqItems}
               facts={facts}
               onUpdateChecklistStatus={handleUpdateChecklistStatus}
@@ -712,7 +788,7 @@ export const AppContent: React.FC = () => {
         isOpen={isPreFlightOpen}
         onClose={() => setIsPreFlightOpen(false)}
         checklists={checklists}
-        rules={RULES_CATALOG}
+        rules={activeRules}
         facts={facts}
         sqItems={sqItems}
         onExportExcel={handleExportExcel}
@@ -726,7 +802,7 @@ export const AppContent: React.FC = () => {
       <OmniSearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        rules={RULES_CATALOG}
+        rules={activeRules}
         facts={facts}
         sqItems={sqItems}
         graph={graph}
@@ -743,10 +819,13 @@ export const AppContent: React.FC = () => {
           localStorage.setItem('dvl_detailer_name', name);
           handleUpdateFact('unit.detailer', name);
         }}
-        rulePackVersion={RULE_PACK_IDENTITY.version}
-        ruleCount={RULES_CATALOG.length}
+        rulePackVersion={rulePackIdentity.version}
+        ruleCount={activeRules.filter(r => !r.isArchived).length}
         lastAutosavedAt={lastSavedAt || undefined}
         onClearAutosave={handleClearAutosave}
+        centralRulePackPath={centralRulePackPath}
+        onUpdateCentralRulePackPath={setCentralRulePackPath}
+        onRulePackUpdated={handleRulePackUpdated}
       />
 
       <DetailerNameModal
