@@ -13,7 +13,8 @@ import {
   SaveAll,
   Home,
   Settings,
-  CheckCircle2
+  CheckCircle2,
+  User
 } from 'lucide-react';
 import { Fact, ThemeMode } from '../types';
 
@@ -35,6 +36,8 @@ interface HeaderProps {
   onCycleThemeMode: () => void;
   lastSavedAt?: string;
   hasUnsavedChanges?: boolean;
+  onOpenDetailerModal?: () => void;
+  onOpenComModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,14 +57,18 @@ export const Header: React.FC<HeaderProps> = ({
   themeMode,
   onCycleThemeMode,
   lastSavedAt,
-  hasUnsavedChanges
+  hasUnsavedChanges,
+  onOpenDetailerModal,
+  onOpenComModal
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Count pending unconfirmed facts
+  // Count pending unconfirmed facts (exclude weight)
   const pendingFactsCount = Object.values(facts).filter(
-    f => f.status === 'Unknown' || f.confidence === 'RequiresConfirmation'
+    f => (f.status === 'Unknown' || f.confidence === 'RequiresConfirmation') && !f.key.includes('weight')
   ).length;
+
+  const detailerName = facts['unit.detailer']?.value ? String(facts['unit.detailer'].value) : '';
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -100,12 +107,27 @@ export const Header: React.FC<HeaderProps> = ({
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white tracking-tight truncate max-w-[180px] sm:max-w-[260px]">
               {jobName || 'AHU Detailing Project'}
             </h2>
-            <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-blue-600 dark:text-blue-400 font-semibold">
-              {comNumber || 'COM-PENDING'}
-            </span>
+            <button
+              onClick={onOpenComModal}
+              title="Click to edit COM Number"
+              className={`text-xs px-2 py-0.5 rounded border font-mono font-semibold transition-colors ${
+                comNumber
+                  ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 hover:border-blue-500'
+                  : 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+              }`}
+            >
+              {comNumber || 'Enter COM#'}
+            </button>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono">
-            <span>Detailer Workspace</span>
+            <button
+              onClick={onOpenDetailerModal}
+              title="Click to edit Detailer Profile"
+              className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <User className="w-3 h-3" />
+              <span>{detailerName || 'Set Detailer'}</span>
+            </button>
             {lastSavedAt && (
               <span className="hidden lg:inline text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 • <CheckCircle2 className="w-3 h-3" /> Autosaved {new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -145,15 +167,17 @@ export const Header: React.FC<HeaderProps> = ({
           className="hidden"
         />
 
-        {/* Load Sample Config.xml */}
-        <button
-          onClick={onLoadSample}
-          title="Reload demo Config.xml"
-          className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 font-medium transition-all"
-        >
-          <FileCode className="w-3.5 h-3.5 text-amber-500" />
-          <span className="hidden lg:inline">Sample XML</span>
-        </button>
+        {/* Load Sample Config.xml (Hidden in production) */}
+        {!import.meta.env.PROD && (
+          <button
+            onClick={onLoadSample}
+            title="Reload demo Config.xml"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 font-medium transition-all"
+          >
+            <FileCode className="w-3.5 h-3.5 text-amber-500" />
+            <span className="hidden lg:inline">Sample XML</span>
+          </button>
+        )}
 
         {/* Upload XML */}
         <button

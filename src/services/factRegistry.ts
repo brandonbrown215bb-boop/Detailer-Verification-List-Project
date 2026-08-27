@@ -47,9 +47,9 @@ export function extractFactsFromGraph(
     'unit.comNumber',
     'COM #',
     'Order & Identity',
-    'COM-842910',
-    'Known',
-    'Authoritative',
+    null,
+    'Unknown',
+    'RequiresConfirmation',
     undefined,
     'Enter COM# from MAPICS (e.g. COM-123456)'
   );
@@ -80,25 +80,18 @@ export function extractFactsFromGraph(
     );
   }
 
-  if (orderRev?.productType) {
-    facts['unit.productType'] = createFact(
-      'unit.productType',
-      'Product Type',
-      'Order & Identity',
-      orderRev.productType.trim(),
-      'Known',
-      'Authoritative',
-      '/root:OrderRevision/productType'
-    );
-  }
 
+
+  const savedDetailer = typeof localStorage !== 'undefined' ? localStorage.getItem('dvl_detailer_name') : null;
   facts['unit.detailer'] = createFact(
     'unit.detailer',
     'Detailer Name',
     'Order & Identity',
-    'Tanner Dean',
-    'Known',
-    'Authoritative'
+    savedDetailer || null,
+    savedDetailer ? 'Known' : 'Unknown',
+    savedDetailer ? 'Authoritative' : 'RequiresConfirmation',
+    undefined,
+    'Enter Detailer Name'
   );
 
   facts['unit.date'] = createFact(
@@ -329,17 +322,15 @@ export function extractFactsFromGraph(
     const hasFilters = skidSegs.some(s => s.typeCode === 'FF' || s.typeCode === 'RF' || s.typeCode === 'AF');
     const hasHeatWheel = skidSegs.some(s => s.typeCode === 'HW');
 
-    // Strict weight semantics: aggregate skid weight is derived from segment sum,
-    // but marked with 'RequiresConfirmation' until approved or authored.
+    // Skid aggregate weight is informational (detailers do not approve weight)
     facts[`skid.${skid.id}.weight`] = createFact(
       `skid.${skid.id}.weight`,
       `${skid.name} Aggregate Weight`,
       skid.name,
       skid.calculatedWeight,
       'Derived',
-      skid.calculatedWeight > 0 ? 'RequiresConfirmation' : 'RequiresConfirmation',
-      `/root:AHU/shippingSkidList/shippingSkid[${skid.index}]`,
-      `Sum of segments = ${skid.calculatedWeight} lbs. Confirm or override official lifting weight.`
+      'Authoritative',
+      `/root:AHU/shippingSkidList/shippingSkid[${skid.index}]`
     );
 
     facts[`skid.${skid.id}.segmentCount`] = createFact(

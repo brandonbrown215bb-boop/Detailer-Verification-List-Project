@@ -28,21 +28,13 @@ namespace AHUVerification.Tests
 
             Assert.NotEmpty(checklists);
 
-            // BASE-01 requires skid.weight. Since skid.weight is RequiresConfirmation, it MUST evaluate to NeedsInput!
+            // BASE-01 (Upturned lip height > 0) evaluates to Applicable
             var base01_skid1 = checklists.FirstOrDefault(c => c.InstanceKey == "skid-1:BASE-01");
             Assert.NotNull(base01_skid1);
-            Assert.Equal(RuleApplicability.NeedsInput, base01_skid1.Applicability);
-
-            // Now confirm/override skid-1 weight
-            extractor.OverrideFact(facts, "skid.skid-1.weight", 6500.0, "Detailer", "Confirmed from scale calculation");
-            var reChecklists = evaluator.GenerateChecklists(bundle.Rules, graph, facts, checklists);
-
-            var base01_skid1_updated = reChecklists.FirstOrDefault(c => c.InstanceKey == "skid-1:BASE-01");
-            Assert.NotNull(base01_skid1_updated);
-            Assert.Equal(RuleApplicability.Applicable, base01_skid1_updated.Applicability);
+            Assert.Equal(RuleApplicability.Applicable, base01_skid1.Applicability);
 
             // HOUS-21 (Thermal break == 'Yes') should be Applicable
-            var hous21 = reChecklists.FirstOrDefault(c => c.InstanceKey == "unit:HOUS-21");
+            var hous21 = checklists.FirstOrDefault(c => c.InstanceKey == "unit:HOUS-21");
             Assert.NotNull(hous21);
             Assert.Equal(RuleApplicability.Applicable, hous21.Applicability);
         }

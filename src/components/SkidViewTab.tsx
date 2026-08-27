@@ -95,20 +95,19 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
   onUpdateFact,
   onOpenResolutionCenter
 }) => {
-  const [viewMode, setViewMode] = useState<SkidViewMode>('cards');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<SkidViewMode>(() => {
+    return (localStorage.getItem('dvl_skid_view_mode') as SkidViewMode) || 'grid';
+  });
+  const [filterStatus, setFilterStatus] = useState<string>('applicable');
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    Base: true,
-    Housing: true,
-    Knockdown: true,
-    UTL: true,
-    Paperwork: true,
-    MOM: true,
-    Internals: true
-  });
+  // Category accordions start collapsed by default in Card View
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    localStorage.setItem('dvl_skid_view_mode', viewMode);
+  }, [viewMode]);
 
   // Get segments and bases on this skid
   const skidSegments = segments.filter(s => skid.segmentIds.includes(s.id));
@@ -229,21 +228,8 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
           </div>
 
           <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-950/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
-            {/* Weight Status */}
-            <div className="text-right">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1 justify-end">
-                <span>Aggregate Weight</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-mono font-bold">
-                  Derived
-                </span>
-              </div>
-              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white">
-                {skid.calculatedWeight.toLocaleString()} lbs
-              </div>
-            </div>
-
             {/* Progress Badge */}
-            <div className="text-right pl-4 border-l border-slate-200 dark:border-slate-800">
+            <div className="text-right">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Checks Passed</div>
               <div className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400">
                 {passedCount} / {applicableChecks.length}
@@ -253,7 +239,7 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
           </div>
         </div>
 
-        {/* Segments Palette */}
+        {/* Segments Palette (Segment weights removed) */}
         <div>
           <div className="text-[11px] font-bold font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
             Mapped Segments ({skidSegments.length}):
@@ -268,7 +254,6 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                 >
                   <span className="font-bold text-sm">{seg.typeCode}</span>
                   <span className="opacity-90 font-medium">{seg.name}</span>
-                  <span className="text-[11px] opacity-75">({seg.weight} lbs)</span>
                 </div>
               );
             })}
@@ -532,7 +517,7 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
       {viewMode === 'cards' && (
         <div className="space-y-4">
           {Object.entries(categorizedRules).map(([category, items]) => {
-            const isExpanded = expandedCategories[category] ?? true;
+            const isExpanded = !!expandedCategories[category];
             const catApplicable = items.filter(i => i.instance.applicability === 'Applicable');
             const catPassed = catApplicable.filter(i => i.instance.status === 'Passed').length;
             const catNeedsInput = items.filter(i => i.instance.applicability === 'NeedsInput').length;

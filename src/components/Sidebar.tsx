@@ -7,11 +7,14 @@ import {
   FileText,
   CheckCircle2,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Snowflake,
+  CheckSquare,
+  Activity
 } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: string; // 'general' | 'skid-1' | 'skid-2' | etc.
+  activeTab: string; // 'general' | 'unit-checks' | 'skid-1' | 'skid-2' | etc.
   onSelectTab: (tabId: string) => void;
   graph: NormalizedXmlGraph | null;
   checklists: ChecklistInstance[];
@@ -31,11 +34,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   if (!graph) return null;
 
-  // Compute unit level checklist progress
+  // Compute unit-level checklist progress
   const unitChecks = checklists.filter(c => c.scopeTargetId === 'unit');
   const unitApplicable = unitChecks.filter(c => c.applicability === 'Applicable');
   const unitPassed = unitApplicable.filter(c => c.status === 'Passed').length;
   const unitNeedsInput = unitChecks.filter(c => c.applicability === 'NeedsInput').length;
+
+  // Compute grand total overall progress across whole unit and all skids
+  const allApplicable = checklists.filter(c => c.applicability === 'Applicable');
+  const allPassed = allApplicable.filter(c => c.status === 'Passed').length;
+  const allNeedsInput = checklists.filter(c => c.applicability === 'NeedsInput').length;
+  const overallPercent = allApplicable.length > 0 ? Math.round((allPassed / allApplicable.length) * 100) : 0;
 
   return (
     <aside
@@ -43,19 +52,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isCollapsed ? 'w-16' : 'w-72'
       }`}
     >
-      {/* Brand Header */}
-      <div className={`border-b border-slate-200 dark:border-slate-800 flex items-center ${
-        isCollapsed ? 'p-3 flex-col gap-2 justify-center' : 'p-4 justify-between'
-      }`}>
+      {/* Brand Header with York AHU Snowflake Logo */}
+      <div
+        className={`border-b border-slate-200 dark:border-slate-800 flex items-center ${
+          isCollapsed ? 'p-3 flex-col gap-2 justify-center' : 'p-4 justify-between'
+        }`}
+      >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 text-white font-bold text-base tracking-wider shrink-0">
-            AHU
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/25 text-white font-bold shrink-0">
+            <Snowflake className="w-5 h-5 text-cyan-100" />
           </div>
           {!isCollapsed && (
             <div className="min-w-0 flex-1">
               <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5 whitespace-nowrap">
-                Verification
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-mono font-bold">v3.0</span>
+                York AHU
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-mono font-bold">
+                  Verification
+                </span>
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">
                 {graph.unitOptions.brandOption} • {graph.unitOptions.unitType}
@@ -66,59 +79,129 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <button
           onClick={onToggleCollapse}
-          title={isCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)"}
+          title={isCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)'}
           className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors shrink-0"
         >
           {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
         </button>
       </div>
 
+      {/* Overall Progress Tracker Card */}
+      {!isCollapsed ? (
+        <div className="mx-3 mt-3 p-3 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-blue-500" />
+              Overall Progress
+            </span>
+            <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">
+              {overallPercent}%
+            </span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-750 h-2 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                overallPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600 dark:bg-blue-500'
+              }`}
+              style={{ width: `${overallPercent}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
+            <span>{allPassed} / {allApplicable.length} Verified</span>
+            {allNeedsInput > 0 && (
+              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {allNeedsInput} input needed
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div
+          title={`Overall Progress: ${overallPercent}% (${allPassed}/${allApplicable.length} verified)`}
+          className="mx-2 mt-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col items-center gap-1 cursor-default"
+        >
+          <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+            {overallPercent}%
+          </span>
+          <div className="w-full bg-slate-200 dark:bg-slate-750 h-1 rounded-full overflow-hidden">
+            <div
+              className={`h-full ${overallPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+              style={{ width: `${overallPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-4 sm:space-y-6">
-        {/* Main Section */}
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-4 sm:space-y-5">
+        {/* Unit Section */}
         <div>
           {!isCollapsed && (
-            <div className="px-3 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Unit Overview
+            <div className="px-3 mb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Unit Configuration
             </div>
           )}
-          
-          <button
-            onClick={() => onSelectTab('general')}
-            title={isCollapsed ? `General Unit Specs (${unitPassed}/${unitApplicable.length} verified)` : undefined}
-            className={`w-full flex items-center rounded-xl font-medium transition-all ${
-              isCollapsed
-                ? 'p-2.5 justify-center'
-                : 'justify-between px-3 py-2.5 text-sm'
-            } ${
-              activeTab === 'general'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'general' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
-              {!isCollapsed && <span className="whitespace-nowrap">General Unit Specs</span>}
-            </div>
 
-            {!isCollapsed && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                {unitNeedsInput > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-700 dark:text-amber-300 font-mono font-bold whitespace-nowrap">
-                    <AlertTriangle className="w-2.5 h-2.5" />
-                    {unitNeedsInput}
-                  </span>
-                )}
-                <span className="text-xs font-mono opacity-90 whitespace-nowrap">
-                  {unitPassed}/{unitApplicable.length}
-                </span>
+          <div className="space-y-1">
+            {/* Button 1: General Unit Specs */}
+            <button
+              onClick={() => onSelectTab('general')}
+              title={isCollapsed ? 'General Unit Specs' : undefined}
+              className={`w-full flex items-center rounded-xl font-medium transition-all ${
+                isCollapsed
+                  ? 'p-2.5 justify-center'
+                  : 'justify-between px-3 py-2 text-sm'
+              } ${
+                activeTab === 'general'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'general' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
+                {!isCollapsed && <span className="whitespace-nowrap">General Unit Specs</span>}
               </div>
-            )}
+            </button>
 
-            {isCollapsed && unitNeedsInput > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" />
-            )}
-          </button>
+            {/* Button 2: Unit Verifications Checklist */}
+            <button
+              onClick={() => onSelectTab('unit-checks')}
+              title={isCollapsed ? `Unit Verifications (${unitPassed}/${unitApplicable.length} verified)` : undefined}
+              className={`w-full flex items-center rounded-xl font-medium transition-all ${
+                isCollapsed
+                  ? 'p-2.5 justify-center'
+                  : 'justify-between px-3 py-2 text-sm'
+              } ${
+                activeTab === 'unit-checks'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <CheckSquare className={`w-4 h-4 shrink-0 ${activeTab === 'unit-checks' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                {!isCollapsed && <span className="whitespace-nowrap">Unit Verifications</span>}
+              </div>
+
+              {!isCollapsed && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {unitNeedsInput > 0 && (
+                    <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-700 dark:text-amber-300 font-mono font-bold whitespace-nowrap">
+                      <AlertTriangle className="w-2.5 h-2.5" />
+                      {unitNeedsInput}
+                    </span>
+                  )}
+                  <span className="text-xs font-mono opacity-90 whitespace-nowrap">
+                    {unitPassed}/{unitApplicable.length}
+                  </span>
+                </div>
+              )}
+
+              {isCollapsed && unitNeedsInput > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Shipping Skids Section */}
@@ -148,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => onSelectTab(skid.id)}
                   title={
                     isCollapsed
-                      ? `${skid.name}: ${percent}% (${passed}/${applicable.length} checks, ${skid.calculatedWeight.toLocaleString()} lbs)`
+                      ? `${skid.name}: ${percent}% (${passed}/${applicable.length} checks)`
                       : undefined
                   }
                   className={`w-full flex flex-col rounded-xl text-left transition-all relative ${
@@ -202,8 +285,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                       {/* Skid Subtitle */}
                       <div className="flex items-center justify-between text-[11px] opacity-80 mt-1.5 font-mono">
-                        <span className="truncate">{skid.segmentIds.length} Segs • {skid.baseIds.length} Bases</span>
-                        <span className="shrink-0 font-semibold">{skid.calculatedWeight.toLocaleString()} lbs</span>
+                        <span className="truncate">{skid.segmentIds.length} Segments • {skid.baseIds.length} Bases</span>
                       </div>
 
                       {/* Mini Progress Bar */}
@@ -232,21 +314,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Special Quotes (SQs)
               </span>
               <span className="font-mono text-[11px] font-bold text-amber-600 dark:text-amber-300">
-                {sqItems.length} / 22
+                {sqItems.length} Active
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-              Mapped dynamically to Verification List sheet columns G & H.
+              Project special quotes and detailing deviations mapped to deliverable.
             </p>
           </div>
         ) : (
           <div
-            title={`Special Quotes: ${sqItems.length} / 22 used`}
+            title={`Special Quotes: ${sqItems.length} active`}
             className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col items-center gap-1"
           >
             <Layers className="w-4 h-4 text-amber-500" />
             <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-300">
-              {sqItems.length}/22
+              {sqItems.length}
             </span>
           </div>
         )}
@@ -260,12 +342,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-slate-700 dark:text-slate-300 font-semibold">{graph.documentVersion}</span>
           </div>
           <div className="flex items-center justify-between font-mono">
-            <span>Total Weight:</span>
-            <span className="text-slate-700 dark:text-slate-300 font-semibold">{graph.unitWeight.toLocaleString()} lbs</span>
-          </div>
-          <div className="flex items-center justify-between font-mono">
             <span>Dimensions:</span>
-            <span className="text-slate-700 dark:text-slate-300 font-semibold">{graph.dimensions.length}"L × {graph.dimensions.width}"W</span>
+            <span className="text-slate-700 dark:text-slate-300 font-semibold">
+              {graph.dimensions.length}"L × {graph.dimensions.width}"W × {graph.dimensions.height}"H
+            </span>
           </div>
         </div>
       )}

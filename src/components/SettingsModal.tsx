@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeMode } from '../types';
 import {
   Settings,
@@ -11,7 +11,8 @@ import {
   User,
   HardDrive,
   Trash2,
-  CheckCircle2
+  CheckCircle2,
+  FolderSync
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -25,6 +26,8 @@ interface SettingsModalProps {
   ruleCount: number;
   lastAutosavedAt?: string;
   onClearAutosave: () => void;
+  sharedExportPath?: string;
+  onUpdateSharedExportPath?: (path: string) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -37,9 +40,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   rulePackVersion,
   ruleCount,
   lastAutosavedAt,
-  onClearAutosave
+  onClearAutosave,
+  sharedExportPath = '',
+  onUpdateSharedExportPath
 }) => {
+  const [exportPath, setExportPath] = useState(sharedExportPath);
+
+  useEffect(() => {
+    setExportPath(sharedExportPath || localStorage.getItem('dvl_shared_export_path') || '');
+  }, [sharedExportPath, isOpen]);
+
   if (!isOpen) return null;
+
+  const handleExportPathChange = (val: string) => {
+    setExportPath(val);
+    localStorage.setItem('dvl_shared_export_path', val.trim());
+    onUpdateSharedExportPath?.(val.trim());
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -55,7 +72,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Application Settings & Preferences
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Detailer defaults, appearance theme, and workspace storage
+                Detailer defaults, appearance theme, and shared network paths
               </p>
             </div>
           </div>
@@ -140,12 +157,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Initials will be auto-derived ({detailerName.slice(0, 2).toUpperCase() || 'TD'}) and written to cell Z of the Excel Verification List sheet.
+                Initials will be auto-derived ({detailerName ? detailerName.slice(0, 2).toUpperCase() : 'TD'}) and written to cell Z of the Excel Verification List sheet.
               </p>
             </div>
           </div>
 
-          {/* Section 3: Active Rule Pack */}
+          {/* Section 3: Shared Network Drive & Export Location */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <FolderSync className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Shared Drive Deliverable Export Directory</span>
+            </label>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-750 space-y-2.5">
+              <div>
+                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1">
+                  Network Share or Folder Path:
+                </label>
+                <input
+                  type="text"
+                  value={exportPath}
+                  onChange={(e) => handleExportPathChange(e.target.value)}
+                  placeholder="e.g. S:\AHU_Verifications or \\server\share\Detailing_DVL"
+                  className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                When specified, Excel exports and saved projects will automatically target and scan this shared directory for checking handoffs.
+              </p>
+            </div>
+          </div>
+
+          {/* Section 4: Active Rule Pack */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
@@ -185,7 +227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Section 4: Workspace Storage & Autosave */}
+          {/* Section 5: Workspace Storage & Autosave */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
               <HardDrive className="w-3.5 h-3.5 text-blue-500" />

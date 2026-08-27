@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { Fact, SpecialQuote, NormalizedXmlGraph, RuleDefinition } from '../types';
+import { Fact, SpecialQuote, NormalizedXmlGraph } from '../types';
 import {
   Layers,
   RotateCcw,
   Check,
-  AlertTriangle,
   Plus,
   Trash2,
   Building2,
   Ruler,
   Cpu,
-  ShieldAlert,
-  GripVertical
+  GripVertical,
+  RefreshCw,
+  Box
 } from 'lucide-react';
 import { InlineFactPopover } from './InlineFactPopover';
-import { RULES_CATALOG } from '../services/rulesCatalog';
+import { SegmentMaterialsTable } from './SegmentMaterialsTable';
 
 interface GeneralUnitTabProps {
   facts: Record<string, Fact>;
@@ -26,6 +26,8 @@ interface GeneralUnitTabProps {
   onUpdateSqItems: (items: SpecialQuote[]) => void;
   onUpdateComments: (comments: string) => void;
   onOpenResolutionCenter: () => void;
+  onResetAllChanges?: () => void;
+  onOpenDetailerModal?: () => void;
 }
 
 export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
@@ -37,26 +39,29 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   onRevertFact,
   onUpdateSqItems,
   onUpdateComments,
-  onOpenResolutionCenter
+  onOpenResolutionCenter,
+  onResetAllChanges,
+  onOpenDetailerModal
 }) => {
   const [newSqText, setNewSqText] = useState('');
   const [newSqScope, setNewSqScope] = useState('all');
   const [draggedSlot, setDraggedSlot] = useState<number | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
-  // Helper to render provenance badge with no-wrap and crisp styling
+  // Helper to render provenance badge
   const renderProvenanceBadge = (fact: Fact) => {
     if (fact.status === 'ManuallyOverridden') {
       return (
         <div className="flex items-center gap-1 shrink-0">
           <span
             title="Overridden by detailer"
-            className="text-[10px] font-mono px-2 py-1 rounded-md bg-purple-500/15 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/30 whitespace-nowrap"
+            className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/30 whitespace-nowrap"
           >
             Overridden
           </span>
           <button
             onClick={() => onRevertFact(fact.key)}
-            title="Revert to original Config.xml value"
+            title="Revert to original value"
             className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-400 hover:text-slate-700 dark:hover:text-slate-100 transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
@@ -72,7 +77,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           fact={fact}
           label={fact.label}
           onUpdateFact={onUpdateFact}
-          triggerButtonText="Confirm"
+          triggerButtonText="Enter"
           compact={true}
         />
       );
@@ -81,8 +86,8 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     if (fact.status === 'Derived') {
       return (
         <span
-          title="Derived from XML rules"
-          className="text-[10px] font-mono px-2 py-1 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-500/30 whitespace-nowrap shrink-0"
+          title="Derived from XML structure"
+          className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-500/30 whitespace-nowrap shrink-0"
         >
           Derived
         </span>
@@ -92,7 +97,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     return (
       <span
         title={`Source: ${fact.sourcePointer || 'Config.xml'}`}
-        className="text-[10px] font-mono px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium border border-emerald-500/30 whitespace-nowrap shrink-0"
+        className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-medium border border-emerald-500/30 whitespace-nowrap shrink-0"
       >
         Auto: XML
       </span>
@@ -109,7 +114,6 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
       nextSlot++;
     }
 
-    const isRuleTag = newSqScope.startsWith('rule:');
     const isSkidTag = newSqScope.startsWith('skid:');
 
     const newItem: SpecialQuote = {
@@ -117,7 +121,6 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
       id: `sq-${Date.now()}`,
       text: newSqText.trim(),
       linkedSkidId: isSkidTag ? newSqScope.replace('skid:', '') : undefined,
-      linkedRuleId: isRuleTag ? newSqScope.replace('rule:', '') : undefined,
       initials: 'TD',
       isCompleted: false
     };
@@ -161,14 +164,12 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
     let updated: SpecialQuote[];
     if (targetItem) {
-      // Swap slots
       updated = sqItems.map(s => {
         if (s.slot === draggedSlot) return { ...s, slot: targetSlot };
         if (s.slot === targetSlot) return { ...s, slot: draggedSlot };
         return s;
       });
     } else {
-      // Move to empty slot
       updated = sqItems.map(s => (s.slot === draggedSlot ? { ...s, slot: targetSlot } : s));
     }
 
@@ -176,51 +177,43 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     setDraggedSlot(null);
   };
 
-  // Group facts logically
+  // Order & Identity Facts (Product Type removed)
   const orderFacts = [
     'unit.jobName',
-    'unit.orderNumber',
     'unit.comNumber',
+    'unit.orderNumber',
     'unit.tag',
-    'unit.productType',
     'unit.detailer',
     'unit.date'
   ];
-  const geometryFacts = [
-    'unit.shellType',
+
+  // Unit Specifications Facts (combines geometry & ratings cleanly)
+  const unitSpecFacts = [
     'unit.unitType',
+    'unit.shellType',
+    'unit.thermalBreak',
     'unit.baseHeight',
     'unit.wallThickness',
-    'unit.thermalBreak',
     'unit.roofPeak',
     'unit.curbrest',
     'unit.utl',
-    'unit.totalWeight',
-    'unit.totalStaticPressure'
-  ];
-  const materialFacts = [
-    'unit.skinMaterial',
-    'unit.skinGauge',
-    'unit.linerMaterial',
-    'unit.linerGauge',
-    'unit.floorMaterial',
-    'unit.floorGauge'
-  ];
-  const ratingFacts = [
+    'unit.knockdown',
     'unit.noa',
     'unit.isSeismic',
     'unit.location',
-    'unit.knockdown'
+    'unit.totalStaticPressure'
   ];
 
   const renderField = (key: string) => {
     const fact = facts[key];
     if (!fact) return null;
 
+    const isDetailerField = key === 'unit.detailer';
+
     return (
       <div
         key={key}
-        className="flex items-center justify-between gap-4 py-2.5 px-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/40 last:border-0 transition-colors group"
+        className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/40 last:border-0 transition-colors group"
       >
         {/* Label & Source Pointer */}
         <div className="flex flex-col min-w-0 flex-1 pr-2">
@@ -229,7 +222,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           </span>
           {fact.sourcePointer ? (
             <span
-              className="text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate max-w-[260px]"
+              className="text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate max-w-[240px]"
               title={fact.sourcePointer}
             >
               {fact.sourcePointer.split('/').slice(-2).join('/')}
@@ -241,16 +234,26 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           )}
         </div>
 
-        {/* Value Input & Provenance Badge */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <input
-            type="text"
-            value={fact.value !== null && fact.value !== undefined ? String(fact.value) : ''}
-            placeholder={fact.promptNote || 'Enter value...'}
-            onChange={(e) => onUpdateFact(key, e.target.value)}
-            className="w-48 sm:w-56 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner"
-          />
-          <div className="min-w-[90px] flex justify-end">
+        {/* Value Input / Modal Trigger & Provenance Badge */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isDetailerField && onOpenDetailerModal ? (
+            <button
+              onClick={onOpenDetailerModal}
+              title="Click to edit Detailer Name profile"
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-right text-slate-900 dark:text-slate-100 hover:border-blue-500 transition-all shadow-inner"
+            >
+              {fact.value ? String(fact.value) : <span className="text-amber-500 font-bold">Set Detailer Name</span>}
+            </button>
+          ) : (
+            <input
+              type="text"
+              value={fact.value !== null && fact.value !== undefined ? String(fact.value) : ''}
+              placeholder={fact.promptNote || 'Enter value...'}
+              onChange={(e) => onUpdateFact(key, e.target.value)}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner"
+            />
+          )}
+          <div className="min-w-[80px] flex justify-end">
             {renderProvenanceBadge(fact)}
           </div>
         </div>
@@ -261,122 +264,126 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 text-slate-800 dark:text-slate-100">
       {/* Overview Banner */}
-      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 dark:from-blue-900/30 dark:via-indigo-900/20 dark:to-slate-900 border border-blue-200 dark:border-blue-800/40 rounded-2xl p-6 shadow-sm dark:shadow-xl transition-colors">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 dark:from-blue-900/30 dark:via-indigo-900/20 dark:to-slate-900 border border-blue-200 dark:border-blue-800/40 rounded-2xl p-5 shadow-sm dark:shadow-xl transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 font-mono text-xs font-bold tracking-wide border border-blue-500/30">
+              <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 font-mono text-[11px] font-bold tracking-wide border border-blue-500/30">
                 CONFIG.XML INGESTION COMPLETE
               </span>
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                 {graph.generatingSoftware} • Schema {graph.documentVersion}
               </span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               {facts['unit.jobName']?.value || 'AHU Unit Specifications'}
             </h2>
-            <p className="text-xs text-slate-600 dark:text-slate-300 max-w-3xl leading-relaxed">
-              Auto-extracted {graph.segments.length} segments across {graph.skids.length} shipping skids. {graph.bases.length} unit bases evaluated with upturned lip (UTL) detection.
-              Authoritative parameters are pre-populated with active provenance tracking.
-            </p>
           </div>
 
-          <div className="flex items-center gap-6 bg-white dark:bg-slate-950/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
-            <div className="text-right">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Total Unit Weight</div>
-              <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                {graph.unitWeight.toLocaleString()} lbs
-              </div>
-            </div>
-            <div className="text-right pl-6 border-l border-slate-200 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Enclosure Box</div>
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Cabinet Dimensions Box */}
+            <div className="bg-white dark:bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-right">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Cabinet Dimensions</div>
               <div className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
                 {graph.dimensions.length}"L × {graph.dimensions.width}"W × {graph.dimensions.height}"H
               </div>
             </div>
+
+            {/* Reset Changes Button */}
+            {onResetAllChanges && (
+              <button
+                onClick={() => setIsResetConfirmOpen(true)}
+                title="Reset all manual overrides to extracted XML state"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 font-medium transition-colors shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Reset Changes</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Reset Confirmation Dialog */}
+      {isResetConfirmOpen && (
+        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
+          <div>
+            <strong>Revert all changes?</strong> This will reset all fact overrides and return checklists to freshly parsed state.
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsResetConfirmOpen(false)}
+              className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                onResetAllChanges?.();
+                setIsResetConfirmOpen(false);
+              }}
+              className="px-3 py-1 rounded-lg bg-red-600 text-white font-semibold text-xs"
+            >
+              Yes, Reset
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 2-Column Balanced Specifications Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column */}
-        <div className="space-y-6">
-          {/* Card 1: Order & Identity */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                  Order & Identity
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                Verification List: D3..D6
-              </span>
+        {/* Left Column: Order & Identity */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                Order & Project Identity
+              </h3>
             </div>
-            <div className="space-y-1">
-              {orderFacts.map(renderField)}
-            </div>
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+              Verification List: D3..D6
+            </span>
           </div>
-
-          {/* Card 2: Geometry & Casing */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Ruler className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                  Geometry & Casing Dimensions
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                CAD Dimensions
-              </span>
-            </div>
-            <div className="space-y-1">
-              {geometryFacts.map(renderField)}
-            </div>
+          <div className="space-y-1">
+            {orderFacts.map(renderField)}
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Card 3: Materials & Gauges */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                  Materials & Gauges
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                BOM Schedule
-              </span>
+        {/* Right Column: Geometry & Specifications */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Ruler className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                Unit Casing Specifications & Ratings
+              </h3>
             </div>
-            <div className="space-y-1">
-              {materialFacts.map(renderField)}
-            </div>
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+              Verification List: D7..D18
+            </span>
           </div>
-
-          {/* Card 4: Ratings & Regulatory */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                <h3 className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                  Ratings, Certifications & Options
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                Detailer Action
-              </span>
-            </div>
-            <div className="space-y-1">
-              {ratingFacts.map(renderField)}
-            </div>
+          <div className="space-y-1">
+            {unitSpecFacts.map(renderField)}
           </div>
         </div>
+      </div>
+
+      {/* Segment-Based Materials & Gauges Schedule Breakdown */}
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              Materials & Gauges Schedule (Segment Breakdown)
+            </h3>
+          </div>
+          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+            {graph.segments.length} Segments Evaluated
+          </span>
+        </div>
+
+        <SegmentMaterialsTable graph={graph} />
       </div>
 
       {/* Special Quotes (SQ) & Deviation Manager */}
@@ -388,7 +395,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
               Special Quotes (SQs) & Detailing Deviations
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Notated project Special Quotes and deviations. Drag handles to reorder items.
+              Notated project Special Quotes and deviations mapped to Excel deliverable columns G & H.
             </p>
           </div>
 
@@ -399,7 +406,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           </div>
         </div>
 
-        {/* Add SQ Form */}
+        {/* Add SQ Form (Rules removed from dropdown) */}
         <div className="flex flex-col lg:flex-row items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
           <input
             type="text"
@@ -413,17 +420,12 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           <select
             value={newSqScope}
             onChange={(e) => setNewSqScope(e.target.value)}
-            className="w-full lg:w-64 px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 font-mono"
+            className="w-full lg:w-56 px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 font-mono"
           >
             <option value="all">Tag: General Unit</option>
             <optgroup label="Shipping Skids">
               {graph.skids.map(s => (
                 <option key={s.id} value={`skid:${s.id}`}>Tag: {s.name}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Specific Rules">
-              {RULES_CATALOG.slice(0, 15).map(r => (
-                <option key={r.id} value={`rule:${r.id}`}>Tag Rule: {r.id}</option>
               ))}
             </optgroup>
           </select>
@@ -433,7 +435,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span>Add SQ Slot</span>
+            <span>Add Special Quote</span>
           </button>
         </div>
 
@@ -445,16 +447,16 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                 <th className="py-2.5 px-3 w-10 text-center"></th>
                 <th className="py-2.5 px-3 w-16 text-center">Slot</th>
                 <th className="py-2.5 px-4">Description / Special Quote Text</th>
-                <th className="py-2.5 px-4 w-48">Linked Scope</th>
+                <th className="py-2.5 px-4 w-44">Linked Scope</th>
                 <th className="py-2.5 px-4 w-28 text-center">Status</th>
-                <th className="py-2.5 px-4 w-20 text-center">Action</th>
+                <th className="py-2.5 px-4 w-16 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
               {sqItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-slate-500 font-mono">
-                    No Special Quotes added yet. Use the form above to add up to 22 detailing SQ items.
+                    No Special Quotes added. Use the form above to add detailing SQ items.
                   </td>
                 </tr>
               ) : (
@@ -472,15 +474,15 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                         draggedSlot === sq.slot ? 'opacity-40 bg-blue-50 dark:bg-blue-950/30' : ''
                       }`}
                     >
-                      <td className="py-3 px-2 text-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                      <td className="py-2.5 px-2 text-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                         <GripVertical className="w-4 h-4 mx-auto" />
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         <span className="inline-block w-8 py-0.5 text-center font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
                           {sq.slot}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-2.5 px-4">
                         <input
                           type="text"
                           value={sq.text}
@@ -488,21 +490,19 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                           className="w-full bg-transparent border-0 border-b border-transparent focus:border-blue-500 text-slate-900 dark:text-slate-200 focus:bg-slate-50 dark:focus:bg-slate-850 px-2 py-1 rounded outline-none text-xs"
                         />
                       </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-mono text-[11px] font-semibold ${
+                      <td className="py-2.5 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-mono text-[11px] font-semibold ${
                           linkedSkid
                             ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
-                            : sq.linkedRuleId
-                            ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                         }`}>
-                          {linkedSkid ? linkedSkid.name : sq.linkedRuleId ? `Rule: ${sq.linkedRuleId}` : 'General Unit'}
+                          {linkedSkid ? linkedSkid.name : 'General Unit'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2.5 px-4 text-center">
                         <button
                           onClick={() => handleToggleSqDone(sq.slot)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-[11px] font-semibold transition-all ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-md font-mono text-[11px] font-semibold transition-all ${
                             sq.isCompleted
                               ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -512,10 +512,10 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                           {sq.isCompleted ? 'Verified' : 'Pending'}
                         </button>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2.5 px-4 text-center">
                         <button
                           onClick={() => handleDeleteSq(sq.slot)}
-                          title="Delete SQ slot"
+                          title="Delete SQ item"
                           className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -531,7 +531,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
       </div>
 
       {/* Additional Detailer Comments */}
-      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-2">
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">
           General Additional Comments
         </h3>

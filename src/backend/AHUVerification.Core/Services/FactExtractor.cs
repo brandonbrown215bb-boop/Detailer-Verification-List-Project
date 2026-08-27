@@ -57,9 +57,9 @@ namespace AHUVerification.Core.Services
                 "unit.comNumber",
                 "COM #",
                 "Order & Identity",
-                "COM-842910",
-                FactStatus.Known,
-                FactConfidence.Authoritative,
+                null,
+                FactStatus.Unknown,
+                FactConfidence.RequiresConfirmation,
                 null,
                 "Enter COM# from MAPICS (e.g. COM-123456)"
             );
@@ -92,27 +92,15 @@ namespace AHUVerification.Core.Services
                 );
             }
 
-            bool hasProductType = !string.IsNullOrWhiteSpace(orderRev?.ProductType);
-            if (hasProductType)
-            {
-                facts["unit.productType"] = CreateFact(
-                    "unit.productType",
-                    "Product Type",
-                    "Order & Identity",
-                    orderRev!.ProductType,
-                    FactStatus.Known,
-                    FactConfidence.Authoritative,
-                    "/root:OrderRevision/productType"
-                );
-            }
-
             facts["unit.detailer"] = CreateFact(
                 "unit.detailer",
                 "Detailer Name",
                 "Order & Identity",
-                "Tanner Dean",
-                FactStatus.Known,
-                FactConfidence.Authoritative
+                null,
+                FactStatus.Unknown,
+                FactConfidence.RequiresConfirmation,
+                null,
+                "Enter Detailer Name"
             );
 
             facts["unit.date"] = CreateFact(
@@ -352,16 +340,15 @@ namespace AHUVerification.Core.Services
                 bool hasFilters = skidSegs.Any(s => s.TypeCode.Equals("FF", StringComparison.OrdinalIgnoreCase) || s.TypeCode.Equals("RF", StringComparison.OrdinalIgnoreCase) || s.TypeCode.Equals("AF", StringComparison.OrdinalIgnoreCase));
                 bool hasHeatWheel = skidSegs.Any(s => s.TypeCode.Equals("HW", StringComparison.OrdinalIgnoreCase));
 
-                // Strict weight semantics: Derived but requires confirmation
+                // Skid aggregate weight is informational (detailers do not approve weight)
                 facts[$"skid.{skid.Id}.weight"] = CreateFact(
                     $"skid.{skid.Id}.weight",
                     $"{skid.Name} Aggregate Weight",
                     skid.Name,
                     skid.CalculatedWeight,
                     FactStatus.Derived,
-                    FactConfidence.RequiresConfirmation,
+                    FactConfidence.Authoritative,
                     $"/root:AHU/shippingSkidList/shippingSkid[{skid.Index}]",
-                    $"Sum of segments = {skid.CalculatedWeight} lbs. Confirm or override official lifting weight.",
                     derivationName: "Sum of Segment Weights"
                 );
 

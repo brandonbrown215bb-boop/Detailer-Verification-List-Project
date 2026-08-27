@@ -179,6 +179,12 @@ namespace AHUVerification.Core.Services
                     {
                         val = generalComments;
                     }
+                    else if (factKey == "unit.date")
+                    {
+                        val = facts.TryGetValue("unit.date", out var dateFact) && !string.IsNullOrWhiteSpace(dateFact.Value?.ToString())
+                            ? dateFact.Value.ToString()!
+                            : DateTime.Now.ToString("yyyy-MM-dd");
+                    }
                     else if (facts.TryGetValue(factKey, out var fact))
                     {
                         val = fact.Value?.ToString() ?? "";

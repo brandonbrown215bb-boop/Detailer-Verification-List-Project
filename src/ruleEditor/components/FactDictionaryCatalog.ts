@@ -84,12 +84,12 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
   },
   {
     key: 'unit.hasUTL',
-    label: 'Unit Trench Line (UTL)',
+    label: 'Upturned Lip (UTL)',
     scope: 'Unit',
     category: 'Construction Options',
     dataType: 'boolean',
     sampleValue: false,
-    description: 'Whether the unit contains a built-in utility trench/corridor line.'
+    description: 'Whether the unit contains base perimeter upturned lips (UTL height > 0).'
   },
   {
     key: 'unit.isSeismic',

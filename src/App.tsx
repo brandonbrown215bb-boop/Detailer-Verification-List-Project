@@ -13,13 +13,15 @@ import { parseAhuXml, parseOrderRevXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './services/rulesCatalog';
 import { generateChecklists } from './services/ruleEvaluator';
-import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
+import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal } from './services/projectStorage';
 import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
 import { desktopBridge } from './services/desktopBridge';
 import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
 
 import { HomePage } from './components/HomePage';
 import { ManualUnitModal } from './components/ManualUnitModal';
+import { DetailerNameModal } from './components/DetailerNameModal';
+import { ComNumberModal } from './components/ComNumberModal';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GeneralUnitTab } from './components/GeneralUnitTab';
@@ -76,9 +78,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const AppContent: React.FC = () => {
-  // App info & Rule Pack state
-  const [appInfo, setAppInfo] = useState<{ appVersion: string; isDesktopHost: boolean; rulePackVersion?: string } | null>(null);
-
   // Application Data States
   const [isProjectLoaded, setIsProjectLoaded] = useState(false);
   const [graph, setGraph] = useState<NormalizedXmlGraph | null>(null);
@@ -98,7 +97,7 @@ export const AppContent: React.FC = () => {
     orderRevision?: any;
   }>({});
 
-  // Active view: 'general' or skid ID ('skid-1', 'skid-2', etc.)
+  // Active view: 'general' | 'unit-checks' | skid ID ('skid-1', 'skid-2', etc.)
   const [activeTab, setActiveTab] = useState<string>('general');
 
   // Modals & Navigation state
@@ -107,6 +106,8 @@ export const AppContent: React.FC = () => {
   const [isPreFlightOpen, setIsPreFlightOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDetailerModalOpen, setIsDetailerModalOpen] = useState(false);
+  const [isComModalOpen, setIsComModalOpen] = useState(false);
 
   // Sidebar Collapse state (persisted in localStorage)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -124,6 +125,14 @@ export const AppContent: React.FC = () => {
 
   // Export success toast state
   const [exportNotice, setExportNotice] = useState<{ fileName: string; filePath?: string } | null>(null);
+
+  // Prompt for Detailer Name on first launch if blank
+  useEffect(() => {
+    const savedDetailer = localStorage.getItem('dvl_detailer_name');
+    if (!savedDetailer) {
+      setIsDetailerModalOpen(true);
+    }
+  }, []);
 
   // Apply Theme Mode class to document element
   useEffect(() => {
@@ -177,6 +186,27 @@ export const AppContent: React.FC = () => {
     }
   }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata]);
 
+  // Fact Update & Revert Handlers
+  const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
+    if (!graph) return;
+    setFacts(prev => {
+      const updated = overrideFact(prev, key, value, author, note);
+      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
+      setChecklists(newChecklists);
+      return updated;
+    });
+  }, [graph, checklists]);
+
+  const handleRevertFact = useCallback((key: string) => {
+    if (!graph) return;
+    setFacts(prev => {
+      const reverted = revertFact(prev, key);
+      const newChecklists = generateChecklists(RULES_CATALOG, graph, reverted, checklists);
+      setChecklists(newChecklists);
+      return reverted;
+    });
+  }, [graph, checklists]);
+
   // Handler for loading new XML or UPZ bundle
   const loadXmlData = useCallback((xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
     try {
@@ -206,6 +236,11 @@ export const AppContent: React.FC = () => {
       setProjectIntegrityWarning(null);
       setActiveTab('general');
       setIsProjectLoaded(true);
+
+      // Prompt for COM# if not populated
+      if (!newFacts['unit.comNumber']?.value) {
+        setIsComModalOpen(true);
+      }
     } catch (err: any) {
       alert(`Error parsing AHU XML: ${err.message}`);
     }
@@ -310,6 +345,19 @@ export const AppContent: React.FC = () => {
     }
   }, []);
 
+  // Reset all manual changes handler
+  const handleResetAllChanges = useCallback(() => {
+    if (!graph) return;
+    try {
+      const freshFacts = extractFactsFromGraph(graph, sourceMetadata.orderRevision);
+      const freshChecklists = generateChecklists(RULES_CATALOG, graph, freshFacts);
+      setFacts(freshFacts);
+      setChecklists(freshChecklists);
+    } catch (err: any) {
+      alert(`Error resetting changes: ${err.message}`);
+    }
+  }, [graph, sourceMetadata]);
+
   // Handler for opening files (.xml or .dvl) from Header
   const handleFileUpload = (file: File) => {
     const reader = new FileReader();
@@ -329,27 +377,6 @@ export const AppContent: React.FC = () => {
     reader.readAsText(file);
   };
 
-  // Fact Update & Revert Handlers
-  const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
-    if (!graph) return;
-    setFacts(prev => {
-      const updated = overrideFact(prev, key, value, author, note);
-      const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
-      setChecklists(newChecklists);
-      return updated;
-    });
-  }, [graph, checklists]);
-
-  const handleRevertFact = useCallback((key: string) => {
-    if (!graph) return;
-    setFacts(prev => {
-      const reverted = revertFact(prev, key);
-      const newChecklists = generateChecklists(RULES_CATALOG, graph, reverted, checklists);
-      setChecklists(newChecklists);
-      return reverted;
-    });
-  }, [graph, checklists]);
-
   const handleBatchResolveDefaults = useCallback(() => {
     if (!graph) return;
     setFacts(prev => {
@@ -357,19 +384,14 @@ export const AppContent: React.FC = () => {
 
       // Set standard default specs
       if (updated['unit.noa'] && updated['unit.noa'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.noa', 'N/A (Standard Unit)', 'Detailer', 'Standard Non-NOA unit');
+        updated = overrideFact(updated, 'unit.noa', 'N/A', 'Detailer', 'Standard Non-NOA unit');
       }
       if (updated['unit.isSeismic'] && updated['unit.isSeismic'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.isSeismic', 'No (Standard Non-Seismic)', 'Detailer', 'Standard Non-Seismic');
+        updated = overrideFact(updated, 'unit.isSeismic', false, 'Detailer', 'Standard Non-Seismic');
       }
-
-      // Confirm all skid weights to calculated weights
-      graph.skids.forEach(s => {
-        const key = `skid.${s.id}.weight`;
-        if (updated[key] && updated[key].confidence === 'RequiresConfirmation') {
-          updated = overrideFact(updated, key, s.calculatedWeight, 'Detailer', 'Confirmed from segment mass properties');
-        }
-      });
+      if (updated['unit.knockdown'] && updated['unit.knockdown'].confidence === 'RequiresConfirmation') {
+        updated = overrideFact(updated, 'unit.knockdown', false, 'Detailer', 'Factory Assembled');
+      }
 
       const newChecklists = generateChecklists(RULES_CATALOG, graph, updated, checklists);
       setChecklists(newChecklists);
@@ -434,8 +456,22 @@ export const AppContent: React.FC = () => {
     const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
     const defaultName = `${jobName}_${comNumber}_Detailing_Verification_List${isDraft ? '_DRAFT' : ''}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
+    // Dynamic verification date population on export
+    const exportFacts = {
+      ...facts,
+      'unit.date': {
+        ...facts['unit.date'],
+        key: 'unit.date',
+        label: 'Verification Date',
+        category: 'Order & Identity',
+        value: new Date().toISOString().split('T')[0],
+        status: 'Known' as const,
+        confidence: 'Authoritative' as const
+      }
+    };
+
     const result = await desktopBridge.exportExcelDeliverable(
-      facts,
+      exportFacts,
       sqItems,
       checklists,
       RULES_CATALOG,
@@ -504,12 +540,34 @@ export const AppContent: React.FC = () => {
           onClose={() => setIsManualModalOpen(false)}
           onCreateUnit={handleManualCreate}
         />
+
+        <DetailerNameModal
+          isOpen={isDetailerModalOpen}
+          onClose={() => setIsDetailerModalOpen(false)}
+          currentName={localStorage.getItem('dvl_detailer_name') || ''}
+          onSaveName={(name) => {
+            localStorage.setItem('dvl_detailer_name', name);
+          }}
+          isFirstLaunch={!localStorage.getItem('dvl_detailer_name')}
+        />
       </div>
     );
   }
 
   // --- RENDER: ACTIVE WORKSPACE ---
   const selectedSkid = graph.skids.find(s => s.id === activeTab);
+
+  // Unit-Level Verifications virtual skid
+  const unitVerificationVirtualSkid = {
+    id: 'unit',
+    index: 0,
+    name: 'Unit-Level Verifications',
+    segmentIds: graph.segments.map(s => s.id),
+    baseIds: graph.bases.map(b => b.id),
+    calculatedWeight: graph.unitWeight,
+    isWeightConfirmed: true,
+    dimensions: graph.dimensions
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -544,6 +602,8 @@ export const AppContent: React.FC = () => {
           themeMode={themeMode}
           onCycleThemeMode={handleCycleThemeMode}
           lastSavedAt={lastSavedAt || undefined}
+          onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
+          onOpenComModal={() => setIsComModalOpen(true)}
         />
 
         {projectIntegrityWarning && (
@@ -604,6 +664,22 @@ export const AppContent: React.FC = () => {
               onUpdateSqItems={setSqItems}
               onUpdateComments={setGeneralComments}
               onOpenResolutionCenter={() => setIsResolutionOpen(true)}
+              onResetAllChanges={handleResetAllChanges}
+              onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
+            />
+          ) : activeTab === 'unit-checks' ? (
+            <SkidViewTab
+              skid={unitVerificationVirtualSkid}
+              segments={graph.segments}
+              bases={graph.bases}
+              checklists={checklists}
+              rules={RULES_CATALOG}
+              sqItems={sqItems}
+              facts={facts}
+              onUpdateChecklistStatus={handleUpdateChecklistStatus}
+              onUpdateChecklistComment={handleUpdateChecklistComment}
+              onUpdateFact={handleUpdateFact}
+              onOpenResolutionCenter={() => setIsResolutionOpen(true)}
             />
           ) : selectedSkid ? (
             <SkidViewTab
@@ -642,7 +718,7 @@ export const AppContent: React.FC = () => {
         onExportExcel={handleExportExcel}
         onExportDvl={handleSaveDvl}
         onNavigateToRule={(scopeTargetId) => {
-          setActiveTab(scopeTargetId === 'unit' ? 'general' : scopeTargetId);
+          setActiveTab(scopeTargetId === 'unit' ? 'unit-checks' : scopeTargetId);
         }}
         onOpenResolutionCenter={() => setIsResolutionOpen(true)}
       />
@@ -662,12 +738,35 @@ export const AppContent: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         themeMode={themeMode}
         onSetThemeMode={setThemeMode}
-        detailerName={String(facts['unit.detailer']?.value || 'Detailer')}
-        onUpdateDetailerName={(name) => handleUpdateFact('unit.detailer', name)}
+        detailerName={String(facts['unit.detailer']?.value || localStorage.getItem('dvl_detailer_name') || 'Detailer')}
+        onUpdateDetailerName={(name) => {
+          localStorage.setItem('dvl_detailer_name', name);
+          handleUpdateFact('unit.detailer', name);
+        }}
         rulePackVersion={RULE_PACK_IDENTITY.version}
         ruleCount={RULES_CATALOG.length}
         lastAutosavedAt={lastSavedAt || undefined}
         onClearAutosave={handleClearAutosave}
+      />
+
+      <DetailerNameModal
+        isOpen={isDetailerModalOpen}
+        onClose={() => setIsDetailerModalOpen(false)}
+        currentName={String(facts['unit.detailer']?.value || localStorage.getItem('dvl_detailer_name') || '')}
+        onSaveName={(name) => {
+          localStorage.setItem('dvl_detailer_name', name);
+          handleUpdateFact('unit.detailer', name);
+        }}
+      />
+
+      <ComNumberModal
+        isOpen={isComModalOpen}
+        onClose={() => setIsComModalOpen(false)}
+        currentComNumber={String(facts['unit.comNumber']?.value || '')}
+        jobName={String(facts['unit.jobName']?.value || '')}
+        onSaveComNumber={(com) => {
+          handleUpdateFact('unit.comNumber', com);
+        }}
       />
     </div>
   );

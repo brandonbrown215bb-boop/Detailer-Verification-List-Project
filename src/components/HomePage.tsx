@@ -3,14 +3,11 @@ import {
   FileCode,
   FolderOpen,
   PlusCircle,
-  Play,
   Shield,
   UploadCloud,
-  CheckCircle2,
   Clock,
   Trash2,
-  Layers,
-  FileSpreadsheet,
+  Snowflake,
   ArrowRight
 } from 'lucide-react';
 import { DvlProjectFile, UpzBundle } from '../types';
@@ -124,6 +121,8 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  const isProd = import.meta.env.PROD;
+
   return (
     <div
       onDragOver={handleDragOver}
@@ -141,15 +140,19 @@ export const HomePage: React.FC<HomePageProps> = ({
         className="hidden"
       />
 
-      {/* Header Banner */}
+      {/* Header Banner with York Snowflake Logo */}
       <div className="w-full max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-900 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-            <FileSpreadsheet className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 shrink-0">
+            <Snowflake className="w-5 h-5 text-cyan-100" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">AHU Detailing Verification System</h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Factory Detailing & Engineering Deliverables</p>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
+              York AHU Detailing Verification System
+            </h1>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              Engineering Configuration Ingestion & Verification Deliverables
+            </p>
           </div>
         </div>
 
@@ -167,7 +170,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             Select an AHU Project to Begin Verification
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
-            Ingest MOM XML engineering configuration, load an existing verification project, or configure a new custom unit.
+            Ingest MOM Config.xml engineering configuration, load an existing .dvl project, or configure a custom unit.
           </p>
         </div>
 
@@ -182,11 +185,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-900 dark:text-white">{autosavedProject.jobName}</span>
                   <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold">
-                    {autosavedProject.comNumber}
+                    {autosavedProject.comNumber || 'COM Pending'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Unsaved session from {new Date(autosavedProject.lastSavedAt).toLocaleString()} ({autosavedProject.author})
+                  Unsaved session from {new Date(autosavedProject.lastSavedAt).toLocaleString()} ({autosavedProject.author || 'Detailer'})
                 </p>
               </div>
             </div>
@@ -210,8 +213,8 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         )}
 
-        {/* 4 Launch Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Launch Action Cards */}
+        <div className={`grid grid-cols-1 ${isProd ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
           {/* 1. Import Config.xml / .upz Bundle */}
           <div
             onClick={handleNativeOpen}
@@ -222,15 +225,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <UploadCloud className="w-6 h-6" />
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                Import Config.xml / .upz Bundle
+                Import Config.xml / .upz
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Ingest MOM Config.xml or JCI .upz bundle to automatically extract unit geometry, order identity (Job Name, COM#, Tag), casing materials, segments, and shipping splits.
+                Ingest MOM Config.xml or JCI .upz bundle to automatically extract unit geometry, casing materials, segments, and shipping splits.
               </p>
             </div>
 
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-blue-600 dark:text-blue-400 font-medium">
-              <span>Select or Drop XML / UPZ File</span>
+              <span>Select File</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
@@ -248,12 +251,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                 Open .dvl Project
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Resume an existing Detailing Verification List project with complete 4-state fact provenance, checklists, and manual overrides intact.
+                Resume an existing Detailing Verification List project with complete fact provenance, checklists, and manual overrides intact.
               </p>
             </div>
 
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              <span>Browse Saved Projects</span>
+              <span>Browse Projects</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
@@ -276,39 +279,41 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
 
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-              <span>Setup Custom Workspace</span>
+              <span>Configure Unit</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
 
-          {/* 4. Load Sample Dataset */}
-          <div
-            onClick={onLoadSample}
-            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all shadow-sm hover:shadow-amber-500/10 flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <FileCode className="w-6 h-6" />
+          {/* 4. Load Demo Sample (Dev/Demo Only) */}
+          {!isProd && (
+            <div
+              onClick={onLoadSample}
+              className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all shadow-sm hover:shadow-amber-500/10 flex flex-col justify-between"
+            >
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <FileCode className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                  Load Demo Dataset
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Explore features and Excel export with reference 4-skid AHU demo dataset (Medical Center Phase 3).
+                </p>
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                Load Demo Dataset
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Quickly explore features, resolution center, and Excel export with the reference 4-skid AHU demo dataset (Medical Center Phase 3).
-              </p>
-            </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
-              <span>Launch Reference Demo</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+                <span>Launch Demo</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Footer Notes */}
       <div className="w-full max-w-5xl text-center border-t border-slate-200 dark:border-slate-900 pt-4 text-xs text-slate-500 font-mono flex items-center justify-between">
-        <span>Johnson Controls Custom Air Handling Units</span>
+        <span>Johnson Controls York Custom Air Handling Units</span>
         <span>OpenXML 3.1.1 Deliverable Engine &bull; Zero Schema Corruption</span>
       </div>
     </div>
