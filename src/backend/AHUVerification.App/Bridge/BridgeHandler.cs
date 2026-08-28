@@ -6,39 +6,14 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
+using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
 using AHUVerification.Core.Services;
+using AHUVerification.Core.Utils;
 
 namespace AHUVerification.App.Bridge
 {
-    public class BridgeRequest
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = "";
-
-        [JsonPropertyName("action")]
-        public string Action { get; set; } = "";
-
-        [JsonPropertyName("payload")]
-        public JsonElement Payload { get; set; }
-    }
-
-    public class BridgeResponse
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = "";
-
-        [JsonPropertyName("success")]
-        public bool Success { get; set; }
-
-        [JsonPropertyName("data")]
-        public object? Data { get; set; }
-
-        [JsonPropertyName("error")]
-        public string? Error { get; set; }
-    }
-
     public class BridgeHandler
     {
         private readonly Form _parentForm;

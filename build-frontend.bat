@@ -7,11 +7,10 @@ echo  AHU Detailing Verification - Frontend Web Build
 echo ======================================================================
 echo.
 
-where npm >nul 2>&1
+call "%~dp0scripts\init_env.bat"
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js / npm is not installed or not in PATH.
     pause
-    exit /b 1
+    exit /b %ERRORLEVEL%
 )
 
 if not exist "node_modules\" (

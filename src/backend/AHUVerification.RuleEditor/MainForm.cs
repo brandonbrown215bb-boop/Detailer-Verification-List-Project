@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using AHUVerification.Core.Bridge;
+using AHUVerification.Core.Utils;
 using AHUVerification.RuleEditor.Bridge;
 
 namespace AHUVerification.RuleEditor
@@ -54,7 +56,7 @@ namespace AHUVerification.RuleEditor
                 string distFolder = Path.Combine(appBase, "dist");
 
 #if DEBUG
-                string repoRoot = FindRepoRoot();
+                string repoRoot = PathUtils.FindRepoRoot();
                 string repositoryRulePack = Path.Combine(repoRoot, "src", "rulepack");
                 string repositoryDist = Path.Combine(repoRoot, "dist");
                 if (Directory.Exists(repositoryRulePack)) rulePackPath = repositoryRulePack;
@@ -140,23 +142,6 @@ namespace AHUVerification.RuleEditor
             {
                 return false;
             }
-        }
-
-        private static string FindRepoRoot()
-        {
-            string current = AppContext.BaseDirectory;
-            for (int i = 0; i < 10; i++)
-            {
-                if (File.Exists(Path.Combine(current, "Detailing Verification List.xlsx")) ||
-                    File.Exists(Path.Combine(current, "package.json")))
-                {
-                    return current;
-                }
-                var parent = Directory.GetParent(current);
-                if (parent == null) break;
-                current = parent.FullName;
-            }
-            return Directory.GetCurrentDirectory();
         }
 #endif
     }

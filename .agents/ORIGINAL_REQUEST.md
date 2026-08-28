@@ -45,3 +45,72 @@ Write the full audit report into `audits/code_duplication_audit.md`. The documen
 ### Deliverable Output
 - [ ] The complete report is generated and saved to `audits/code_duplication_audit.md`.
 - [ ] A dedicated section details the recommended shared utilities module architecture, including module structure and consolidated helper implementations.
+
+## 2026-08-28T19:59:44Z
+
+Audit all repository documentation for gaps, missing prerequisites, unstated assumptions, ambiguous steps, unguided error scenarios, and outdated or contradictory details from the perspective of an AI agent with a fresh context window.
+
+Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project
+Integrity mode: development
+
+## Scope & Target Documents
+
+Audit all documentation files across the repository:
+1. Root Documentation:
+   - `README.md`
+   - `PROJECT.md`
+   - `AGENTS.md`
+   - `GEMINI.md`
+2. Architecture & Decisions:
+   - `docs/architecture/README.md`
+   - `docs/decisions/README.md`
+   - `docs/decisions/0001-ahu-verification-desktop-architecture.md` through `0009-upz-baseline-fact-extraction-and-predicate-expansion.md`
+3. Operations & Guides:
+   - `docs/operations/development.md`
+   - `docs/operations/validation.md`
+   - `docs/rule_and_logic_editor_guide.md`
+4. Historical Audits & Analysis Reports:
+   - `docs/AHU_Verification_E2E_Workflow_Audit.md`
+   - `docs/documentation_staleness_report.md`
+   - `docs/field_derivation_report.md`
+   - `audits/code_duplication_audit.md`
+   - `docs/context-manifest.json`
+
+## Requirements
+
+### R1. Comprehensive Gap & Inaccuracy Audit Across All Target Documents
+Conduct an in-depth audit of every target document from the perspective of a fresh AI agent onboarding to the project with no prior conversation memory. Evaluate the docs across five critical dimensions:
+- **Missing Information**: Critical setup prerequisites, environment variables, dependencies, commands, data structures, or workflow steps required to build, test, run, debug, or extend the system effectively.
+- **Unstated Assumptions**: Implicit knowledge assumed by the docs that a new agent would not know (e.g., specific OS/architecture dependencies, tool locations, implicit workflow orders).
+- **Ambiguous Steps**: Instructions, procedures, or definitions that can be interpreted in multiple ways or lack concrete syntax/examples.
+- **Unguided Error Scenarios**: Commands, builds, tests, or workflows prone to failure with zero troubleshooting guidance or recovery steps.
+- **Outdated / Contradictory Information**: Sections that contradict current repository code, build batch scripts, solution structure, or standard conventions for the .NET 10 / React / TypeScript / OpenXML stack.
+
+### R2. Prioritized Gap List Deliverable
+Do NOT rewrite the documentation. Generate a structured, prioritized gap catalog saved to `audits/documentation_gap_audit.md` categorized strictly into three severity tiers:
+1. **Blocks the Reader** (Critical): Gaps, errors, or missing steps that prevent building, running, testing, or correctly understanding core architectural boundaries and deliverables.
+2. **Slows the Reader** (Moderate): Ambiguities, implicit assumptions, missing troubleshooting guidance, or incomplete workflow details that require trial-and-error, code diving, or guesswork.
+3. **Minor** (Low): Outdated non-critical references, dead links, formatting inconsistencies, or minor documentation omissions that do not impede execution.
+
+### R3. Structured Finding Schema & One-Sentence Fix Notes
+Every finding in the gap catalog must follow this structured schema:
+- **Finding ID & Title**: Short descriptive identifier (e.g., `[BLOCKER-01] Outdated Project Scope in PROJECT.md`).
+- **Document & Section Reference**: Exact file path and section heading (e.g., `PROJECT.md` § Feature Inventory).
+- **Gap Category**: One of `Missing Information`, `Unstated Assumption`, `Ambiguous Step`, `Unguided Error Scenario`, `Outdated / Contradictory`.
+- **Impact Description**: Concrete explanation of what happens when a fresh AI agent attempts to follow or rely on this section.
+- **One-Sentence Fix Note**: A concise, actionable 1-sentence instruction specifying the exact fix needed.
+
+## Acceptance Criteria
+
+### Audit Completeness
+- [ ] All 20+ listed markdown documents across root, `docs/`, `docs/decisions/`, `docs/operations/`, and `audits/` are explicitly audited.
+- [ ] Every finding is classified into one of the three severity levels (`Blocks the reader`, `Slows the reader`, `Minor`).
+- [ ] Every finding addresses at least one of the 5 target categories (missing info, unstated assumptions, ambiguous steps, unguided error scenarios, outdated/contradictory info).
+- [ ] Findings cite exact file paths and section headings.
+- [ ] Every finding includes a concise 1-sentence fix note without rewriting the original document.
+
+### Deliverable Format & Verification
+- [ ] Deliverable is written to `audits/documentation_gap_audit.md`.
+- [ ] Includes an Executive Summary with finding counts broken down by severity and document category.
+- [ ] Findings are ordered by severity (Blockers first, then Slowdowns, then Minor).
+

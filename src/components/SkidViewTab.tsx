@@ -36,45 +36,7 @@ interface SkidViewTabProps {
   onOpenResolutionCenter: () => void;
 }
 
-const SEGMENT_COLORS: Record<string, string> = {
-  AB: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30',
-  AF: 'bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30',
-  AT: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/30',
-  CC: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30',
-  DI: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30',
-  DP: 'bg-blue-600/15 text-blue-700 dark:text-blue-300 border-blue-600/30',
-  EB: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  EE: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-  EF: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30',
-  EH: 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30',
-  FD: 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30',
-  FE: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30',
-  FF: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-  FM: 'bg-teal-600/15 text-teal-700 dark:text-teal-300 border-teal-600/30',
-  FR: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30',
-  FS: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30',
-  HC: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30',
-  HD: 'bg-rose-600/15 text-rose-700 dark:text-rose-300 border-rose-600/30',
-  HF: 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-600/30',
-  HM: 'bg-cyan-600/15 text-cyan-700 dark:text-cyan-300 border-cyan-600/30',
-  HW: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  HX: 'bg-purple-600/15 text-purple-700 dark:text-purple-300 border-purple-600/30',
-  IB: 'bg-amber-600/15 text-amber-700 dark:text-amber-300 border-amber-600/30',
-  IC: 'bg-violet-600/15 text-violet-700 dark:text-violet-300 border-violet-600/30',
-  IG: 'bg-red-600/15 text-red-700 dark:text-red-300 border-red-600/30',
-  IO: 'bg-slate-300 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border-slate-400 dark:border-slate-600/60',
-  IP: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
-  MB: 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30',
-  PC: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
-  RF: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30',
-  TN: 'bg-slate-300 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border-slate-400 dark:border-slate-600/60',
-  UV: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/30',
-  VC: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30',
-  VE: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-  VB: 'bg-slate-300 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border-slate-400 dark:border-slate-600/60',
-  VP: 'bg-cyan-600/15 text-cyan-700 dark:text-cyan-300 border-cyan-600/30',
-  XA: 'bg-slate-200 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600/60'
-};
+import { SEGMENT_COLORS } from '../utils/segmentCatalog';
 
 export const SkidViewTab: React.FC<SkidViewTabProps> = ({
   skid,

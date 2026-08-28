@@ -8,19 +8,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="..\..\..\dist\**\*">
-      <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\..\..\resources\rulepack\**\*">
-      <Link>resources\rulepack\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -33,11 +20,6 @@
 
   <Target Name="ValidatePackagedAssets" BeforeTargets="PrepareForPublish">
     <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\dist\rule-editor.html')" Text="Run 'npm run build' before publishing; dist\rule-editor.html is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\manifest.json')" Text="Baseline Rule Pack manifest is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\rules.json')" Text="Baseline Rule Pack rules.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\template_map.json')" Text="Baseline Rule Pack template_map.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\approved_mappings.json')" Text="Baseline Rule Pack approved_mappings.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\template.xlsx')" Text="Baseline Rule Pack template.xlsx is missing." />
   </Target>
 
 </Project>

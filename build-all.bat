@@ -7,36 +7,10 @@ echo  AHU Detailing Verification - Full Architecture Build
 echo ======================================================================
 echo.
 
-REM 1. Locate and Check 64-bit .NET SDK
-if defined ProgramW6432 (
-    set "DOTNET_DIR=%ProgramW6432%\dotnet"
-) else (
-    set "DOTNET_DIR=%ProgramFiles%\dotnet"
-)
-
-if exist "!DOTNET_DIR!\dotnet.exe" (
-    set "PATH=!DOTNET_DIR!;!PATH!"
-    if not defined DOTNET_ROOT set "DOTNET_ROOT=!DOTNET_DIR!"
-)
-
-set "DOTNET_VER="
-for /f "tokens=1" %%i in ('dotnet --version 2^>nul') do (
-    if not defined DOTNET_VER set "DOTNET_VER=%%i"
-)
-
-if not defined DOTNET_VER (
-    echo [ERROR] .NET SDK is not installed, not in PATH, or not functional.
-    echo Please install the 64-bit .NET SDK [v8.0 or later]: https://dotnet.microsoft.com/download
-    pause
-    exit /b 1
-)
-
-REM 2. Check Node.js and npm
-where npm >nul 2>&1
+call "%~dp0scripts\init_env.bat"
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js / npm is not installed or not in PATH.
     pause
-    exit /b 1
+    exit /b %ERRORLEVEL%
 )
 
 REM 3. Frontend Web Assets Build

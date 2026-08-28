@@ -1,0 +1,23 @@
+<Project>
+  <ItemGroup Condition="'$(OutputType)' == 'WinExe'">
+    <Content Include="$(MSBuildThisFileDirectory)..\..\dist\**\*">
+      <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(MSBuildThisFileDirectory)..\..\resources\rulepack\**\*">
+      <Link>resources\rulepack\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="ValidateCommonPackagedAssets" BeforeTargets="PrepareForPublish" Condition="'$(OutputType)' == 'WinExe'">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\resources\rulepack\manifest.json')" Text="Baseline Rule Pack manifest is missing." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\resources\rulepack\rules.json')" Text="Baseline Rule Pack rules.json is missing." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\resources\rulepack\template_map.json')" Text="Baseline Rule Pack template_map.json is missing." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\resources\rulepack\approved_mappings.json')" Text="Baseline Rule Pack approved_mappings.json is missing." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\resources\rulepack\template.xlsx')" Text="Baseline Rule Pack template.xlsx is missing." />
+  </Target>
+</Project>
+

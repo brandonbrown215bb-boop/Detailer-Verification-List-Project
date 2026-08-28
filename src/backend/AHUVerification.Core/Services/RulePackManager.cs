@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AHUVerification.Core.Models;
+using AHUVerification.Core.Utils;
 
 namespace AHUVerification.Core.Services
 {
@@ -331,36 +332,17 @@ namespace AHUVerification.Core.Services
         private static string ComputeCanonicalJsonSha256(string content)
         {
             string canonicalText = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-            return ComputeSha256(Encoding.UTF8.GetBytes(canonicalText));
+            return CryptoUtils.ComputeSha256(canonicalText);
         }
 
         private static string ComputeBundleSha256(IReadOnlyDictionary<string, string> hashes)
         {
             string identity = string.Join("\n", RequiredArtifactNames.Select(name => $"{name}:{hashes[name].ToLowerInvariant()}"));
-            return ComputeSha256(Encoding.UTF8.GetBytes(identity));
+            return CryptoUtils.ComputeSha256(identity);
         }
 
-        private static string ComputeFileSha256(string filePath)
-        {
-            using var stream = File.OpenRead(filePath);
-            return ComputeSha256(stream);
-        }
+        private static string ComputeFileSha256(string filePath) => CryptoUtils.ComputeFileSha256(filePath);
 
-        private static string ComputeSha256(byte[] bytes)
-        {
-            using var sha = SHA256.Create();
-            return Convert.ToHexString(sha.ComputeHash(bytes)).ToLowerInvariant();
-        }
-
-        private static string ComputeSha256(Stream stream)
-        {
-            using var sha = SHA256.Create();
-            return Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
-        }
-
-        private static bool IsFullSha256(string value)
-        {
-            return !string.IsNullOrEmpty(value) && value.Length == 64 && value.All(Uri.IsHexDigit);
-        }
+        private static bool IsFullSha256(string value) => CryptoUtils.IsValidSha256(value);
     }
 }

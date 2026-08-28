@@ -5,39 +5,14 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
+using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
 using AHUVerification.Core.Services;
+using AHUVerification.Core.Utils;
 
 namespace AHUVerification.RuleEditor.Bridge
 {
-    public class BridgeRequest
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = "";
-
-        [JsonPropertyName("action")]
-        public string Action { get; set; } = "";
-
-        [JsonPropertyName("payload")]
-        public JsonElement Payload { get; set; }
-    }
-
-    public class BridgeResponse
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = "";
-
-        [JsonPropertyName("success")]
-        public bool Success { get; set; }
-
-        [JsonPropertyName("data")]
-        public object? Data { get; set; }
-
-        [JsonPropertyName("error")]
-        public string? Error { get; set; }
-    }
-
     public class RuleEditorBridgeHandler
     {
         private readonly Form _parentForm;
@@ -153,7 +128,7 @@ namespace AHUVerification.RuleEditor.Bridge
             if (!File.Exists(templatePath))
             {
                 // Look for repository fallback
-                string repoRoot = FindRepoRoot();
+                string repoRoot = PathUtils.FindRepoRoot();
                 string fallbackRes = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
                 if (File.Exists(fallbackRes)) templatePath = fallbackRes;
             }
@@ -169,7 +144,7 @@ namespace AHUVerification.RuleEditor.Bridge
             );
 
             // 2. Also publish to resources/rulepack in repository root if available
-            string repoDir = FindRepoRoot();
+            string repoDir = PathUtils.FindRepoRoot();
             string resRulepack = Path.Combine(repoDir, "resources", "rulepack");
 
             if (Directory.Exists(resRulepack) && !string.Equals(Path.GetFullPath(resRulepack), Path.GetFullPath(_rulePackPath), StringComparison.OrdinalIgnoreCase))
@@ -248,23 +223,6 @@ namespace AHUVerification.RuleEditor.Bridge
             }));
 
             return selectedPath != null ? new { folderPath = selectedPath } : null;
-        }
-
-        private static string FindRepoRoot()
-        {
-            string current = AppContext.BaseDirectory;
-            for (int i = 0; i < 10; i++)
-            {
-                if (File.Exists(Path.Combine(current, "Detailing Verification List.xlsx")) ||
-                    File.Exists(Path.Combine(current, "package.json")))
-                {
-                    return current;
-                }
-                var parent = Directory.GetParent(current);
-                if (parent == null) break;
-                current = parent.FullName;
-            }
-            return Directory.GetCurrentDirectory();
         }
     }
 }

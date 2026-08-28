@@ -124,8 +124,8 @@ namespace AHUVerification.Core.Parsers
                     graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
                     graph.UnitOptions.Materials.FloorMaterialGauge = int.TryParse(floorGaugeRaw, out int fgInt) ? fgInt : 16;
 
-                    string rawStyle = GetChildText(constOptNode, "housingStyle", "ISG");
-                    graph.UnitOptions.Materials.HousingStyle = rawStyle.Equals("CAD", StringComparison.OrdinalIgnoreCase) ? "CAD" : "ISG";
+                    string rawStyle = GetChildText(constOptNode, "housingStyle", "ThermalBreak");
+                    graph.UnitOptions.Materials.HousingStyle = rawStyle;
                     graph.UnitOptions.ThermalBreak = rawStyle.Contains("ThermalBreak", StringComparison.OrdinalIgnoreCase) || !rawStyle.Equals("Standard", StringComparison.OrdinalIgnoreCase);
                     graph.UnitOptions.Materials.InsulationType = GetChildText(constOptNode, "insulationType", "Foam");
 

@@ -9,16 +9,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\..\dist\**\*">
-      <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\..\..\resources\rulepack\**\*">
-      <Link>resources\rulepack\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Include="resources\bin\**\*">
       <Link>resources\bin\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -37,11 +27,6 @@
 
   <Target Name="ValidatePackagedAssets" BeforeTargets="PrepareForPublish">
     <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\dist\index.html')" Text="Run 'npm run build' before publishing; dist\index.html is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\manifest.json')" Text="Baseline Rule Pack manifest is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\rules.json')" Text="Baseline Rule Pack rules.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\template_map.json')" Text="Baseline Rule Pack template_map.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\approved_mappings.json')" Text="Baseline Rule Pack approved_mappings.json is missing." />
-    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\..\resources\rulepack\template.xlsx')" Text="Baseline Rule Pack template.xlsx is missing." />
     <Error Condition="!Exists('$(MSBuildProjectDirectory)\resources\bin\unpack32.exe')" Text="Native UPZ decompressor unpack32.exe is missing from resources\bin\." />
     <Error Condition="!Exists('$(MSBuildProjectDirectory)\resources\bin\ywunpack.dll')" Text="Native UPZ decompressor ywunpack.dll is missing from resources\bin\." />
   </Target>

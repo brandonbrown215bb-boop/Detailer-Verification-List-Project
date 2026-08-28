@@ -4,11 +4,11 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
-  X,
   Download,
   ShieldCheck,
   ArrowRight
 } from 'lucide-react';
+import { ModalShell } from './common/ModalShell';
 
 interface PreFlightModalProps {
   isOpen: boolean;
@@ -52,45 +52,15 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
   const isReadyForFinal = incompleteChecks.length === 0 && needsInputChecks.length === 0 && pendingFacts.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100">
-        {/* Header */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
-              isReadyForFinal
-                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-            }`}>
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                Pre-Flight Verification Audit
-                <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-semibold ${
-                  isReadyForFinal
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
-                }`}>
-                  {percentComplete}% Ready
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Auditing rule completion, special quotes table, and fact confirmations before deliverable export.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Pre-Flight Verification Audit"
+      subtitle="Auditing rule completion, special quotes table, and fact confirmations before deliverable export."
+      icon={<ShieldCheck className="w-5 h-5" />}
+      maxWidth="4xl"
+    >
+      <div className="space-y-6">
           {/* Readiness Summary Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-center">
@@ -222,7 +192,6 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      </ModalShell>
+    );
+  };

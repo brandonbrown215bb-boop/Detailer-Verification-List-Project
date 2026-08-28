@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AHUVerification.Core.Models;
+using AHUVerification.Core.Utils;
 
 namespace AHUVerification.Core.Services
 {
@@ -28,14 +28,14 @@ namespace AHUVerification.Core.Services
         {
             if (string.IsNullOrWhiteSpace(rulePackVersion))
                 throw new ArgumentException("A Rule Pack version is required.", nameof(rulePackVersion));
-            if (!IsFullSha256(rulePackSha))
+            if (!CryptoUtils.IsValidSha256(rulePackSha))
                 throw new ArgumentException("A full Rule Pack SHA-256 is required.", nameof(rulePackSha));
 
             string author = facts.TryGetValue("unit.detailer", out var af) ? af.Value?.ToString() ?? "Detailer" : "Detailer";
             string jobName = facts.TryGetValue("unit.jobName", out var jf) ? jf.Value?.ToString() ?? "AHU Project" : "AHU Project";
             string comNumber = facts.TryGetValue("unit.comNumber", out var cf) ? cf.Value?.ToString() ?? "COM-000000" : "COM-000000";
 
-            string xmlSha = ComputeSha256(rawXml);
+            string xmlSha = CryptoUtils.ComputeSha256(rawXml);
 
             return new DvlProjectFile
             {
@@ -114,29 +114,8 @@ namespace AHUVerification.Core.Services
                 ?? throw new InvalidOperationException("Failed to deserialize DVL project file.");
         }
 
-        public static string ComputeSha256(string content)
-        {
-            using var sha = SHA256.Create();
-            byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
-            return Convert.ToHexString(bytes).ToLowerInvariant();
-        }
+        public static string ComputeSha256(string content) => CryptoUtils.ComputeSha256(content);
 
-        public static string ComputeFileSha256(string filePath)
-        {
-            using var sha = SHA256.Create();
-            using var stream = File.OpenRead(filePath);
-            byte[] bytes = sha.ComputeHash(stream);
-            return Convert.ToHexString(bytes).ToLowerInvariant();
-        }
-
-        private static bool IsFullSha256(string value)
-        {
-            if (string.IsNullOrEmpty(value) || value.Length != 64) return false;
-            foreach (char character in value)
-            {
-                if (!Uri.IsHexDigit(character)) return false;
-            }
-            return true;
-        }
+        public static string ComputeFileSha256(string filePath) => CryptoUtils.ComputeFileSha256(filePath);
     }
 }

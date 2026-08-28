@@ -18,47 +18,7 @@ import {
   SurfaceDetail,
   SegmentSurfaces
 } from '../types';
-
-const SEGMENT_NAMES: Record<string, string> = {
-  AB: 'Air Blender',
-  AF: 'Angle Filter',
-  AT: 'Sound Attenuator',
-  CC: 'Coil (Cooling)',
-  DI: 'Diffuser',
-  DP: 'Discharge Plenum',
-  EB: 'External Bypass',
-  EE: 'Economizer',
-  EF: 'Filter Economizer',
-  EH: 'Electric Heat',
-  FD: 'Face Damper',
-  FE: 'Fan (Exhaust)',
-  FF: 'Flat Filter',
-  FM: 'Filter Mixing Box',
-  FR: 'Fan (Return)',
-  FS: 'Fan (Supply)',
-  HC: 'Coil (Heating)',
-  HD: 'Hot Deck',
-  HF: 'HEPA Filter',
-  HM: 'Humidifier',
-  HW: 'Heat Wheel',
-  HX: 'Heat Exchanger',
-  IB: 'Internal Bypass',
-  IC: 'Integrated Face and Bypass Coil',
-  IG: 'Indirect Fired Gas',
-  IO: 'Inlet / Outlet',
-  IP: 'Inlet Plenum',
-  MB: 'Mixing Box',
-  PC: 'Pipe Chase',
-  RF: 'High Efficiency Filter',
-  TN: 'Turning',
-  UV: 'UV Light',
-  VC: 'Vertical Coil',
-  VE: 'Vertical Economizer',
-  VB: 'Vestibule / Corridor',
-  VESTIBULE: 'Vestibule / Corridor',
-  VP: 'Vertical Plenum',
-  XA: 'Access'
-};
+import { SEGMENT_NAMES } from '../utils/segmentCatalog';
 
 function getElements(parent: Element | Document, tagName: string): Element[] {
   const list = parent.getElementsByTagName(tagName);

@@ -1,5 +1,5 @@
-import { ASTPredicate } from '../../types';
-import { VisualConditionGroup, VisualConditionLeaf, VisualConditionNode, ComparisonOperator } from '../types';
+import type { ASTPredicate } from '../../types/index.ts';
+import type { VisualConditionGroup, VisualConditionLeaf, VisualConditionNode, ComparisonOperator } from '../types.ts';
 
 let idCounter = 1;
 export function generateNodeId(): string {
