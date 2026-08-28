@@ -6,17 +6,30 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
   // ==========================================
   {
     key: 'unit.shellType',
-    label: 'Shell Type / Housing Style',
+    label: 'Shell Type',
     scope: 'Unit',
     category: 'Geometry & Casing',
     dataType: 'enum',
     enumOptions: [
-      { value: 'ThermalBreak', label: 'ThermalBreak (Standard 2" / 3" / 4")' },
-      { value: 'Standard', label: 'Standard (Non-Thermal Break)' },
-      { value: 'CustomThermalBreak', label: 'Custom Thermal Break' }
+      { value: 'ISG', label: 'ISG' },
+      { value: 'CAD', label: 'CAD' }
     ],
-    sampleValue: 'ThermalBreak',
-    description: 'The construction style of the unit casing panels.'
+    sampleValue: 'ISG',
+    description: 'Unit casing shell system design standard (ISG vs CAD).'
+  },
+  {
+    key: 'roof.roofPeak',
+    label: 'Roof Peak Orientation',
+    scope: 'Unit',
+    category: 'Geometry & Casing',
+    dataType: 'enum',
+    enumOptions: [
+      { value: 'Internal (Center)', label: 'Internal (Center)' },
+      { value: 'Left', label: 'Left' },
+      { value: 'Right', label: 'Right' }
+    ],
+    sampleValue: 'Internal (Center)',
+    description: 'Roof slope apex peak style for outdoor units.'
   },
   {
     key: 'unit.unitType',
@@ -56,12 +69,8 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
     label: 'Thermal Break Construction',
     scope: 'Unit',
     category: 'Geometry & Casing',
-    dataType: 'enum',
-    enumOptions: [
-      { value: 'Yes', label: 'Yes' },
-      { value: 'No', label: 'No' }
-    ],
-    sampleValue: 'Yes',
+    dataType: 'boolean',
+    sampleValue: true,
     description: 'Whether unit utilizes thermal-break framing profiles.'
   },
   {
@@ -120,12 +129,8 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
     label: 'Miami-Dade NOA Wind Certification',
     scope: 'Unit',
     category: 'Ratings & Compliance',
-    dataType: 'enum',
-    enumOptions: [
-      { value: 'NOA', label: 'NOA Certified' },
-      { value: 'N/A', label: 'N/A' }
-    ],
-    sampleValue: 'N/A',
+    dataType: 'boolean',
+    sampleValue: false,
     description: 'Notice of Acceptance hurricane rating.'
   },
   {

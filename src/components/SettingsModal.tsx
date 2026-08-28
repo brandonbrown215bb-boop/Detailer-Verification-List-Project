@@ -16,6 +16,7 @@ import {
   Folder,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   Sparkles
 } from 'lucide-react';
 import { desktopBridge } from '../services/desktopBridge';
@@ -36,6 +37,7 @@ interface SettingsModalProps {
   centralRulePackPath?: string;
   onUpdateCentralRulePackPath?: (path: string) => void;
   onRulePackUpdated?: (updatedBundle: any) => void;
+  onResetAllChanges?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -53,7 +55,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSharedExportPath,
   centralRulePackPath = '',
   onUpdateCentralRulePackPath,
-  onRulePackUpdated
+  onRulePackUpdated,
+  onResetAllChanges
 }) => {
   const [exportPath, setExportPath] = useState(sharedExportPath);
   const [rulePath, setRulePath] = useState(centralRulePackPath);
@@ -63,6 +66,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'updated' | 'uptodate' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isResetConfirming, setIsResetConfirming] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setExportPath(sharedExportPath || localStorage.getItem('dvl_shared_export_path') || '');
@@ -398,6 +403,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Section 6: Danger Zone / Destructive Operations */}
+          {onResetAllChanges && (
+            <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <label className="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                <span>Destructive Operations & Reset</span>
+              </label>
+
+              <div className="p-4 rounded-xl bg-red-500/5 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 text-red-500" />
+                      <span>Reset Project Changes</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Revert all manual fact overrides and checklist verifications back to original extracted XML state.
+                    </p>
+                  </div>
+
+                  {!isResetConfirming && (
+                    <button
+                      onClick={() => setIsResetConfirming(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-colors shadow-sm shrink-0"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Reset Changes</span>
+                    </button>
+                  )}
+                </div>
+
+                {isResetConfirming && (
+                  <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-red-300 dark:border-red-700 space-y-2 animate-in fade-in duration-150">
+                    <p className="text-xs text-red-700 dark:text-red-300 font-medium">
+                      ⚠️ Are you sure? This will discard all manual overrides and reset all verification checklists to their unverified parsed state. This action cannot be undone.
+                    </p>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setIsResetConfirming(false)}
+                        className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          onResetAllChanges();
+                          setIsResetConfirming(false);
+                          setResetSuccessMessage('Project successfully reset to original XML state.');
+                          setTimeout(() => setResetSuccessMessage(null), 4000);
+                        }}
+                        className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm"
+                      >
+                        Yes, Reset All Changes
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {resetSuccessMessage && (
+                  <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{resetSuccessMessage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

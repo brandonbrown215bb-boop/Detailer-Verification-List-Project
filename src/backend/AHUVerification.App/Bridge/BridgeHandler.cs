@@ -42,9 +42,6 @@ namespace AHUVerification.App.Bridge
     public class BridgeHandler
     {
         private readonly Form _parentForm;
-        private readonly NormalizedXmlParser _parser = new();
-        private readonly FactExtractor _factExtractor = new();
-        private readonly AstRuleEvaluator _evaluator = new();
         private readonly DvlProjectManager _projectManager = new();
         private readonly OpenXmlTemplatePatcher _patcher = new();
         private readonly RulePackManager _rulePackManager = new();
@@ -97,7 +94,6 @@ namespace AHUVerification.App.Bridge
                     "openFileDialog" => ShowOpenFileDialog(),
                     "saveFileDialog" => ShowSaveFileDialog(req.Payload),
                     "extractUpz" => ExtractUpz(req.Payload),
-                    "parseXml" => ParseXml(req.Payload),
                     "saveDvl" => SaveDvl(req.Payload),
                     "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
                     "openFile" => OpenFile(req.Payload),
@@ -232,30 +228,6 @@ namespace AHUVerification.App.Bridge
                     orderRevision = bundle.OrderRevision,
                     manifest = bundle.Manifest
                 }
-            };
-        }
-
-        private object ParseXml(JsonElement payload)
-        {
-            string xmlContent = payload.GetProperty("xmlContent").GetString() ?? "";
-            var graph = _parser.Parse(xmlContent);
-
-            OrderRevisionData? orderRev = null;
-            if (payload.TryGetProperty("orderRevision", out var ordEl) && ordEl.ValueKind == JsonValueKind.Object)
-            {
-                orderRev = JsonSerializer.Deserialize<OrderRevisionData>(ordEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-
-            var facts = _factExtractor.ExtractFacts(graph, orderRev);
-
-            List<RuleDefinition> rules = _activeRulePack?.Rules ?? new();
-            var checklists = _evaluator.GenerateChecklists(rules, graph, facts);
-
-            return new
-            {
-                normalizedGraph = graph,
-                factRegistry = facts,
-                checklistInstances = checklists
             };
         }
 

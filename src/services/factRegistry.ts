@@ -205,11 +205,13 @@ export function extractFactsFromGraph(
   // ==========================================
   // 3. Housing, Casing, Materials & Roof Domain
   // ==========================================
+  const rawHousingStyle = graph.unitOptions.materials.housingStyle || 'ISG';
+  const shellTypeVal = rawHousingStyle.toUpperCase() === 'CAD' ? 'CAD' : 'ISG';
   facts['unit.shellType'] = createFact(
     'unit.shellType',
     'Shell Type',
     'Housing & Materials',
-    graph.unitOptions.materials.housingStyle || 'ThermalBreak',
+    shellTypeVal,
     'Known',
     'Authoritative',
     '/root:AHU/unitOptions/defaultConstructionOptions/housingStyle'
@@ -365,11 +367,16 @@ export function extractFactsFromGraph(
     '/root:AHU/roofOptions/hasSlopedRoof'
   );
 
+  const rawPeak = graph.roofOptions.roofPeak || 'Internal (Center)';
+  const normalizedPeak = rawPeak.toLowerCase().includes('center') || rawPeak.toLowerCase().includes('internal')
+    ? 'Internal (Center)'
+    : (rawPeak.toLowerCase() === 'left' ? 'Left' : (rawPeak.toLowerCase() === 'right' ? 'Right' : rawPeak));
+
   facts['roof.roofPeak'] = createFact(
     'roof.roofPeak',
     'Roof Peak Style',
     'Housing & Materials',
-    graph.roofOptions.roofPeak || 'Center',
+    normalizedPeak,
     'Derived',
     'Authoritative',
     '/root:AHU/roofOptions/roofSlopeHighSide'
@@ -493,7 +500,7 @@ export function extractFactsFromGraph(
     'unit.isSeismic',
     'Seismic Certification Required',
     'Ratings & Options',
-    graph.unitOptions.isSeismic,
+    !!graph.unitOptions.isSeismic,
     'Derived',
     'Authoritative',
     '/root:AHU/unitOptions/unitConstructionType'
@@ -503,7 +510,7 @@ export function extractFactsFromGraph(
     'unit.noa',
     'Notice of Acceptance (NOA)',
     'Ratings & Options',
-    graph.unitOptions.noa,
+    !!graph.unitOptions.noa,
     'Derived',
     'Authoritative',
     '/root:AHU/unitOptions/unitConstructionType'

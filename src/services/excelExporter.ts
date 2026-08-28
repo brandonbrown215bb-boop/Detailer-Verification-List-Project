@@ -30,18 +30,25 @@ export function exportToExcel(
   vlData.push(['', 'DATE:', facts['unit.date']?.value || new Date().toISOString().split('T')[0]]);
   vlData.push(['', 'JOB NAME:', facts['unit.jobName']?.value || '']);
   vlData.push(['', 'COM#:', facts['unit.comNumber']?.value || '']);
-  vlData.push(['', 'SHELL TYPE:', facts['unit.shellType']?.value || '']);
-  vlData.push(['', 'UNIT TYPE:', facts['unit.unitType']?.value || '']);
+  const formatBool = (val: any, defaultIfNull: string = 'No') => {
+    if (val === true || val === 'true' || val === 'Yes') return 'Yes';
+    if (val === false || val === 'false' || val === 'No') return 'No';
+    if (val === null || val === undefined || val === '') return defaultIfNull;
+    return String(val);
+  };
+
+  vlData.push(['', 'SHELL TYPE:', facts['unit.shellType']?.value || 'ISG']);
+  vlData.push(['', 'UNIT TYPE:', facts['unit.unitType']?.value || 'Outdoor']);
   vlData.push(['', 'BASE HEIGHT:', `${facts['unit.baseHeight']?.value || 10}"`]);
   vlData.push(['', 'WALL THICKNESS:', `${facts['unit.wallThickness']?.value || 2}"`]);
-  vlData.push(['', 'THERMAL BREAK:', facts['unit.thermalBreak']?.value || 'Yes']);
-  vlData.push(['', 'ROOF PEAK:', String(facts['unit.roofPeak']?.value || '')]);
-  vlData.push(['', 'CURBREST:', facts['unit.curbrest']?.value || 'Yes']);
-  vlData.push(['', 'NOA:', facts['unit.noa']?.value || 'N/A']);
-  vlData.push(['', 'SEISMIC:', facts['unit.isSeismic']?.value ? 'Yes' : 'No']);
+  vlData.push(['', 'THERMAL BREAK:', formatBool(facts['unit.thermalBreak']?.value, 'Yes')]);
+  vlData.push(['', 'ROOF PEAK:', String(facts['roof.roofPeak']?.value || facts['unit.roofPeak']?.value || '')]);
+  vlData.push(['', 'CURBREST:', formatBool(facts['unit.curbrest']?.value, 'No')]);
+  vlData.push(['', 'NOA:', formatBool(facts['unit.noa']?.value, 'No')]);
+  vlData.push(['', 'SEISMIC:', formatBool(facts['unit.isSeismic']?.value, 'No')]);
   vlData.push(['', 'LOCATION:', facts['unit.location']?.value || 'Outdoor']);
-  vlData.push(['', 'KNOCKDOWN:', facts['unit.knockdown']?.value || 'No']);
-  vlData.push(['', 'UTL:', facts['unit.utl']?.value || 'No']);
+  vlData.push(['', 'KNOCKDOWN:', formatBool(facts['unit.knockdown']?.value, 'No')]);
+  vlData.push(['', 'UTL:', formatBool(facts['unit.hasUTL']?.value || facts['unit.utl']?.value, 'No')]);
   vlData.push(['', 'LINER MATERIAL', facts['unit.linerMaterial']?.value || 'STL GALV', 'GA', facts['unit.linerGauge']?.value || 22]);
   vlData.push(['', 'SKIN MATERIAL', facts['unit.skinMaterial']?.value || 'STL GALV PPC', 'GA', facts['unit.skinGauge']?.value || 18]);
   vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);

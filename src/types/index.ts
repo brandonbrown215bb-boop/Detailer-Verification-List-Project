@@ -154,6 +154,25 @@ export interface UnitBase {
   dimensions: { x: number; y: number; z: number; xLength: number; yLength: number; zLength: number };
 }
 
+export interface SurfaceDetail {
+  exteriorMaterial: string;
+  exteriorGauge: number;
+  exteriorPaint?: string;
+  interiorMaterial: string;
+  interiorGauge: number;
+  interiorPaint?: string;
+  housingThickness: number;
+}
+
+export interface SegmentSurfaces {
+  left?: SurfaceDetail;
+  front?: SurfaceDetail;
+  right?: SurfaceDetail;
+  rear?: SurfaceDetail;
+  top?: SurfaceDetail;
+  bottom?: SurfaceDetail;
+}
+
 export interface Segment {
   id: string;
   tag: string;
@@ -181,6 +200,7 @@ export interface Segment {
     interiorPaintType?: string;
     floorPaintType?: string;
   };
+  surfaces?: SegmentSurfaces;
   internals: string[];
   hasFrontChannel: boolean;
   hasRearChannel: boolean;

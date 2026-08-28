@@ -7,24 +7,18 @@ import {
   RuleDefinition,
   SpecialQuote,
   Fact,
-  CheckStatus,
-  SkidViewMode
+  CheckStatus
 } from '../types';
 import {
-  Box,
   Layers,
   CheckCircle2,
   AlertTriangle,
-  MessageSquare,
   Sparkles,
   ChevronDown,
   ChevronUp,
   Filter,
   Check,
-  LayoutGrid,
-  Table,
-  Keyboard,
-  Info
+  Keyboard
 } from 'lucide-react';
 import { InlineFactPopover } from './InlineFactPopover';
 
@@ -95,31 +89,18 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
   onUpdateFact,
   onOpenResolutionCenter
 }) => {
-  const [viewMode, setViewMode] = useState<SkidViewMode>(() => {
-    return (localStorage.getItem('dvl_skid_view_mode') as SkidViewMode) || 'grid';
-  });
   const [filterStatus, setFilterStatus] = useState<string>('applicable');
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // Category accordions start collapsed by default in Card View
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedRowKeys, setExpandedRowKeys] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    localStorage.setItem('dvl_skid_view_mode', viewMode);
-  }, [viewMode]);
-
-  // Get segments and bases on this skid
   const skidSegments = segments.filter(s => skid.segmentIds.includes(s.id));
   const skidBases = bases.filter(b => skid.baseIds.includes(b.id));
-
-  // Get linked SQs for this skid
   const linkedSqs = sqItems.filter(sq => sq.linkedSkidId === skid.id);
-
-  // Get checklist instances for this skid
   const skidChecklists = checklists.filter(c => c.scopeTargetId === skid.id);
 
-  // Flattened visible items list for roving keyboard navigation
   const visibleItems = useMemo(() => {
     const list: Array<{ rule: RuleDefinition; instance: ChecklistInstance }> = [];
     skidChecklists.forEach((instance) => {
@@ -136,30 +117,43 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
     return list;
   }, [skidChecklists, rules, filterStatus]);
 
-  // Group by category
   const categorizedRules = useMemo(() => {
-    const map: Record<string, Array<{ rule: RuleDefinition; instance: ChecklistInstance }>> = {};
-    visibleItems.forEach(item => {
+    const map: Record<string, Array<{ rule: RuleDefinition; instance: ChecklistInstance; globalIndex: number }>> = {};
+    visibleItems.forEach((item, globalIndex) => {
       const cat = item.rule.category;
       if (!map[cat]) map[cat] = [];
-      map[cat].push(item);
+      map[cat].push({ ...item, globalIndex });
     });
     return map;
   }, [visibleItems]);
 
   const toggleCategory = (cat: string) => {
-    setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+    setExpandedCategories(prev => {
+      const isCurrentlyExpanded = prev[cat] !== false;
+      return { ...prev, [cat]: !isCurrentlyExpanded };
+    });
   };
 
-  // Keyboard navigation for Space, N, C, ArrowUp, ArrowDown
+  const expandAllCategories = () => {
+    const all: Record<string, boolean> = {};
+    Object.keys(categorizedRules).forEach(cat => { all[cat] = true; });
+    setExpandedCategories(all);
+  };
+
+  const collapseAllCategories = () => {
+    const all: Record<string, boolean> = {};
+    Object.keys(categorizedRules).forEach(cat => { all[cat] = false; });
+    setExpandedCategories(all);
+  };
+
+  const toggleRowExpansion = (instanceKey: string) => {
+    setExpandedRowKeys(prev => ({ ...prev, [instanceKey]: !prev[instanceKey] }));
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is actively typing in an input or textarea
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (visibleItems.length === 0) return;
 
       if (e.key === 'ArrowDown' || e.key === 'j') {
@@ -171,32 +165,25 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
       } else if (e.key === ' ') {
         e.preventDefault();
         const active = visibleItems[focusedIndex];
-        if (active) {
-          const isPassed = active.instance.status === 'Passed';
-          onUpdateChecklistStatus(active.instance.instanceKey, isPassed ? 'Incomplete' : 'Passed');
-        }
+        if (active) onUpdateChecklistStatus(active.instance.instanceKey, active.instance.status === 'Passed' ? 'Incomplete' : 'Passed');
       } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         const active = visibleItems[focusedIndex];
-        if (active && active.rule.allowNA) {
-          const isNA = active.instance.status === 'NA';
-          onUpdateChecklistStatus(active.instance.instanceKey, isNA ? 'Incomplete' : 'NA');
-        }
+        if (active && active.rule.allowNA) onUpdateChecklistStatus(active.instance.instanceKey, active.instance.status === 'NA' ? 'Incomplete' : 'NA');
       } else if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
         const active = visibleItems[focusedIndex];
-        if (active) {
-          const input = commentInputRefs.current[active.instance.instanceKey];
-          input?.focus();
-        }
+        if (active) commentInputRefs.current[active.instance.instanceKey]?.focus();
+      } else if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        const active = visibleItems[focusedIndex];
+        if (active) toggleRowExpansion(active.instance.instanceKey);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visibleItems, focusedIndex, onUpdateChecklistStatus]);
 
-  // Progress metrics for this skid
   const applicableChecks = skidChecklists.filter(c => c.applicability === 'Applicable');
   const passedCount = applicableChecks.filter(c => c.status === 'Passed').length;
   const needsInputCount = skidChecklists.filter(c => c.applicability === 'NeedsInput').length;
@@ -204,7 +191,6 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 text-slate-800 dark:text-slate-100">
-      {/* Skid Summary Card */}
       <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
@@ -215,20 +201,12 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
               <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
                 {skid.name} Overview & Verification
               </h2>
-              {percentComplete === 100 && (
-                <span className="flex items-center gap-1 text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30 whitespace-nowrap">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  100% Complete
-                </span>
-              )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 font-mono">
               Boundary: {skidSegments.length} Segments • {skidBases.length} Bases • Dimensions: {skid.dimensions.length}"L × {skid.dimensions.width}"W × {skid.dimensions.height}"H
             </p>
           </div>
-
           <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-950/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
-            {/* Progress Badge */}
             <div className="text-right">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Checks Passed</div>
               <div className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400">
@@ -239,19 +217,13 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
           </div>
         </div>
 
-        {/* Segments Palette (Segment weights removed) */}
         <div>
-          <div className="text-[11px] font-bold font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-            Mapped Segments ({skidSegments.length}):
-          </div>
+          <div className="text-[11px] font-bold font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Mapped Segments ({skidSegments.length}):</div>
           <div className="flex flex-wrap gap-2">
             {skidSegments.map((seg) => {
               const colorClass = SEGMENT_COLORS[seg.typeCode] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
               return (
-                <div
-                  key={seg.id}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono shadow-sm ${colorClass}`}
-                >
+                <div key={seg.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono shadow-sm ${colorClass}`}>
                   <span className="font-bold text-sm">{seg.typeCode}</span>
                   <span className="opacity-90 font-medium">{seg.name}</span>
                 </div>
@@ -260,7 +232,6 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
           </div>
         </div>
 
-        {/* Linked SQs Banner */}
         {linkedSqs.length > 0 && (
           <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/25 text-xs">
             <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold font-mono mb-1.5">
@@ -269,32 +240,23 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
             </div>
             <ul className="space-y-1 list-disc list-inside text-slate-700 dark:text-slate-300">
               {linkedSqs.map(sq => (
-                <li key={sq.id}>
-                  <span className="font-mono font-bold text-amber-700 dark:text-amber-300">Slot {sq.slot}:</span> {sq.text}
-                </li>
+                <li key={sq.id}><span className="font-mono font-bold text-amber-700 dark:text-amber-300">Slot {sq.slot}:</span> {sq.text}</li>
               ))}
             </ul>
           </div>
         )}
       </div>
 
-      {/* Filter and View Mode Action Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Left Filter Chips */}
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="w-4 h-4 text-slate-400 shrink-0" />
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-semibold">Filter:</span>
           {['all', 'incomplete', 'needsInput', 'applicable', 'passed'].map((st) => (
             <button
               key={st}
-              onClick={() => {
-                setFilterStatus(st);
-                setFocusedIndex(0);
-              }}
+              onClick={() => { setFilterStatus(st); setFocusedIndex(0); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium whitespace-nowrap transition-all ${
-                filterStatus === st
-                  ? 'bg-blue-600 text-white shadow-sm font-bold'
-                  : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800'
+                filterStatus === st ? 'bg-blue-600 text-white shadow-sm font-bold' : 'bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
               }`}
             >
               {st === 'all' && `All (${skidChecklists.length})`}
@@ -306,402 +268,283 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
           ))}
         </div>
 
-        {/* Right Tools: View Mode Toggle & Keyboard Hint */}
         <div className="flex items-center gap-3">
-          {/* Keyboard Navigation Tooltip / Badge */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[11px] font-mono border border-slate-200 dark:border-slate-700">
             <Keyboard className="w-3.5 h-3.5 text-blue-500" />
-            <span>Nav: <kbd className="font-bold">↑/↓</kbd> • Check: <kbd className="font-bold">Space</kbd> • N/A: <kbd className="font-bold">N</kbd> • Note: <kbd className="font-bold">C</kbd></span>
+            <span>Nav: <kbd className="font-bold">↑/↓</kbd> • Check: <kbd className="font-bold">Space</kbd> • N/A: <kbd className="font-bold">N</kbd> • Note: <kbd className="font-bold">C</kbd> • Detail: <kbd className="font-bold">Enter</kbd></span>
           </div>
-
-          {/* View Mode Toggle: Cards vs Dense Spreadsheet Grid */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
-            <button
-              onClick={() => setViewMode('cards')}
-              title="Rich Card View (detailed context and AST traces)"
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                viewMode === 'cards'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-white shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Card View</span>
-            </button>
-
-            <button
-              onClick={() => setViewMode('grid')}
-              title="Dense Spreadsheet Grid (high-density rapid review)"
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-white shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Table className="w-3.5 h-3.5" />
-              <span>Dense Grid</span>
-            </button>
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700">
+            <button onClick={expandAllCategories} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600">Expand All</button>
+            <button onClick={collapseAllCategories} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600">Collapse All</button>
           </div>
         </div>
       </div>
 
-      {/* --- RENDER VIEW 1: DENSE SPREADSHEET GRID VIEW --- */}
-      {viewMode === 'grid' && (
-        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
-                  <th className="py-3 px-3 w-12 text-center">#</th>
-                  <th className="py-3 px-3 w-40">Rule ID / Scope</th>
-                  <th className="py-3 px-4 min-w-[280px]">Verification Description</th>
-                  <th className="py-3 px-3 w-36 text-center">Applicability</th>
-                  <th className="py-3 px-3 w-28 text-center">Check Off</th>
-                  <th className="py-3 px-3 w-16 text-center">N/A</th>
-                  <th className="py-3 px-4 min-w-[220px]">Detailer Comments</th>
-                  <th className="py-3 px-3 w-28 text-center">SQ Link</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
-                {visibleItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500 font-mono">
-                      No verification checks match the active filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  visibleItems.map(({ rule, instance }, index) => {
-                    const isFocused = focusedIndex === index;
-                    const isPassed = instance.status === 'Passed';
-                    const isNA = instance.status === 'NA' || instance.applicability === 'NotApplicable';
-                    const isNeedsInput = instance.applicability === 'NeedsInput';
-
-                    // Find linked SQ for this rule
-                    const linkedRuleSq = sqItems.find(s => s.linkedRuleId === rule.id);
-
-                    return (
-                      <tr
-                        key={instance.instanceKey}
-                        onClick={() => setFocusedIndex(index)}
-                        className={`transition-colors ${
-                          isFocused ? 'bg-blue-50/70 dark:bg-blue-950/30 ring-1 ring-inset ring-blue-500' : ''
-                        } ${
-                          isPassed
-                            ? 'bg-emerald-50/30 dark:bg-emerald-950/15'
-                            : isNeedsInput
-                            ? 'bg-amber-50/40 dark:bg-amber-950/20'
-                            : isNA
-                            ? 'opacity-60 bg-slate-50/50 dark:bg-slate-950/20'
-                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                        }`}
-                      >
-                        {/* Index */}
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-400 dark:text-slate-500 text-[11px]">
-                          {index + 1}
-                        </td>
-
-                        {/* Rule ID & Scope */}
-                        <td className="py-2.5 px-3 font-mono">
-                          <div className="font-bold text-slate-900 dark:text-white text-xs">{rule.id}</div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {rule.category} {rule.subgroup ? `• ${rule.subgroup}` : ''}
-                          </div>
-                        </td>
-
-                        {/* Description */}
-                        <td className="py-2.5 px-4">
-                          <div className="text-slate-800 dark:text-slate-200 text-xs font-medium line-clamp-2">
-                            {rule.text}
-                          </div>
-                          {rule.reference && (
-                            <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                              Ref: {rule.reference}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Applicability */}
-                        <td className="py-2.5 px-3 text-center">
-                          {instance.applicability === 'Applicable' && (
-                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
-                              Applicable
-                            </span>
-                          )}
-                          {instance.applicability === 'NotApplicable' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                              N/A
-                            </span>
-                          )}
-                          {instance.applicability === 'NeedsInput' && (
-                            <div className="flex justify-center">
-                              <InlineFactPopover
-                                factKey={rule.requiredFacts[0] || 'unknown'}
-                                fact={facts[rule.requiredFacts[0]]}
-                                onUpdateFact={onUpdateFact}
-                                triggerButtonText="Needs Input"
-                                compact={true}
-                              />
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Check Off Button */}
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => onUpdateChecklistStatus(instance.instanceKey, isPassed ? 'Incomplete' : 'Passed')}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                              isPassed
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
-                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                            }`}
-                          >
-                            <Check className="w-3 h-3" />
-                            <span>{isPassed ? 'Verified' : 'Check'}</span>
-                          </button>
-                        </td>
-
-                        {/* N/A Toggle */}
-                        <td className="py-2.5 px-3 text-center">
-                          {rule.allowNA ? (
-                            <button
-                              onClick={() => onUpdateChecklistStatus(instance.instanceKey, isNA ? 'Incomplete' : 'NA')}
-                              className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
-                                isNA && !isPassed
-                                  ? 'bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold'
-                                  : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                              }`}
-                            >
-                              N/A
-                            </button>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-700 font-mono">-</span>
-                          )}
-                        </td>
-
-                        {/* Comments */}
-                        <td className="py-2.5 px-4">
-                          <input
-                            ref={el => (commentInputRefs.current[instance.instanceKey] = el)}
-                            type="text"
-                            value={instance.detailerComment}
-                            onChange={(e) => onUpdateChecklistComment(instance.instanceKey, e.target.value)}
-                            placeholder="Add comment..."
-                            className="w-full text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-slate-900 dark:text-slate-200 placeholder-slate-400 outline-none transition-colors"
-                          />
-                        </td>
-
-                        {/* SQ Badge */}
-                        <td className="py-2.5 px-3 text-center">
-                          {linkedRuleSq ? (
-                            <span
-                              title={`Slot ${linkedRuleSq.slot}: ${linkedRuleSq.text}`}
-                              className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap inline-block"
-                            >
-                              SQ-{linkedRuleSq.slot}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-700 font-mono">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+      {visibleItems.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center text-slate-400 dark:text-slate-500 font-mono shadow-sm">
+          No verification checks match the active filter criteria.
         </div>
-      )}
-
-      {/* --- RENDER VIEW 2: RICH CARD VIEW --- */}
-      {viewMode === 'cards' && (
-        <div className="space-y-4">
+      ) : (
+        <div className="space-y-5">
           {Object.entries(categorizedRules).map(([category, items]) => {
-            const isExpanded = !!expandedCategories[category];
+            const isExpanded = expandedCategories[category] !== false;
             const catApplicable = items.filter(i => i.instance.applicability === 'Applicable');
             const catPassed = catApplicable.filter(i => i.instance.status === 'Passed').length;
             const catNeedsInput = items.filter(i => i.instance.applicability === 'NeedsInput').length;
+            const distinctSubgroups = Array.from(new Set(items.map(i => i.rule.subgroup || '')));
+            const hasMultipleSubgroups = distinctSubgroups.length > 1 || (distinctSubgroups.length === 1 && !!distinctSubgroups[0]);
+            const subgroupMap: Record<string, typeof items> = {};
+            items.forEach(item => {
+              const sgKey = item.rule.subgroup || 'Standard Items';
+              if (!subgroupMap[sgKey]) subgroupMap[sgKey] = [];
+              subgroupMap[sgKey].push(item);
+            });
 
             return (
-              <div key={category} className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                {/* Category Header Accordion */}
-                <button
-                  onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 border-b border-slate-200 dark:border-slate-800 transition-colors text-left"
-                >
+              <div key={category} className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-all">
+                <button onClick={() => toggleCategory(category)} className="w-full flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-left">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
-                      {category} Verification Group
-                    </span>
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                      ({items.length} rules)
-                    </span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">{category} Verification Group</span>
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">({items.length} rules)</span>
                   </div>
-
                   <div className="flex items-center gap-3">
                     {catNeedsInput > 0 && (
-                      <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 whitespace-nowrap">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                        {catNeedsInput} Needs Input
-                      </span>
+                      <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300"><AlertTriangle className="w-3.5 h-3.5" />{catNeedsInput} Needs Input</span>
                     )}
-                    <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      {catPassed} / {catApplicable.length} Complete
-                    </span>
-                    {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+                    <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-300">{catPassed} / {catApplicable.length} Complete</span>
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
                 </button>
 
-                {/* Rules List */}
                 {isExpanded && (
-                  <div className="p-4 space-y-3 divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {items.map(({ rule, instance }) => {
-                      const globalIdx = visibleItems.findIndex(v => v.instance.instanceKey === instance.instanceKey);
-                      const isFocused = focusedIndex === globalIdx;
-                      const isPassed = instance.status === 'Passed';
-                      const isNA = instance.status === 'NA' || instance.applicability === 'NotApplicable';
-                      const isNeedsInput = instance.applicability === 'NeedsInput';
-
-                      // Find linked SQ for this rule
-                      const linkedRuleSq = sqItems.find(s => s.linkedRuleId === rule.id);
-
-                      return (
-                        <div
-                          key={instance.instanceKey}
-                          onClick={() => setFocusedIndex(globalIdx)}
-                          className={`pt-3 first:pt-0 flex flex-col md:flex-row md:items-start justify-between gap-4 p-4 rounded-xl transition-all ${
-                            isFocused ? 'ring-2 ring-blue-500 shadow-md' : ''
-                          } ${
-                            isPassed
-                              ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30'
-                              : isNeedsInput
-                              ? 'bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30'
-                              : isNA
-                              ? 'opacity-60 bg-slate-50 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-800/50'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border border-slate-100 dark:border-slate-800/40'
-                          }`}
-                        >
-                          {/* Rule Description & AST Trace */}
-                          <div className="space-y-2 flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold whitespace-nowrap">
-                                {rule.id}
-                              </span>
-                              {rule.subgroup && (
-                                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                  {rule.subgroup}
-                                </span>
-                              )}
-
-                              {/* Applicability Badge */}
-                              {instance.applicability === 'Applicable' && (
-                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
-                                  Applicable
-                                </span>
-                              )}
-                              {instance.applicability === 'NotApplicable' && (
-                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                  Not Applicable
-                                </span>
-                              )}
-                              {instance.applicability === 'NeedsInput' && (
-                                <span className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40 whitespace-nowrap">
-                                  <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                  Needs Input
-                                </span>
-                              )}
-
-                              {/* Linked SQ Badge */}
-                              {linkedRuleSq && (
-                                <span
-                                  title={`Linked to Special Quote Slot ${linkedRuleSq.slot}: ${linkedRuleSq.text}`}
-                                  className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 whitespace-nowrap"
-                                >
-                                  <Layers className="w-3 h-3 text-amber-500" />
-                                  <span>SQ Slot {linkedRuleSq.slot}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Rule Text */}
-                            <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
-                              {rule.text}
-                            </p>
-
-                            {/* Reference Standard */}
-                            {rule.reference && (
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5">
-                                <span>Ref:</span>
-                                <span className="text-slate-700 dark:text-slate-300 font-medium">{rule.reference}</span>
-                              </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                          <th className="py-2.5 px-3 w-14 text-center"># / Info</th>
+                          <th className="py-2.5 px-3 w-36">Rule ID</th>
+                          <th className="py-2.5 px-4 min-w-[280px]">Verification Description</th>
+                          <th className="py-2.5 px-3 w-32 text-center">Applicability</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Check Off</th>
+                          <th className="py-2.5 px-3 w-16 text-center">N/A</th>
+                          <th className="py-2.5 px-4 min-w-[220px]">Detailer Comments</th>
+                          <th className="py-2.5 px-3 w-24 text-center">SQ Link</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
+                        {Object.entries(subgroupMap).map(([subgroupName, subItems]) => (
+                          <React.Fragment key={subgroupName}>
+                            {hasMultipleSubgroups && (
+                              <tr className="bg-slate-100/70 dark:bg-slate-800/50 border-t border-b border-slate-200 dark:border-slate-800">
+                                <td colSpan={8} className="py-1.5 px-4 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    <span>{subgroupName}</span>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
+                            {subItems.map(({ rule, instance, globalIndex }) => {
+                              const isFocused = focusedIndex === globalIndex;
+                              const isPassed = instance.status === 'Passed';
+                              const isNA = instance.status === 'NA' || instance.applicability === 'NotApplicable';
+                              const isNeedsInput = instance.applicability === 'NeedsInput';
+                              const isRowExpanded = !!expandedRowKeys[instance.instanceKey];
+                              const linkedRuleSq = sqItems.find(s => s.linkedRuleId === rule.id);
 
-                            {/* AST Evaluation Trace */}
-                            <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-0.5">
-                              <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-300 font-semibold text-[10px]">
-                                <Sparkles className="w-3 h-3 text-blue-500" />
-                                <span>Rule Logic Trace:</span>
-                              </div>
-                              <p className="text-slate-700 dark:text-slate-300">{instance.applicabilityReason}</p>
-                            </div>
-
-                            {/* Detailer Comment Box */}
-                            <div className="flex items-center gap-2 pt-1">
-                              <MessageSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <input
-                                ref={el => (commentInputRefs.current[instance.instanceKey] = el)}
-                                type="text"
-                                value={instance.detailerComment}
-                                onChange={(e) => onUpdateChecklistComment(instance.instanceKey, e.target.value)}
-                                placeholder="Add detailer comment / verification note..."
-                                className="flex-1 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 focus:border-blue-500 rounded-lg px-3 py-1.5 text-slate-900 dark:text-slate-200 placeholder-slate-400 outline-none transition-colors shadow-inner"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Status Checkbox Controls */}
-                          <div className="flex items-center gap-2 shrink-0 md:flex-col md:items-end">
-                            {isNeedsInput ? (
-                              <InlineFactPopover
-                                factKey={rule.requiredFacts[0] || 'unknown'}
-                                fact={facts[rule.requiredFacts[0]]}
-                                onUpdateFact={onUpdateFact}
-                                triggerButtonText="Resolve Fact"
-                              />
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                {/* Mark Verified / Passed */}
-                                <button
-                                  onClick={() => onUpdateChecklistStatus(instance.instanceKey, isPassed ? 'Incomplete' : 'Passed')}
-                                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                                    isPassed
-                                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30'
-                                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
-                                  }`}
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>{isPassed ? 'Verified' : 'Check Off'}</span>
-                                </button>
-
-                                {/* Mark N/A */}
-                                {rule.allowNA && (
-                                  <button
-                                    onClick={() => onUpdateChecklistStatus(instance.instanceKey, isNA ? 'Incomplete' : 'NA')}
-                                    className={`px-3 py-2 rounded-lg text-xs font-mono font-semibold whitespace-nowrap transition-all ${
-                                      isNA && !isPassed
-                                        ? 'bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-slate-200 border border-slate-400 dark:border-slate-600 font-bold'
-                                        : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700/80'
+                              return (
+                                <React.Fragment key={instance.instanceKey}>
+                                  <tr
+                                    onClick={() => setFocusedIndex(globalIndex)}
+                                    className={`transition-colors ${
+                                      isFocused
+                                        ? 'bg-blue-50/70 dark:bg-blue-950/30 ring-1 ring-inset ring-blue-500'
+                                        : ''
+                                    } ${
+                                      isPassed
+                                        ? 'bg-emerald-50/30 dark:bg-emerald-950/15'
+                                        : isNeedsInput
+                                        ? 'bg-amber-50/40 dark:bg-amber-950/20'
+                                        : isNA
+                                        ? 'opacity-60 bg-slate-50/50 dark:bg-slate-950/20'
+                                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                                     }`}
                                   >
-                                    N/A
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                                    <td className="py-2 px-3 text-center text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleRowExpansion(instance.instanceKey);
+                                          }}
+                                          title={isRowExpanded ? 'Collapse logic details' : 'Expand AST logic trace & full reference'}
+                                          className={`p-1 rounded transition-colors ${
+                                            isRowExpanded
+                                              ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300'
+                                              : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60'
+                                          }`}
+                                        >
+                                          {isRowExpanded ? (
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                          ) : (
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                          )}
+                                        </button>
+                                        <span>{globalIndex + 1}</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3 font-mono text-xs font-bold text-slate-900 dark:text-slate-100">
+                                      {rule.id}
+                                    </td>
+                                    <td
+                                      className="py-2 px-4 cursor-pointer text-slate-800 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                      onClick={() => toggleRowExpansion(instance.instanceKey)}
+                                      title="Click to toggle full details"
+                                    >
+                                      <div className="line-clamp-2">{rule.text}</div>
+                                      {rule.reference && (
+                                        <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                          Ref: {rule.reference}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
+                                      {instance.applicability === 'Applicable' && (
+                                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
+                                          Applicable
+                                        </span>
+                                      )}
+                                      {instance.applicability === 'NotApplicable' && (
+                                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                          N/A
+                                        </span>
+                                      )}
+                                      {instance.applicability === 'NeedsInput' && (
+                                        <div className="flex justify-center">
+                                          <InlineFactPopover
+                                            factKey={rule.requiredFacts[0] || 'unknown'}
+                                            fact={facts[rule.requiredFacts[0]]}
+                                            onUpdateFact={onUpdateFact}
+                                            triggerButtonText="Needs Input"
+                                            compact={true}
+                                          />
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
+                                      <button
+                                        onClick={() =>
+                                          onUpdateChecklistStatus(
+                                            instance.instanceKey,
+                                            isPassed ? 'Incomplete' : 'Passed'
+                                          )
+                                        }
+                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                          isPassed
+                                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                                            : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                        }`}
+                                      >
+                                        <Check className="w-3 h-3" />
+                                        <span>{isPassed ? 'Verified' : 'Check'}</span>
+                                      </button>
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
+                                      {rule.allowNA ? (
+                                        <button
+                                          onClick={() =>
+                                            onUpdateChecklistStatus(
+                                              instance.instanceKey,
+                                              isNA ? 'Incomplete' : 'NA'
+                                            )
+                                          }
+                                          className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
+                                            isNA && !isPassed
+                                              ? 'bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold'
+                                              : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                          }`}
+                                        >
+                                          N/A
+                                        </button>
+                                      ) : (
+                                        <span className="text-slate-300 dark:text-slate-700 font-mono">-</span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-4">
+                                      <input
+                                        ref={el => (commentInputRefs.current[instance.instanceKey] = el)}
+                                        type="text"
+                                        value={instance.detailerComment}
+                                        onChange={(e) =>
+                                          onUpdateChecklistComment(instance.instanceKey, e.target.value)
+                                        }
+                                        placeholder="Add comment..."
+                                        className="w-full text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-slate-900 dark:text-slate-200 placeholder-slate-400 outline-none transition-colors"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
+                                      {linkedRuleSq ? (
+                                        <span
+                                          title={`Slot ${linkedRuleSq.slot}: ${linkedRuleSq.text}`}
+                                          className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap inline-block"
+                                        >
+                                          SQ-{linkedRuleSq.slot}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-300 dark:text-slate-700 font-mono">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {isRowExpanded && (
+                                    <tr className="bg-slate-50/90 dark:bg-slate-950/70 border-t border-b border-slate-200 dark:border-slate-800">
+                                      <td colSpan={8} className="p-4">
+                                        <div className="space-y-3 pl-4 sm:pl-6 border-l-2 border-blue-500">
+                                          <div>
+                                            <div className="text-[10px] font-bold font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                              Full Verification Requirement ({rule.id}):
+                                            </div>
+                                            <p className="text-xs text-slate-800 dark:text-slate-200 font-medium mt-1 leading-relaxed">
+                                              {rule.text}
+                                            </p>
+                                          </div>
+                                          {rule.reference && (
+                                            <div className="text-xs font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                              <span className="font-semibold text-slate-700 dark:text-slate-300">Reference:</span>
+                                              <span>{rule.reference}</span>
+                                            </div>
+                                          )}
+                                          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-1.5 shadow-sm">
+                                            <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-bold text-xs">
+                                              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                                              <span>AST Rule Logic Trace:</span>
+                                            </div>
+                                            <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                                              {instance.applicabilityReason || 'Rule evaluated against unit normalized graph.'}
+                                            </p>
+                                            {instance.factTraces && instance.factTraces.length > 0 && (
+                                              <div className="flex flex-wrap gap-1.5 pt-2 mt-1.5 border-t border-slate-100 dark:border-slate-800">
+                                                {instance.factTraces.map(f => (
+                                                  <span
+                                                    key={f.key}
+                                                    className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px]"
+                                                  >
+                                                    <span className="font-bold">{f.label}:</span> {String(f.value)}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

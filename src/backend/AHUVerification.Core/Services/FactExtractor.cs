@@ -305,7 +305,7 @@ namespace AHUVerification.Core.Services
                 "unit.shellType",
                 "Shell Type",
                 "Housing & Materials",
-                graph.UnitOptions.Materials.HousingStyle,
+                graph.UnitOptions.Materials.HousingStyle.Equals("CAD", StringComparison.OrdinalIgnoreCase) ? "CAD" : "ISG",
                 FactStatus.Known,
                 FactConfidence.Authoritative,
                 "/root:AHU/unitOptions/defaultConstructionOptions/housingStyle"
@@ -462,11 +462,16 @@ namespace AHUVerification.Core.Services
                 "/root:AHU/roofOptions/hasSlopedRoof"
             );
 
+            string peakVal = graph.RoofOptions.RoofPeak;
+            if (peakVal.Equals("Center", StringComparison.OrdinalIgnoreCase) || peakVal.Equals("Internal", StringComparison.OrdinalIgnoreCase))
+            {
+                peakVal = "Internal (Center)";
+            }
             facts["roof.roofPeak"] = CreateFact(
                 "roof.roofPeak",
                 "Roof Peak Style",
                 "Housing & Materials",
-                graph.RoofOptions.RoofPeak,
+                peakVal,
                 FactStatus.Derived,
                 FactConfidence.Authoritative,
                 "/root:AHU/roofOptions/roofSlopeHighSide"

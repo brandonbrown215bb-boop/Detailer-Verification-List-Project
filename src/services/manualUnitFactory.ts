@@ -563,6 +563,31 @@ export function createManualUnit(config: ManualUnitConfig): {
       insulationType: item.casing?.insulationType || casingMaterials.insulationType
     };
 
+    const defaultSurface = {
+      exteriorMaterial: casing.exteriorMaterial,
+      exteriorGauge: casing.exteriorGauge,
+      exteriorPaint: 'None',
+      interiorMaterial: casing.interiorMaterial,
+      interiorGauge: casing.interiorGauge,
+      interiorPaint: 'None',
+      housingThickness: casing.housingThickness
+    };
+
+    const surfaces = {
+      left: { ...defaultSurface },
+      front: { ...defaultSurface },
+      right: { ...defaultSurface },
+      rear: { ...defaultSurface },
+      top: { ...defaultSurface },
+      bottom: {
+        ...defaultSurface,
+        exteriorGauge: casingMaterials.floorMaterialGauge || 16,
+        interiorMaterial: casingMaterials.floorMaterialType || casing.interiorMaterial,
+        interiorGauge: casingMaterials.floorMaterialGauge || 16,
+        housingThickness: 0
+      }
+    };
+
     segments.push({
       id: segId,
       tag: `segment_${item.typeCode}`,
@@ -581,6 +606,7 @@ export function createManualUnit(config: ManualUnitConfig): {
         zLength: segWidth
       },
       casing,
+      surfaces,
       internals: item.internals || [],
       hasFrontChannel: item.hasFrontChannel || false,
       hasRearChannel: item.hasRearChannel || false,
@@ -719,7 +745,7 @@ export function createManualUnit(config: ManualUnitConfig): {
   facts = overrideFact(facts, 'unit.comNumber', config.comNumber || 'COM-000000', config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.detailer', config.detailerName || 'Detailer', config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.unitType', config.unitType || 'Outdoor', config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.shellType', config.housingStyle || 'ThermalBreak', config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'unit.shellType', 'ISG', config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.wallThickness', defaultWallThickness, config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.baseHeight', defaultBaseHeight, config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.totalStaticPressure', totalStaticPressure, config.detailerName, 'Manual Project Creation');

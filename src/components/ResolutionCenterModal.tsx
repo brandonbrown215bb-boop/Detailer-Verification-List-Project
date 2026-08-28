@@ -167,16 +167,16 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                         {isNoa && (
                           <>
                             <button
-                              onClick={() => onUpdateFact('unit.noa', 'N/A', 'Detailer', 'Standard No NOA')}
+                              onClick={() => onUpdateFact('unit.noa', false, 'Detailer', 'Standard Non-NOA')}
                               className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 transition-colors"
                             >
-                              N/A (Standard Unit)
+                              Standard (No NOA)
                             </button>
                             <button
-                              onClick={() => onUpdateFact('unit.noa', 'NOA 21-0428.03', 'Detailer', 'Miami-Dade Approved')}
+                              onClick={() => onUpdateFact('unit.noa', true, 'Detailer', 'NOA Certified')}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
                             >
-                              NOA 21-0428.03
+                              NOA Certified
                             </button>
                           </>
                         )}

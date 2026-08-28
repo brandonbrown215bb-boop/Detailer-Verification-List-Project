@@ -19,7 +19,7 @@ namespace AHUVerification.Tests
             var extractor = new FactExtractor();
             var facts = extractor.ExtractFacts(graph);
 
-            string rulePackDir = TestPathHelper.GetRepoPath("src/rulepack");
+            string rulePackDir = TestPathHelper.GetRepoPath("resources/rulepack");
             var rulePackManager = new RulePackManager();
             var bundle = rulePackManager.LoadFromDirectory(rulePackDir);
 

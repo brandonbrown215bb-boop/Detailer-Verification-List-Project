@@ -14,7 +14,9 @@ import {
   CoilConfig,
   FilterConfig,
   HeatWheelConfig,
-  TestingOptions
+  TestingOptions,
+  SurfaceDetail,
+  SegmentSurfaces
 } from '../types';
 
 const SEGMENT_NAMES: Record<string, string> = {
@@ -108,6 +110,31 @@ function parseDimensions(geom: Element | null | undefined) {
   };
 }
 
+function parseSurfaceNode(
+  constOpt: Element | undefined | null,
+  surfaceTag: string,
+  defaults: {
+    extMat: string;
+    extGa: number;
+    extPaint: string;
+    intMat: string;
+    intGa: number;
+    intPaint: string;
+    housingThk: number;
+  }
+): SurfaceDetail {
+  const node = constOpt ? getElements(constOpt, surfaceTag)[0] : null;
+  return {
+    exteriorMaterial: node ? getChildText(node, 'exteriorMaterialType', defaults.extMat) : defaults.extMat,
+    exteriorGauge: node ? getChildNumber(node, 'exteriorMaterialGauge', defaults.extGa) : defaults.extGa,
+    exteriorPaint: node ? getChildText(node, 'exteriorPaintType', defaults.extPaint) : defaults.extPaint,
+    interiorMaterial: node ? getChildText(node, 'interiorMaterialType', defaults.intMat) : defaults.intMat,
+    interiorGauge: node ? getChildNumber(node, 'interiorMaterialGauge', defaults.intGa) : defaults.intGa,
+    interiorPaint: node ? getChildText(node, 'interiorPaintType', defaults.intPaint) : defaults.intPaint,
+    housingThickness: node ? getChildNumber(node, 'housingThickness', defaults.housingThk) : defaults.housingThk
+  };
+}
+
 export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   if (!xmlContent || typeof xmlContent !== 'string') {
     throw new Error('Empty XML input received.');
@@ -195,11 +222,11 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const roofNode = roofNodes[0];
   const hasSlopedRoof = roofNode ? getChildBool(roofNode, 'hasSlopedRoof', true) : true;
   const highSide = roofNode ? getChildText(roofNode, 'roofSlopeHighSide', 'Internal') : 'Internal';
-  let roofPeak = 'Center';
+  let roofPeak = 'Internal (Center)';
   if (highSide.toLowerCase() === 'left') roofPeak = 'Left';
   else if (highSide.toLowerCase() === 'right') roofPeak = 'Right';
-  else if (highSide.toLowerCase() === 'internal') roofPeak = 'Center';
-  else roofPeak = hasSlopedRoof ? 'Center' : 'Flat';
+  else if (highSide.toLowerCase() === 'internal' || highSide.toLowerCase() === 'center') roofPeak = 'Internal (Center)';
+  else roofPeak = hasSlopedRoof ? 'Internal (Center)' : 'Flat';
 
   const roofOptions = {
     hasSlopedRoof,
@@ -289,21 +316,56 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
       const isTiered = isUpperDeck && !hasBaseBelowAtSameY;
       const tierLevel = isTiered ? 2 : 1;
 
-      // Casing detail
+      // Casing and Surface details
       const constOpt = getElements(segEl, 'constructionOptions')[0];
+      const defaultMats = {
+        extMat: unitOptions.materials.exteriorMaterialType,
+        extGa: unitOptions.materials.exteriorMaterialGauge,
+        extPaint: unitOptions.materials.exteriorPaintType || 'None',
+        intMat: unitOptions.materials.interiorMaterialType,
+        intGa: unitOptions.materials.interiorMaterialGauge,
+        intPaint: unitOptions.materials.interiorPaintType || 'None',
+        housingThk: unitOptions.materials.housingThicknessFront || 2.0
+      };
+
+      const frontSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Front', defaultMats);
+      const rearSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Rear', defaultMats);
+      const leftSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Left', defaultMats);
+      const rightSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Right', defaultMats);
+      const topSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Top', {
+        ...defaultMats,
+        housingThk: unitOptions.materials.housingThicknessTop || defaultMats.housingThk
+      });
+      const bottomSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Bottom', {
+        ...defaultMats,
+        extGa: unitOptions.materials.floorMaterialGauge || 16,
+        intMat: unitOptions.materials.floorMaterialType || defaultMats.intMat,
+        intGa: unitOptions.materials.floorMaterialGauge || 16,
+        housingThk: 0
+      });
+
+      const surfaces: SegmentSurfaces = {
+        front: frontSurfDetail,
+        rear: rearSurfDetail,
+        left: leftSurfDetail,
+        right: rightSurfDetail,
+        top: topSurfDetail,
+        bottom: bottomSurfDetail
+      };
+
       const frontSurf = constOpt ? getElements(constOpt, 'surfaceDetail_Front')[0] : null;
       const segFloorGaugeRaw = frontSurf ? getChildText(frontSurf, 'floorMaterialGauge', unitOptions.materials.floorMaterialGaugeString) : unitOptions.materials.floorMaterialGaugeString;
       const segFloorGaugeInt = parseInt(segFloorGaugeRaw, 10) || unitOptions.materials.floorMaterialGauge;
 
       const casing = {
-        exteriorMaterial: frontSurf ? getChildText(frontSurf, 'exteriorMaterialType', unitOptions.materials.exteriorMaterialType) : unitOptions.materials.exteriorMaterialType,
-        exteriorGauge: frontSurf ? getChildNumber(frontSurf, 'exteriorMaterialGauge', unitOptions.materials.exteriorMaterialGauge) : unitOptions.materials.exteriorMaterialGauge,
-        interiorMaterial: frontSurf ? getChildText(frontSurf, 'interiorMaterialType', unitOptions.materials.interiorMaterialType) : unitOptions.materials.interiorMaterialType,
-        interiorGauge: frontSurf ? getChildNumber(frontSurf, 'interiorMaterialGauge', unitOptions.materials.interiorMaterialGauge) : unitOptions.materials.interiorMaterialGauge,
+        exteriorMaterial: frontSurfDetail.exteriorMaterial,
+        exteriorGauge: frontSurfDetail.exteriorGauge,
+        interiorMaterial: frontSurfDetail.interiorMaterial,
+        interiorGauge: frontSurfDetail.interiorGauge,
         floorMaterial: unitOptions.materials.floorMaterialType,
         floorGauge: segFloorGaugeInt,
         floorGaugeString: segFloorGaugeRaw,
-        housingThickness: frontSurf ? getChildNumber(frontSurf, 'housingThickness', unitOptions.materials.housingThicknessFront) : (unitOptions.materials.housingThicknessFront || 2.0),
+        housingThickness: frontSurfDetail.housingThickness,
         housingThicknessFront: unitOptions.materials.housingThicknessFront,
         housingThicknessTop: unitOptions.materials.housingThicknessTop,
         housingStyle: constOpt ? getChildText(constOpt, 'housingStyle', unitOptions.materials.housingStyle) : unitOptions.materials.housingStyle,
@@ -429,6 +491,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
         handOrientation,
         dimensions,
         casing,
+        surfaces,
         internals,
         hasFrontChannel: getChildBool(segEl, 'hasFrontChannel', false),
         hasRearChannel: getChildBool(segEl, 'hasRearChannel', false),

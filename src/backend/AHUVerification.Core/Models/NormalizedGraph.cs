@@ -520,6 +520,51 @@ namespace AHUVerification.Core.Models
         public string FloorPaintType { get; set; } = "None";
     }
 
+    public class SurfaceDetail
+    {
+        [JsonPropertyName("exteriorMaterial")]
+        public string ExteriorMaterial { get; set; } = "STL GALV PPC";
+
+        [JsonPropertyName("exteriorGauge")]
+        public int ExteriorGauge { get; set; } = 18;
+
+        [JsonPropertyName("exteriorPaint")]
+        public string ExteriorPaint { get; set; } = "None";
+
+        [JsonPropertyName("interiorMaterial")]
+        public string InteriorMaterial { get; set; } = "STL GALV";
+
+        [JsonPropertyName("interiorGauge")]
+        public int InteriorGauge { get; set; } = 22;
+
+        [JsonPropertyName("interiorPaint")]
+        public string InteriorPaint { get; set; } = "None";
+
+        [JsonPropertyName("housingThickness")]
+        public double HousingThickness { get; set; } = 2.0;
+    }
+
+    public class SegmentSurfaces
+    {
+        [JsonPropertyName("left")]
+        public SurfaceDetail Left { get; set; } = new();
+
+        [JsonPropertyName("front")]
+        public SurfaceDetail Front { get; set; } = new();
+
+        [JsonPropertyName("right")]
+        public SurfaceDetail Right { get; set; } = new();
+
+        [JsonPropertyName("rear")]
+        public SurfaceDetail Rear { get; set; } = new();
+
+        [JsonPropertyName("top")]
+        public SurfaceDetail Top { get; set; } = new();
+
+        [JsonPropertyName("bottom")]
+        public SurfaceDetail? Bottom { get; set; }
+    }
+
     public class Segment
     {
         [JsonPropertyName("id")]
@@ -551,6 +596,9 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("casing")]
         public CasingDetail Casing { get; set; } = new();
+
+        [JsonPropertyName("surfaces")]
+        public SegmentSurfaces Surfaces { get; set; } = new();
 
         [JsonPropertyName("internals")]
         public List<string> Internals { get; set; } = new();

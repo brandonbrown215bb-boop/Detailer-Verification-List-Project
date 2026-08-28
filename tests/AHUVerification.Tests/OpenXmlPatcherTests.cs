@@ -29,7 +29,7 @@ namespace AHUVerification.Tests
             extractor.OverrideFact(facts, "unit.comNumber", "COM-842910", "Test", "Test");
 
             var rulePackManager = new RulePackManager();
-            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
 
             var evaluator = new AstRuleEvaluator();
             var checklists = evaluator.GenerateChecklists(bundle.Rules, graph, facts);
@@ -177,7 +177,7 @@ namespace AHUVerification.Tests
         {
             string templatePath = TestPathHelper.GetRepoPath("Detailing Verification List.xlsx");
             var rulePackManager = new RulePackManager();
-            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
 
             var graph = new NormalizedXmlGraph
             {

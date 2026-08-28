@@ -1,4 +1,3 @@
-src/rulepack/*.json text eol=lf
 resources/rulepack/*.json text eol=lf
-src/rulepack/*.xlsx binary
 resources/rulepack/*.xlsx binary
+

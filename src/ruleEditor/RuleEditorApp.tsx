@@ -8,10 +8,10 @@ import { PublishModal } from './components/PublishModal';
 import { desktopBridge } from '../services/desktopBridge';
 
 // Baseline fallback rule pack imports for web / development
-import initialRules from '../rulepack/rules.json';
-import initialTemplateMap from '../rulepack/template_map.json';
-import initialApprovedMappings from '../rulepack/approved_mappings.json';
-import initialManifest from '../rulepack/manifest.json';
+import initialRules from '../../resources/rulepack/rules.json';
+import initialTemplateMap from '../../resources/rulepack/template_map.json';
+import initialApprovedMappings from '../../resources/rulepack/approved_mappings.json';
+import initialManifest from '../../resources/rulepack/manifest.json';
 
 export const RuleEditorApp: React.FC = () => {
   const [baselineRules, setBaselineRules] = useState<RuleDefinition[]>(() => initialRules as RuleDefinition[]);

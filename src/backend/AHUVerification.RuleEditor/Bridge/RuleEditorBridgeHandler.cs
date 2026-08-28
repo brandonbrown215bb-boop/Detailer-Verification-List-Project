@@ -42,8 +42,6 @@ namespace AHUVerification.RuleEditor.Bridge
     {
         private readonly Form _parentForm;
         private readonly RulePackManager _rulePackManager = new();
-        private readonly NormalizedXmlParser _xmlParser = new();
-        private readonly FactExtractor _factExtractor = new();
         private readonly string _rulePackPath;
         private RulePackBundle? _activeRulePack;
 
@@ -90,7 +88,6 @@ namespace AHUVerification.RuleEditor.Bridge
                     "getAppInfo" => GetAppInfo(),
                     "getRulePack" => GetRulePack(),
                     "publishRulePack" => PublishRulePack(req.Payload),
-                    "parseSampleXml" => ParseSampleXml(req.Payload),
                     "openFileDialog" => ShowOpenFileDialog(),
                     "selectFolderDialog" => ShowSelectFolderDialog(),
                     _ => throw new NotSupportedException($"Unsupported Rule Editor bridge action: {req.Action}")
@@ -158,9 +155,7 @@ namespace AHUVerification.RuleEditor.Bridge
                 // Look for repository fallback
                 string repoRoot = FindRepoRoot();
                 string fallbackRes = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
-                string fallbackSrc = Path.Combine(repoRoot, "src", "rulepack", "template.xlsx");
                 if (File.Exists(fallbackRes)) templatePath = fallbackRes;
-                else if (File.Exists(fallbackSrc)) templatePath = fallbackSrc;
             }
 
             // 1. Publish directly into local packaged rule pack directory
@@ -173,15 +168,10 @@ namespace AHUVerification.RuleEditor.Bridge
                 templatePath
             );
 
-            // 2. Also publish to src/rulepack and resources/rulepack in repository root if available
+            // 2. Also publish to resources/rulepack in repository root if available
             string repoDir = FindRepoRoot();
-            string srcRulepack = Path.Combine(repoDir, "src", "rulepack");
             string resRulepack = Path.Combine(repoDir, "resources", "rulepack");
 
-            if (Directory.Exists(srcRulepack) && !string.Equals(Path.GetFullPath(srcRulepack), Path.GetFullPath(_rulePackPath), StringComparison.OrdinalIgnoreCase))
-            {
-                _rulePackManager.PublishToDirectory(srcRulepack, version, rules, templateMap, approvedMappings, templatePath);
-            }
             if (Directory.Exists(resRulepack) && !string.Equals(Path.GetFullPath(resRulepack), Path.GetFullPath(_rulePackPath), StringComparison.OrdinalIgnoreCase))
             {
                 _rulePackManager.PublishToDirectory(resRulepack, version, rules, templateMap, approvedMappings, templatePath);
@@ -210,19 +200,6 @@ namespace AHUVerification.RuleEditor.Bridge
                 version = published.Manifest.Version,
                 bundleSha256 = published.Manifest.BundleSha256,
                 totalRules = published.Rules.Count
-            };
-        }
-
-        private object ParseSampleXml(JsonElement payload)
-        {
-            string rawXml = payload.GetProperty("xmlContent").GetString() ?? "";
-            var graph = _xmlParser.Parse(rawXml);
-            var facts = _factExtractor.ExtractFacts(graph);
-
-            return new
-            {
-                graph,
-                facts
             };
         }
 

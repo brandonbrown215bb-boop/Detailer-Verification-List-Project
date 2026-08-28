@@ -187,7 +187,22 @@ namespace AHUVerification.Core.Services
                     }
                     else if (facts.TryGetValue(factKey, out var fact))
                     {
-                        val = fact.Value?.ToString() ?? "";
+                        if (fact.Value is bool b)
+                        {
+                            val = b ? "Yes" : "No";
+                        }
+                        else if (fact.Value is System.Text.Json.JsonElement je && (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False))
+                        {
+                            val = je.GetBoolean() ? "Yes" : "No";
+                        }
+                        else if (bool.TryParse(fact.Value?.ToString(), out bool bParsed))
+                        {
+                            val = bParsed ? "Yes" : "No";
+                        }
+                        else
+                        {
+                            val = fact.Value?.ToString() ?? "";
+                        }
                     }
                     SetCellValue(coord.Cell, val);
                 }

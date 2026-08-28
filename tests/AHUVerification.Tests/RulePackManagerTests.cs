@@ -19,7 +19,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void LoadFromDirectory_ValidatesCompleteBundle()
         {
-            var bundle = new RulePackManager().LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+            var bundle = new RulePackManager().LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
 
             Assert.True(bundle.IsValid);
             Assert.Equal(64, bundle.Manifest.BundleSha256.Length);
@@ -98,7 +98,7 @@ namespace AHUVerification.Tests
         public void PublishToDirectory_GeneratesValidBundle_WithAccurateBundleSha()
         {
             var manager = new RulePackManager();
-            var baseline = manager.LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+            var baseline = manager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
 
             string tempPublishDir = Path.Combine(Path.GetTempPath(), $"ahu-published-rulepack-{Guid.NewGuid():N}");
             try
@@ -146,7 +146,7 @@ namespace AHUVerification.Tests
         public void CheckRemoteUpdate_DetectsNewerVersionAndMissingRemote()
         {
             var manager = new RulePackManager();
-            string baselinePath = TestPathHelper.GetRepoPath("src/rulepack");
+            string baselinePath = TestPathHelper.GetRepoPath("resources/rulepack");
             var baseline = manager.LoadFromDirectory(baselinePath);
 
             // 1. Identical directory check -> No update
@@ -173,7 +173,7 @@ namespace AHUVerification.Tests
             string destination = Path.Combine(Path.GetTempPath(), $"ahu-rulepack-{Guid.NewGuid():N}");
             Directory.CreateDirectory(destination);
 
-            foreach (string sourcePath in Directory.GetFiles(TestPathHelper.GetRepoPath("src/rulepack")))
+            foreach (string sourcePath in Directory.GetFiles(TestPathHelper.GetRepoPath("resources/rulepack")))
             {
                 File.Copy(sourcePath, Path.Combine(destination, Path.GetFileName(sourcePath)));
             }

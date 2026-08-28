@@ -6,12 +6,17 @@ import {
   Check,
   Plus,
   Trash2,
-  Building2,
   Ruler,
   Cpu,
   GripVertical,
-  RefreshCw,
-  Box
+  ShieldCheck,
+  Box,
+  Wrench,
+  Zap,
+  CheckCircle2,
+  X,
+  ChevronDown,
+  Sliders
 } from 'lucide-react';
 import { InlineFactPopover } from './InlineFactPopover';
 import { SegmentMaterialsTable } from './SegmentMaterialsTable';
@@ -26,9 +31,17 @@ interface GeneralUnitTabProps {
   onUpdateSqItems: (items: SpecialQuote[]) => void;
   onUpdateComments: (comments: string) => void;
   onOpenResolutionCenter: () => void;
-  onResetAllChanges?: () => void;
   onOpenDetailerModal?: () => void;
 }
+
+const ONLY_SHOW_WHEN_TRUE_FACTS = [
+  { key: 'unit.curbrest', label: 'Curbrest Option', icon: CheckCircle2, description: 'Roof curb rest channel' },
+  { key: 'unit.isTiered', label: 'Tiered Unit', icon: Layers, description: 'Multi-level upper tier segments' },
+  { key: 'unit.isStacked', label: 'Stacked Unit', icon: Box, description: 'Upper base stacked unit assembly' },
+  { key: 'unit.knockdown', label: 'Knockdown Construction', icon: Wrench, description: 'Ships field-disassembled' },
+  { key: 'unit.noa', label: 'NOA Certified', icon: ShieldCheck, description: 'Miami-Dade Notice of Acceptance' },
+  { key: 'unit.isSeismic', label: 'Seismic Certified', icon: Zap, description: 'IBC / OSHPD seismic compliance' }
+];
 
 export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   facts,
@@ -40,13 +53,12 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   onUpdateSqItems,
   onUpdateComments,
   onOpenResolutionCenter,
-  onResetAllChanges,
   onOpenDetailerModal
 }) => {
   const [newSqText, setNewSqText] = useState('');
   const [newSqScope, setNewSqScope] = useState('all');
   const [draggedSlot, setDraggedSlot] = useState<number | null>(null);
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isAddOptionOpen, setIsAddOptionOpen] = useState(false);
 
   // Helper to render provenance badge
   const renderProvenanceBadge = (fact: Fact) => {
@@ -177,33 +189,24 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     setDraggedSlot(null);
   };
 
-  // Order & Identity Facts (Product Type removed)
-  const orderFacts = [
-    'unit.jobName',
-    'unit.comNumber',
-    'unit.orderNumber',
-    'unit.tag',
-    'unit.detailer',
-    'unit.date'
-  ];
+  const unitTypeVal = String(facts['unit.unitType']?.value || graph.unitOptions.unitType || 'Outdoor');
+  const isOutdoor = unitTypeVal !== 'Indoor';
 
-  // Unit Specifications Facts (combines geometry & ratings cleanly)
+  // Unit Specifications Facts (core geometry & general casing specs)
   const unitSpecFacts = [
     'unit.unitType',
     'unit.shellType',
     'unit.thermalBreak',
     'unit.baseHeight',
     'unit.lipHeight',
-    'unit.curbrest',
-    'unit.isTiered',
-    'unit.isStacked',
-    'roof.roofPeak',
-    'unit.knockdown',
-    'unit.shippingProtection',
-    'unit.noa',
-    'unit.isSeismic',
+    ...(isOutdoor ? ['roof.roofPeak'] : []),
     'unit.totalStaticPressure'
   ];
+
+  const activeFeatures = ONLY_SHOW_WHEN_TRUE_FACTS.filter(item => {
+    const fact = facts[item.key];
+    return Boolean(fact?.value === true || fact?.value === 'true' || fact?.value === 'Yes');
+  });
 
   const renderField = (key: string) => {
     const fact = facts[key];
@@ -238,7 +241,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           )}
         </div>
 
-        {/* Value Input / Modal Trigger & Provenance Badge */}
+        {/* Value Input / Custom Controls & Provenance Badge */}
         <div className="flex items-center gap-2 shrink-0">
           {isDetailerField && onOpenDetailerModal ? (
             <button
@@ -248,6 +251,47 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             >
               {fact.value ? String(fact.value) : <span className="text-amber-500 font-bold">Set Detailer Name</span>}
             </button>
+          ) : key === 'unit.unitType' ? (
+            <select
+              value={String(fact.value || 'Outdoor')}
+              onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
+            >
+              <option value="Outdoor">Outdoor</option>
+              <option value="Indoor">Indoor</option>
+            </select>
+          ) : key === 'unit.shellType' ? (
+            <select
+              value={String(fact.value || 'ISG').toUpperCase() === 'CAD' ? 'CAD' : 'ISG'}
+              onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
+            >
+              <option value="ISG">ISG</option>
+              <option value="CAD">CAD</option>
+            </select>
+          ) : key === 'unit.thermalBreak' ? (
+            <button
+              type="button"
+              onClick={() => onUpdateFact(key, !Boolean(fact.value), 'Detailer')}
+              className={`w-44 sm:w-52 px-3 py-1.5 text-xs font-mono rounded-md border text-center font-bold transition-all shadow-inner flex items-center justify-between ${
+                Boolean(fact.value)
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-750'
+              }`}
+            >
+              <span className="text-[10px] text-slate-400 font-normal">State:</span>
+              <span>{Boolean(fact.value) ? 'Yes (Thermal Break)' : 'No (Standard)'}</span>
+            </button>
+          ) : key === 'roof.roofPeak' ? (
+            <select
+              value={String(fact.value || 'Internal (Center)')}
+              onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
+            >
+              <option value="Internal (Center)">Internal (Center)</option>
+              <option value="Left">Left</option>
+              <option value="Right">Right</option>
+            </select>
           ) : (
             <input
               type="text"
@@ -267,109 +311,135 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 text-slate-800 dark:text-slate-100">
-      {/* Overview Banner */}
-      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 dark:from-blue-900/30 dark:via-indigo-900/20 dark:to-slate-900 border border-blue-200 dark:border-blue-800/40 rounded-2xl p-5 shadow-sm dark:shadow-xl transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-300 font-mono text-[11px] font-bold tracking-wide border border-blue-500/30">
-                CONFIG.XML INGESTION COMPLETE
-              </span>
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {graph.generatingSoftware} • Schema {graph.documentVersion}
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {facts['unit.jobName']?.value || 'AHU Unit Specifications'}
-            </h2>
+      {/* Active Features & Options Bar (Only Show When True) */}
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+              Active Unit Features & Options
+            </h3>
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+              Only True Attributes Shown
+            </span>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Cabinet Dimensions Box */}
-            <div className="bg-white dark:bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-right">
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Cabinet Dimensions</div>
-              <div className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
-                {graph.dimensions.length}"L × {graph.dimensions.width}"W × {graph.dimensions.height}"H
-              </div>
-            </div>
+          {/* Add / Toggle Feature Dropdown Button */}
+          <div className="relative">
+            <button
+              onClick={() => setIsAddOptionOpen(!isAddOptionOpen)}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add / Toggle Option</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
 
-            {/* Reset Changes Button */}
-            {onResetAllChanges && (
-              <button
-                onClick={() => setIsResetConfirmOpen(true)}
-                title="Reset all manual overrides to extracted XML state"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 font-medium transition-colors shadow-sm"
+            {isAddOptionOpen && (
+              <div
+                className="absolute right-0 mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl shadow-xl z-30 p-2 space-y-1"
+                onMouseLeave={() => setIsAddOptionOpen(false)}
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Reset Changes</span>
-              </button>
+                <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 uppercase tracking-wider">
+                  Enable Unit Features
+                </div>
+                {ONLY_SHOW_WHEN_TRUE_FACTS.map(item => {
+                  const fact = facts[item.key];
+                  const isCurrentlyActive = Boolean(fact?.value === true || fact?.value === 'true' || fact?.value === 'Yes');
+                  const Icon = item.icon;
+
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        onUpdateFact(item.key, !isCurrentlyActive, 'Detailer', isCurrentlyActive ? 'Turned off' : 'Activated option');
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors ${
+                        isCurrentlyActive
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className={`w-4 h-4 ${isCurrentlyActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                        <div>
+                          <div>{item.label}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">{item.description}</div>
+                        </div>
+                      </div>
+                      {isCurrentlyActive ? (
+                        <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-mono">+ Enable</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
+
+        {/* Feature Badges Display */}
+        {activeFeatures.length === 0 ? (
+          <div className="py-3 px-4 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 dark:text-slate-500 font-mono">
+            No special construction features active (Standard commercial configuration).
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2.5 pt-1">
+            {activeFeatures.map(item => {
+              const fact = facts[item.key];
+              const Icon = item.icon;
+              if (!fact) return null;
+
+              return (
+                <div
+                  key={item.key}
+                  className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 shadow-sm hover:border-blue-500/40 transition-colors group"
+                >
+                  <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {item.label}
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      Active: Yes
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+                    {renderProvenanceBadge(fact)}
+                    <button
+                      onClick={() => onUpdateFact(item.key, false, 'Detailer', 'Disabled feature')}
+                      title="Disable feature"
+                      className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Reset Confirmation Dialog */}
-      {isResetConfirmOpen && (
-        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
-          <div>
-            <strong>Revert all changes?</strong> This will reset all fact overrides and return checklists to freshly parsed state.
-          </div>
+      {/* Unit Casing Specifications & Ratings Full-Width Card with 2-Column Grid */}
+      <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsResetConfirmOpen(false)}
-              className="px-3 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-xs"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                onResetAllChanges?.();
-                setIsResetConfirmOpen(false);
-              }}
-              className="px-3 py-1 rounded-lg bg-red-600 text-white font-semibold text-xs"
-            >
-              Yes, Reset
-            </button>
+            <Ruler className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+              Unit Casing Specifications & Ratings
+            </h3>
           </div>
-        </div>
-      )}
-
-      {/* 2-Column Balanced Specifications Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Order & Identity */}
-        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                Order & Project Identity
-              </h3>
-            </div>
-            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-              Verification List: D3..D6
-            </span>
-          </div>
-          <div className="space-y-1">
-            {orderFacts.map(renderField)}
-          </div>
+          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+            Verification List: D7..D18
+          </span>
         </div>
 
-        {/* Right Column: Geometry & Specifications */}
-        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Ruler className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                Unit Casing Specifications & Ratings
-              </h3>
-            </div>
-            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-              Verification List: D7..D18
-            </span>
-          </div>
-          <div className="space-y-1">
-            {unitSpecFacts.map(renderField)}
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-1">
+          {unitSpecFacts.map(renderField)}
         </div>
       </div>
 

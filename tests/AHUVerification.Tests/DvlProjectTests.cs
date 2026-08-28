@@ -20,7 +20,7 @@ namespace AHUVerification.Tests
             var facts = extractor.ExtractFacts(graph);
 
             var rulePackManager = new RulePackManager();
-            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("src/rulepack"));
+            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
 
             var evaluator = new AstRuleEvaluator();
             var checklists = evaluator.GenerateChecklists(bundle.Rules, graph, facts);

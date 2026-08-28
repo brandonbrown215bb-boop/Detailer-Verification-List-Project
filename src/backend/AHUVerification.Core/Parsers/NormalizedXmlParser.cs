@@ -124,8 +124,9 @@ namespace AHUVerification.Core.Parsers
                     graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
                     graph.UnitOptions.Materials.FloorMaterialGauge = int.TryParse(floorGaugeRaw, out int fgInt) ? fgInt : 16;
 
-                    graph.UnitOptions.Materials.HousingStyle = GetChildText(constOptNode, "housingStyle", "ThermalBreak");
-                    graph.UnitOptions.ThermalBreak = graph.UnitOptions.Materials.HousingStyle.Contains("ThermalBreak", StringComparison.OrdinalIgnoreCase);
+                    string rawStyle = GetChildText(constOptNode, "housingStyle", "ISG");
+                    graph.UnitOptions.Materials.HousingStyle = rawStyle.Equals("CAD", StringComparison.OrdinalIgnoreCase) ? "CAD" : "ISG";
+                    graph.UnitOptions.ThermalBreak = rawStyle.Contains("ThermalBreak", StringComparison.OrdinalIgnoreCase) || !rawStyle.Equals("Standard", StringComparison.OrdinalIgnoreCase);
                     graph.UnitOptions.Materials.InsulationType = GetChildText(constOptNode, "insulationType", "Foam");
 
                     graph.UnitOptions.Materials.ExteriorPaintType = GetChildText(constOptNode, "exteriorPaintType", "None");
@@ -150,14 +151,14 @@ namespace AHUVerification.Core.Parsers
                 string highSide = GetChildText(roofNode, "roofSlopeHighSide", "Internal");
                 graph.RoofOptions.RoofSlopeHighSide = highSide;
                 
-                if (highSide.Equals("Internal", StringComparison.OrdinalIgnoreCase))
-                    graph.RoofOptions.RoofPeak = "Center";
+                if (highSide.Equals("Internal", StringComparison.OrdinalIgnoreCase) || highSide.Equals("Center", StringComparison.OrdinalIgnoreCase))
+                    graph.RoofOptions.RoofPeak = "Internal (Center)";
                 else if (highSide.Equals("Left", StringComparison.OrdinalIgnoreCase))
                     graph.RoofOptions.RoofPeak = "Left";
                 else if (highSide.Equals("Right", StringComparison.OrdinalIgnoreCase))
                     graph.RoofOptions.RoofPeak = "Right";
                 else
-                    graph.RoofOptions.RoofPeak = graph.RoofOptions.HasSlopedRoof ? "Center" : "Flat";
+                    graph.RoofOptions.RoofPeak = graph.RoofOptions.HasSlopedRoof ? "Internal (Center)" : "Flat";
 
                 graph.RoofOptions.RoofPeakZDim = GetChildDouble(roofNode, "roofPeakZDim", 97);
             }
@@ -248,6 +249,23 @@ namespace AHUVerification.Core.Parsers
                     int tierLevel = isTiered ? 2 : 1;
 
                     var constOpt = FindElement(segEl, "constructionOptions");
+                    var frontSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Front", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessFront);
+                    var rearSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Rear", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessRear);
+                    var leftSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Left", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessLeft);
+                    var rightSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Right", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessRight);
+                    var topSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Top", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessTop);
+                    var bottomSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Bottom", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.FloorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.FloorMaterialType, graph.UnitOptions.Materials.FloorMaterialGauge, graph.UnitOptions.Materials.FloorPaintType, 0);
+
+                    var surfaces = new SegmentSurfaces
+                    {
+                        Front = frontSurfDetail,
+                        Rear = rearSurfDetail,
+                        Left = leftSurfDetail,
+                        Right = rightSurfDetail,
+                        Top = topSurfDetail,
+                        Bottom = bottomSurfDetail
+                    };
+
                     var frontSurf = constOpt != null ? FindElement(constOpt, "surfaceDetail_Front") : null;
 
                     string segFloorGaugeRaw = frontSurf != null ? GetChildText(frontSurf, "floorMaterialGauge", graph.UnitOptions.Materials.FloorMaterialGaugeString) : graph.UnitOptions.Materials.FloorMaterialGaugeString;
@@ -255,14 +273,14 @@ namespace AHUVerification.Core.Parsers
 
                     var casing = new CasingDetail
                     {
-                        ExteriorMaterial = frontSurf != null ? GetChildText(frontSurf, "exteriorMaterialType", graph.UnitOptions.Materials.ExteriorMaterialType) : graph.UnitOptions.Materials.ExteriorMaterialType,
-                        ExteriorGauge = frontSurf != null ? GetChildInt(frontSurf, "exteriorMaterialGauge", graph.UnitOptions.Materials.ExteriorMaterialGauge) : graph.UnitOptions.Materials.ExteriorMaterialGauge,
-                        InteriorMaterial = frontSurf != null ? GetChildText(frontSurf, "interiorMaterialType", graph.UnitOptions.Materials.InteriorMaterialType) : graph.UnitOptions.Materials.InteriorMaterialType,
-                        InteriorGauge = frontSurf != null ? GetChildInt(frontSurf, "interiorMaterialGauge", graph.UnitOptions.Materials.InteriorMaterialGauge) : graph.UnitOptions.Materials.InteriorMaterialGauge,
+                        ExteriorMaterial = frontSurfDetail.ExteriorMaterial,
+                        ExteriorGauge = frontSurfDetail.ExteriorGauge,
+                        InteriorMaterial = frontSurfDetail.InteriorMaterial,
+                        InteriorGauge = frontSurfDetail.InteriorGauge,
                         FloorMaterial = graph.UnitOptions.Materials.FloorMaterialType,
                         FloorGauge = segFloorGaugeInt,
                         FloorGaugeString = segFloorGaugeRaw,
-                        HousingThickness = frontSurf != null ? GetChildDouble(frontSurf, "housingThickness", graph.UnitOptions.Materials.HousingThicknessFront) : graph.UnitOptions.Materials.HousingThicknessFront,
+                        HousingThickness = frontSurfDetail.HousingThickness,
                         HousingThicknessFront = graph.UnitOptions.Materials.HousingThicknessFront,
                         HousingThicknessTop = graph.UnitOptions.Materials.HousingThicknessTop,
                         HousingStyle = constOpt != null ? GetChildText(constOpt, "housingStyle", graph.UnitOptions.Materials.HousingStyle) : graph.UnitOptions.Materials.HousingStyle,
@@ -408,6 +426,7 @@ namespace AHUVerification.Core.Parsers
                         HandOrientation = handOrientation,
                         Dimensions = parsedGeom,
                         Casing = casing,
+                        Surfaces = surfaces,
                         Internals = internals,
                         HasFrontChannel = GetChildBool(segEl, "hasFrontChannel", false),
                         HasRearChannel = GetChildBool(segEl, "hasRearChannel", false),
@@ -658,6 +677,21 @@ namespace AHUVerification.Core.Parsers
                 XLength = GetChildDouble(geom, "xLength", 0),
                 YLength = GetChildDouble(geom, "yLength", 0),
                 ZLength = GetChildDouble(geom, "zLength", 0)
+            };
+        }
+
+        private static SurfaceDetail ParseSurfaceDetail(XElement? constOpt, string surfaceTagName, string defaultExtMat, int defaultExtGa, string defaultExtPaint, string defaultIntMat, int defaultIntGa, string defaultIntPaint, double defaultHousingThk)
+        {
+            var node = constOpt != null ? FindElement(constOpt, surfaceTagName) : null;
+            return new SurfaceDetail
+            {
+                ExteriorMaterial = node != null ? GetChildText(node, "exteriorMaterialType", defaultExtMat) : defaultExtMat,
+                ExteriorGauge = node != null ? GetChildInt(node, "exteriorMaterialGauge", defaultExtGa) : defaultExtGa,
+                ExteriorPaint = node != null ? GetChildText(node, "exteriorPaintType", defaultExtPaint) : defaultExtPaint,
+                InteriorMaterial = node != null ? GetChildText(node, "interiorMaterialType", defaultIntMat) : defaultIntMat,
+                InteriorGauge = node != null ? GetChildInt(node, "interiorMaterialGauge", defaultIntGa) : defaultIntGa,
+                InteriorPaint = node != null ? GetChildText(node, "interiorPaintType", defaultIntPaint) : defaultIntPaint,
+                HousingThickness = node != null ? GetChildDouble(node, "housingThickness", defaultHousingThk) : defaultHousingThk
             };
         }
 

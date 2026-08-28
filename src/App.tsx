@@ -14,7 +14,7 @@ import { parseAhuXml, parseOrderRevXml } from './services/xmlParser';
 import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './services/rulesCatalog';
 import { generateChecklists } from './services/ruleEvaluator';
-import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal } from './services/projectStorage';
+import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
 import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
 import { desktopBridge } from './services/desktopBridge';
 import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
@@ -23,6 +23,7 @@ import { HomePage } from './components/HomePage';
 import { ManualUnitModal } from './components/ManualUnitModal';
 import { DetailerNameModal } from './components/DetailerNameModal';
 import { ComNumberModal } from './components/ComNumberModal';
+import { ProjectIdentityModal } from './components/ProjectIdentityModal';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { GeneralUnitTab } from './components/GeneralUnitTab';
@@ -86,7 +87,7 @@ export const AppContent: React.FC = () => {
   const [sqItems, setSqItems] = useState<SpecialQuote[]>([]);
   const [checklists, setChecklists] = useState<ChecklistInstance[]>([]);
   const [rawXml, setRawXml] = useState<string>('');
-  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(null);
+  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(() => loadAutosave());
   const [generalComments, setGeneralComments] = useState<string>(
     'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
   );
@@ -107,6 +108,7 @@ export const AppContent: React.FC = () => {
   const [isPreFlightOpen, setIsPreFlightOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProjectIdentityModalOpen, setIsProjectIdentityModalOpen] = useState(false);
   const [isDetailerModalOpen, setIsDetailerModalOpen] = useState(false);
   const [isComModalOpen, setIsComModalOpen] = useState(false);
 
@@ -442,7 +444,7 @@ export const AppContent: React.FC = () => {
 
       // Set standard default specs
       if (updated['unit.noa'] && updated['unit.noa'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.noa', 'N/A', 'Detailer', 'Standard Non-NOA unit');
+        updated = overrideFact(updated, 'unit.noa', false, 'Detailer', 'Standard Non-NOA unit');
       }
       if (updated['unit.isSeismic'] && updated['unit.isSeismic'].confidence === 'RequiresConfirmation') {
         updated = overrideFact(updated, 'unit.isSeismic', false, 'Detailer', 'Standard Non-Seismic');
@@ -648,6 +650,9 @@ export const AppContent: React.FC = () => {
         <Header
           jobName={String(facts['unit.jobName']?.value || '')}
           comNumber={String(facts['unit.comNumber']?.value || '')}
+          orderNumber={String(facts['unit.orderNumber']?.value || '')}
+          unitTag={String(facts['unit.tag']?.value || '')}
+          dimensions={graph.dimensions}
           facts={facts}
           onGoHome={() => setIsProjectLoaded(false)}
           onOpenResolutionCenter={() => setIsResolutionOpen(true)}
@@ -662,6 +667,7 @@ export const AppContent: React.FC = () => {
           themeMode={themeMode}
           onCycleThemeMode={handleCycleThemeMode}
           lastSavedAt={lastSavedAt || undefined}
+          onOpenProjectIdentityModal={() => setIsProjectIdentityModalOpen(true)}
           onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
           onOpenComModal={() => setIsComModalOpen(true)}
         />
@@ -740,7 +746,6 @@ export const AppContent: React.FC = () => {
               onUpdateSqItems={setSqItems}
               onUpdateComments={setGeneralComments}
               onOpenResolutionCenter={() => setIsResolutionOpen(true)}
-              onResetAllChanges={handleResetAllChanges}
               onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
             />
           ) : activeTab === 'unit-checks' ? (
@@ -776,6 +781,13 @@ export const AppContent: React.FC = () => {
       </div>
 
       {/* Modals */}
+      <ProjectIdentityModal
+        isOpen={isProjectIdentityModalOpen}
+        onClose={() => setIsProjectIdentityModalOpen(false)}
+        facts={facts}
+        onUpdateFact={handleUpdateFact}
+      />
+
       <ResolutionCenterModal
         isOpen={isResolutionOpen}
         onClose={() => setIsResolutionOpen(false)}
@@ -826,6 +838,7 @@ export const AppContent: React.FC = () => {
         centralRulePackPath={centralRulePackPath}
         onUpdateCentralRulePackPath={setCentralRulePackPath}
         onRulePackUpdated={handleRulePackUpdated}
+        onResetAllChanges={handleResetAllChanges}
       />
 
       <DetailerNameModal
