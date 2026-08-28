@@ -153,8 +153,13 @@ class DesktopBridge {
     }
 
     // Browser fallback
-    exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
-    return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
+    try {
+      exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
+      return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
+    } catch (err: any) {
+      console.error('Browser export error:', err);
+      throw new Error(`Failed to generate Excel deliverable: ${err?.message || err}`);
+    }
   }
 
   public async openFile(filePath: string): Promise<void> {

@@ -42,11 +42,7 @@ namespace AHUVerification.App.Bridge
 
         public BridgeResponse Handle(string jsonMessage)
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                Converters = { new JsonStringEnumConverter() }
-            };
+            var options = JsonDefaults.CreateFlexibleOptions();
 
             BridgeRequest? req;
             try
@@ -224,10 +220,34 @@ namespace AHUVerification.App.Bridge
             if (!File.Exists(templatePath))
             {
                 string fallback = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "rulepack", "template.xlsx");
-                if (File.Exists(fallback)) templatePath = fallback;
+                if (File.Exists(fallback))
+                {
+                    templatePath = fallback;
+                }
+                else
+                {
+                    string repoFallback = Path.Combine(PathUtils.FindRepoRoot(), "resources", "rulepack", "template.xlsx");
+                    if (File.Exists(repoFallback))
+                    {
+                        templatePath = repoFallback;
+                    }
+                    else
+                    {
+                        string repoRootTemplate = Path.Combine(PathUtils.FindRepoRoot(), "Detailing Verification List.xlsx");
+                        if (File.Exists(repoRootTemplate))
+                        {
+                            templatePath = repoRootTemplate;
+                        }
+                    }
+                }
             }
 
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
+            if (!File.Exists(templatePath))
+            {
+                throw new FileNotFoundException($"Excel template file 'template.xlsx' or 'Detailing Verification List.xlsx' could not be found in active rule pack or repository locations.", templatePath);
+            }
+
+            var options = JsonDefaults.CreateFlexibleOptions();
             var facts = JsonSerializer.Deserialize<Dictionary<string, Fact>>(payload.GetProperty("facts").GetRawText(), options) ?? new();
             var sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(payload.GetProperty("sqItems").GetRawText(), options) ?? new();
             var checklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(payload.GetProperty("checklists").GetRawText(), options) ?? new();

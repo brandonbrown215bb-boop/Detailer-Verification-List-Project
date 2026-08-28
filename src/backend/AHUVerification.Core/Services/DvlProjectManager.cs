@@ -10,11 +10,7 @@ namespace AHUVerification.Core.Services
 {
     public class DvlProjectManager
     {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            WriteIndented = true,
-            PropertyNameCaseInsensitive = true
-        };
+        private static readonly JsonSerializerOptions JsonOptions = JsonDefaults.CreateFlexibleOptions();
 
         public DvlProjectFile CreateProject(
             NormalizedXmlGraph graph,

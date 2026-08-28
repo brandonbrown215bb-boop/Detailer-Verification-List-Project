@@ -78,7 +78,7 @@ namespace AHUVerification.App
 
 #if DEBUG
                 string repoRoot = PathUtils.FindRepoRoot();
-                string repositoryRulePack = Path.Combine(repoRoot, "src", "rulepack");
+                string repositoryRulePack = Path.Combine(repoRoot, "resources", "rulepack");
                 string repositoryDist = Path.Combine(repoRoot, "dist");
                 if (Directory.Exists(repositoryRulePack) && !Directory.Exists(localActiveRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;

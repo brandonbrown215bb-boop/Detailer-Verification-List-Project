@@ -126,8 +126,9 @@ export const AppContent: React.FC = () => {
   // Live Autosave status tracking
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
-  // Export success toast state
+  // Export success and error toast states
   const [exportNotice, setExportNotice] = useState<{ fileName: string; filePath?: string } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Dynamic Rule Pack State
   const [activeRules, setActiveRules] = useState<RuleDefinition[]>(RULES_CATALOG);
@@ -511,9 +512,12 @@ export const AppContent: React.FC = () => {
 
   // Export Excel Deliverable
   const handleExportExcel = async (isDraft: boolean = false) => {
-    if (!graph) return;
-    const jobName = facts['unit.jobName']?.value || 'AHU_Project';
-    const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
+    if (!graph) {
+      setExportError('Cannot export Excel deliverable: No project geometry or graph is loaded.');
+      return;
+    }
+    const jobName = String(facts['unit.jobName']?.value || 'AHU_Project');
+    const comNumber = String(facts['unit.comNumber']?.value || 'COM-000000');
     const defaultName = `${jobName}_${comNumber}_Detailing_Verification_List${isDraft ? '_DRAFT' : ''}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
     // Dynamic verification date population on export
@@ -530,19 +534,26 @@ export const AppContent: React.FC = () => {
       }
     };
 
-    const result = await desktopBridge.exportExcelDeliverable(
-      exportFacts,
-      sqItems,
-      checklists,
-      activeRules,
-      graph,
-      generalComments,
-      defaultName,
-      isDraft
-    );
+    try {
+      setExportError(null);
+      const result = await desktopBridge.exportExcelDeliverable(
+        exportFacts,
+        sqItems,
+        checklists,
+        activeRules,
+        graph,
+        generalComments,
+        defaultName,
+        isDraft
+      );
 
-    if (result.exported && !result.cancelled) {
-      setExportNotice({ fileName: result.fileName || defaultName, filePath: result.filePath });
+      if (result.exported && !result.cancelled) {
+        setExportNotice({ fileName: result.fileName || defaultName, filePath: result.filePath });
+      }
+    } catch (error: any) {
+      console.error('Export Excel failed:', error);
+      const errorMsg = error?.message || 'An unknown error occurred while exporting the Excel deliverable.';
+      setExportError(errorMsg);
     }
   };
 
@@ -730,6 +741,24 @@ export const AppContent: React.FC = () => {
                 Dismiss
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Export Error Notification Banner */}
+        {exportError && (
+          <div className="bg-rose-100 dark:bg-rose-950/90 border-b border-rose-300 dark:border-rose-700/60 px-6 py-2.5 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2.5 text-xs text-rose-900 dark:text-rose-200">
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+              <span>
+                <strong>Excel Export Failed:</strong> {exportError}
+              </span>
+            </div>
+            <button
+              onClick={() => setExportError(null)}
+              className="text-xs text-rose-700 hover:text-rose-950 dark:text-rose-400 dark:hover:text-white px-2 py-0.5 rounded hover:bg-rose-200/50 dark:hover:bg-rose-900/50 font-medium"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 

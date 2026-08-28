@@ -223,8 +223,8 @@ export function exportToExcel(
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-  const comNum = facts['unit.comNumber']?.value || 'COM-000000';
-  const jobName = (facts['unit.jobName']?.value || 'AHU').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const comNum = facts['unit.comNumber']?.value ? String(facts['unit.comNumber'].value) : 'COM-000000';
+  const jobName = String(facts['unit.jobName']?.value || 'AHU').replace(/[^a-zA-Z0-9_-]/g, '_');
   const targetName = fileName || `${jobName}_${comNum}_Detailing_Verification_List.xlsx`;
 
   saveAs(blob, targetName);

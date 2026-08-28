@@ -43,10 +43,29 @@ namespace AHUVerification.Core.Services
             {
                 Directory.CreateDirectory(dir);
             }
-            File.Copy(templateFilePath, outputFilePath, true);
 
-            using var doc = SpreadsheetDocument.Open(outputFilePath, true);
-            var wbPart = doc.WorkbookPart ?? throw new InvalidOperationException("Invalid workbook part.");
+            try
+            {
+                File.Copy(templateFilePath, outputFilePath, true);
+            }
+            catch (IOException ioEx)
+            {
+                throw new IOException($"The file '{Path.GetFileName(outputFilePath)}' cannot be written because it is in use by another program (such as Microsoft Excel). Please close the file in Excel and try exporting again.", ioEx);
+            }
+
+            SpreadsheetDocument doc;
+            try
+            {
+                doc = SpreadsheetDocument.Open(outputFilePath, true);
+            }
+            catch (IOException ioEx)
+            {
+                throw new IOException($"The file '{Path.GetFileName(outputFilePath)}' cannot be opened for writing because it is currently locked by another application. Please close Microsoft Excel and try exporting again.", ioEx);
+            }
+
+            using (doc)
+            {
+                var wbPart = doc.WorkbookPart ?? throw new InvalidOperationException("Invalid workbook part.");
 
             // 1. Shared String Table handling
             var sstPart = wbPart.SharedStringTablePart;
@@ -444,6 +463,7 @@ namespace AHUVerification.Core.Services
             sst.Save();
             ws.Save();
             wbPart.Workbook.Save();
+            }
         }
 
         private static bool IsHeaderMerge(string mergeRef)

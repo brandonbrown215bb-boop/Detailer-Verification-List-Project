@@ -243,5 +243,40 @@ namespace AHUVerification.Tests
                 if (File.Exists(outputPath)) File.Delete(outputPath);
             }
         }
+
+        [Fact]
+        public void FlexibleJsonDeserialization_HandlesDecimalGaugesAndStrings()
+        {
+            string jsonWithDecimalGauges = @"
+            {
+                ""segments"": [
+                    {
+                        ""id"": ""seg-1"",
+                        ""name"": ""Access Segment"",
+                        ""surfaces"": {
+                            ""bottom"": {
+                                ""interiorGauge"": 22.0,
+                                ""exteriorGauge"": 18.0,
+                                ""housingThickness"": 2.0
+                            },
+                            ""top"": {
+                                ""interiorGauge"": ""22"",
+                                ""exteriorGauge"": ""18.000""
+                            }
+                        }
+                    }
+                ]
+            }";
+
+            var options = AHUVerification.Core.Utils.JsonDefaults.CreateFlexibleOptions();
+            var graph = System.Text.Json.JsonSerializer.Deserialize<NormalizedXmlGraph>(jsonWithDecimalGauges, options);
+
+            Assert.NotNull(graph);
+            Assert.Single(graph.Segments);
+            Assert.Equal(22, graph.Segments[0].Surfaces.Bottom.InteriorGauge);
+            Assert.Equal(18, graph.Segments[0].Surfaces.Bottom.ExteriorGauge);
+            Assert.Equal(22, graph.Segments[0].Surfaces.Top.InteriorGauge);
+            Assert.Equal(18, graph.Segments[0].Surfaces.Top.ExteriorGauge);
+        }
     }
 }

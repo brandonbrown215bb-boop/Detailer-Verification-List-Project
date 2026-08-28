@@ -86,10 +86,10 @@ function parseSurfaceNode(
   const node = constOpt ? getElements(constOpt, surfaceTag)[0] : null;
   return {
     exteriorMaterial: node ? getChildText(node, 'exteriorMaterialType', defaults.extMat) : defaults.extMat,
-    exteriorGauge: node ? getChildNumber(node, 'exteriorMaterialGauge', defaults.extGa) : defaults.extGa,
+    exteriorGauge: node ? Math.round(getChildNumber(node, 'exteriorMaterialGauge', defaults.extGa)) : Math.round(defaults.extGa),
     exteriorPaint: node ? getChildText(node, 'exteriorPaintType', defaults.extPaint) : defaults.extPaint,
     interiorMaterial: node ? getChildText(node, 'interiorMaterialType', defaults.intMat) : defaults.intMat,
-    interiorGauge: node ? getChildNumber(node, 'interiorMaterialGauge', defaults.intGa) : defaults.intGa,
+    interiorGauge: node ? Math.round(getChildNumber(node, 'interiorMaterialGauge', defaults.intGa)) : Math.round(defaults.intGa),
     interiorPaint: node ? getChildText(node, 'interiorPaintType', defaults.intPaint) : defaults.intPaint,
     housingThickness: node ? getChildNumber(node, 'housingThickness', defaults.housingThk) : defaults.housingThk
   };
@@ -161,9 +161,9 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     defaultUnitBaseHeight: unitOptNode ? getChildNumber(unitOptNode, 'defaultUnitBaseHeight', 10) : 10,
     materials: {
       exteriorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'exteriorMaterialType', 'STL GALV PPC') : 'STL GALV PPC',
-      exteriorMaterialGauge: defaultConstNode ? getChildNumber(defaultConstNode, 'exteriorMaterialGauge', 18) : 18,
+      exteriorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'exteriorMaterialGauge', 18)) : 18,
       interiorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'interiorMaterialType', 'STL GALV') : 'STL GALV',
-      interiorMaterialGauge: defaultConstNode ? getChildNumber(defaultConstNode, 'interiorMaterialGauge', 22) : 22,
+      interiorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'interiorMaterialGauge', 22)) : 22,
       floorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialType', 'STL GALV') : 'STL GALV',
       floorMaterialGauge: floorMaterialGaugeInt,
       floorMaterialGaugeString: floorMaterialGaugeRaw,
@@ -225,7 +225,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     if (lipHeight > maxLipHeight) maxLipHeight = lipHeight;
 
     const subMatType = getChildText(b, 'subFloorMaterialType', 'STL GALV');
-    const subGauge = getChildNumber(b, 'subFloorMaterialGauge', 22);
+    const subGauge = Math.round(getChildNumber(b, 'subFloorMaterialGauge', 22));
     const by = geom ? getChildNumber(geom, 'y', 0) : 0;
 
     bases.push({
