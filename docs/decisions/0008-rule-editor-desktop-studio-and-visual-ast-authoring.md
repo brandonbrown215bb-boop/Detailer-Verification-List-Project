@@ -12,7 +12,7 @@ Furthermore, dynamic OpenXML synthesis (ADR 0005) obsoleted fixed Excel cell row
 ## Decisions
 
 1. **Standalone Desktop Application & Delivery (`RuleEditor.exe`)**:
-   - The Rule Editor is delivered as an independent .NET 10 + WebView2 desktop host (`AHUVerification.RuleEditor`) and multi-page web entry (`rule-editor.html`), running independently from the main detailer verification application.
+   - The Rule Editor is delivered as an independent .NET 8 + WebView2 desktop host (`AHUVerification.RuleEditor`) and multi-page web entry (`rule-editor.html`), running independently from the main detailer verification application.
    - It reuses `AHUVerification.Core` for rule pack loading, AST evaluation, XML parsing, and canonical SHA-256 hashing.
 
 2. **Visual No-Code AST Condition Builder**:
@@ -37,3 +37,11 @@ Furthermore, dynamic OpenXML synthesis (ADR 0005) obsoleted fixed Excel cell row
 - Engineering team leads can maintain, audit, and expand verification rules directly through a dedicated visual UI without manual JSON manipulation.
 - Rule changes are verified before publishing using the built-in simulation sandbox.
 - Published rule packs strictly adhere to canonical SHA-256 integrity checks across all Windows desktop installations.
+
+## Addendum (2026-08-28): current implementation
+
+`AHUVerification.RuleEditor` targets `net8.0-windows` and produces `RuleEditor.exe`. Its desktop bridge is `RuleEditorBridgeHandler`; the Vite route `/rule-editor.html` is a browser preview whose publishing fallback downloads JSON rather than writing a local directory.
+
+Publishing serializes indented JSON, normalizes CRLF/CR to LF, writes UTF-8 without BOM, hashes the three JSON files after normalization and `template.xlsx` as exact bytes, then derives `bundleSha256` from ordered `name:sha256` entries for `rules.json`, `template_map.json`, `approved_mappings.json`, and `template.xlsx`.
+
+Remote synchronization is stage → validate → move active store to caller-provided LKG path → promote staging; a failed promotion restores the LKG. `RulePackManager.SyncFromRemote` receives all three paths from its caller, so the core service has no fixed LKG storage location.

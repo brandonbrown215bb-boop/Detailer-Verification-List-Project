@@ -1,5 +1,5 @@
 <!-- AGENT_GROUND_START -->
 @AGENTS.md
 
-Use the Agent Ground repository contract and current source as authority.
+`AGENTS.md` contains the complete repository contract, grounding steps, and verification commands. Treat current source and tests as the authority when documentation is stale.
 <!-- AGENT_GROUND_END -->

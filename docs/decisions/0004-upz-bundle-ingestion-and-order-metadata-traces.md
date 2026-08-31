@@ -14,10 +14,12 @@ The `.upz` file is a proprietary container format (`upl\0`) enclosing synchroniz
 1. **Native UPZ Decompression Toolchain**:
    - Bundle `unpack32.exe` and `ywunpack.dll` in `resources/bin/` as deployable desktop assets.
    - Execute decompression via `UpzBundleExtractor` using isolated temporary directories with automatic cleanup.
+   - `unpack32.exe` requires a trailing separator on its destination path. The current extractor times out after 30 seconds but does not inspect a non-zero process exit code; failures may surface later as missing `Config.xml`. This is a known implementation limitation, not a guaranteed diagnostic.
+   - The packaged `resources/bin/` location is the supported deployment location. A hard-coded developer fallback remains in source and must not be relied on for deployment.
    - For browser preview mode (without native desktop helper), state clearly that `.upz` decompression requires the desktop host, while maintaining standalone `Config.xml` and `.dvl` support.
 
 2. **Order Metadata Trace Extraction**:
-   - Implement `OrderRevParser` in both C# Core and TypeScript.
+   - The C# implementation is `OrderRevParser`; TypeScript exports `parseOrderRevXml` from `src/services/xmlParser.ts` rather than a separate parser class.
    - Extract `jobName`, `orderNumber`, `tagList` / `primaryTag`, and `productType` from `OrderRev.xml`.
    - Fields not needed for verification deliverables (`quantity`, `salesEngineer`, `revisionDate`) are excluded from domain fact extraction.
 

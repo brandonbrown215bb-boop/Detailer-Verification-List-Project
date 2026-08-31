@@ -4,7 +4,9 @@
 **Audit Scope**: Entire Repository Documentation Suite (23 Files across Root, Architecture, Decisions, Operations, Guides, and Historical Audits)  
 **Perspective**: Fresh AI Agent Onboarding with Zero Prior Memory  
 **Target Deliverable**: `audits/documentation_gap_audit.md`  
-**Status**: Authoritative & Complete  
+**Status**: Historical audit findings; remediation reviewed 2026-08-28
+
+> **Remediation review (2026-08-28):** The listed documentation surfaces were refreshed against the current checkout. This audit remains the evidence trail for the original gaps, not the current operating manual. Two audit details required correction during remediation: shared `src/backend/Directory.Build.targets` does validate all five baseline rule-pack members before publishing, and the current xUnit run discovers 29 tests (27 pass; 2 native-UPZ tests fail because licensed unpacker assets are absent). Current source and the refreshed runbooks are authoritative.
 
 ---
 

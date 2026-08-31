@@ -1,9 +1,7 @@
 ---
 kind: architecture
-verified_at_commit: UNCOMMITTED
+verified_at_commit: 2f34eff38488
 scope:
-  - implementation_plan.md
-  - spike/**
   - src/**
   - tests/**
   - scripts/**
@@ -14,7 +12,7 @@ scope:
 
 ## Purpose
 
-The **AHU Detailing Verification** system is a Windows desktop application (.NET 10 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml` or `.upz` unit package bundles), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
+The **AHU Detailing Verification** system is a Windows desktop application (.NET 8 + WebView2) designed for Air Handling Unit (AHU) detailers. It ingests engineering unit configurations (`Config.xml` or `.upz` unit package bundles), maps facts through a 4-state provenance-aware registry, evaluates scoped verification checklists against declarative AST rules, enables detailers to manage Special Quotes (SQs) and component checks, and outputs an official `Detailing Verification List.xlsx` workbook for checkers using OpenXML.
 
 ## Boundaries
 
@@ -78,8 +76,8 @@ flowchart TD
 - **Scoped Rule Evaluator**: JSON-AST predicate engine evaluating rules across `Unit`, `Skid`, `Segment`, and `Component` scopes to produce `Applicable`, `Not Applicable`, or `Needs Input`.
 
 ### 3. Desktop Host & Typed Asynchronous IPC Bridge
-- **Responsibility**: C#/.NET 10 hosting Edge WebView2 interface.
-- **Typed Asynchronous IPC Bridge**: Communication occurs via 11 typed asynchronous actions (`getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `parseXml`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `syncRulePack`) with graceful browser fallback.
+- **Responsibility**: C#/.NET 8 hosting Edge WebView2 interface.
+- **Typed Asynchronous IPC Bridge**: Main-host actions are `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, and `selectFolderDialog`. XML parsing is currently invoked in the TypeScript frontend; it is not registered in `BridgeHandler`. The Rule Editor has its own bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
 - **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, checklist completion states, full source XML SHA-256, and pinned Rule Pack bundle identity.
 - **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file.
 
@@ -90,7 +88,7 @@ flowchart TD
 - **Dynamic Skid Row Generation**: Rebuilds `Verification List` rows $\ge 26$ dynamically with structured shipping skid and general unit section headers containing only applicable checks.
 
 ### 5. Desktop Delivery
-- **Artifact**: A self-contained `win-x64` publish folder containing the desktop host executable, `dist/` (frontend web assets), `resources/rulepack/` (rule pack files), and `resources/bin/` (`unpack32.exe` and `ywunpack.dll`).
+- **Artifact**: A framework-dependent `win-x64` publish folder containing the desktop host executable, `dist/` (frontend web assets), `resources/rulepack/` (rule pack files), and, for the main host, `resources/bin/` (`unpack32.exe` and `ywunpack.dll`). The target machine needs the .NET 8 runtime and WebView2 Runtime.
 - **Runtime Resolution**: Release builds load adjacent packaged assets only. Debug builds may use the repository bundle or a running Vite development server.
 
 ### 6. UI Architecture & Productivity Engine

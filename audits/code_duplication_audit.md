@@ -1,11 +1,13 @@
 # Comprehensive Code Duplication Audit & DRY Remediation Specification
 
+> **Historical audit with implementation-status update (2026-08-28):** The findings and proposed snippets below preserve the audit snapshot; they are not a current implementation plan. The repository now targets .NET 8 (`net8.0` / `net8.0-windows`). `scripts/init_env.bat` and `scripts/launch.bat` already exist and root batch scripts use them, so DUP-09 and DUP-10 are historical findings rather than pending work. The `tsx` proposal in DUP-04 still requires adding it as a direct development dependency before that command can be relied upon. Test-count examples are snapshot evidence, not a release gate.
+
 **Repository**: `Detailer-Verification-List-Project`  
 **Author**: Code Quality & Architecture Audit Team (Worker 1)  
 **Date**: 2026-08-28  
 **Audit Scope**: Entire Application (`src/backend/`, `src/services/`, `src/components/`, `src/ruleEditor/`, `scripts/`, `tests/`, root `.bat` scripts, configs, and rule packs)  
 **Integrity Mode**: Development / High Rigor (100% Ground-Truth Verified)  
-**Status**: Publication-Ready Deliverable  
+**Status**: Historical audit snapshot; implementation status amended 2026-08-28
 
 ---
 
@@ -33,7 +35,7 @@
 
 ### 1.1 Architecture & Context
 The **Air Handling Unit (AHU) Engineering Verification System** is a dual-stack desktop and web verification platform designed for HVAC detailers and engineering leads. The architecture combines:
-1. **Authoritative .NET 10 Desktop Engine** (`src/backend/AHUVerification.Core/`, `src/backend/AHUVerification.App/`, `src/backend/AHUVerification.RuleEditor/`): Native Windows WinForms host embedding Microsoft Edge WebView2, OpenXML workbook synthesizer, native UPZ decompression, and SHA-256 cryptographic verification.
+1. **Authoritative .NET 8 Desktop Engine** (`src/backend/AHUVerification.Core/`, `src/backend/AHUVerification.App/`, `src/backend/AHUVerification.RuleEditor/`): Native Windows WinForms host embedding Microsoft Edge WebView2, OpenXML workbook synthesizer, native UPZ decompression, and SHA-256 cryptographic verification.
 2. **Interactive React 18 / TypeScript Frontend** (`src/`, `src/components/`, `src/ruleEditor/`): Single Page Applications for unit inspection, skid layout visualization, Special Quotes (SQ) management, fact resolution, and AST rule authoring.
 3. **Browser Fallback & Preview Services** (`src/services/`): Web-native implementations of XML parsing, fact extraction, and AST rule evaluation that allow pure browser execution without a local .NET runtime.
 4. **Declarative Rule Pack Bundles** (`resources/rulepack/`): Immutable JSON schemas, rules, template mappings, and OpenXML Excel templates secured via canonical LF-normalized SHA-256 hashing.
@@ -505,6 +507,8 @@ Provide comprehensive shared JSON test vectors (`tests/fixtures/ast_evaluator_ve
 - **Refactoring Effort**: Low (15 minutes)
 - **Extraction Method**: Consolidated launcher `scripts/launch.bat`
 
+**Historical proposed remediation (superseded):** The example below was implemented later as `scripts/launch.bat`; retain it only as provenance for the original recommendation.
+
 **Concrete Drop-In DRY Remediation**:
 Create `scripts/launch.bat`:
 ```bat
@@ -590,6 +594,8 @@ if exist "!DOTNET_DIR!\dotnet.exe" (
 )
 ...
 ```
+
+**Historical proposed remediation (superseded):** The example below was implemented later as `scripts/init_env.bat`; retain it only as provenance for the original recommendation.
 
 **Concrete Drop-In DRY Remediation**:
 Create `scripts/init_env.bat`:
@@ -1194,7 +1200,7 @@ gantt
 1. **Refactor 7 React modals** to use `<ModalShell />` (eliminates ~200 LOC of DOM boilerplate).
 2. **Consolidate `ComNumberModal` and `DetailerNameModal`** into `ProjectIdentityModal`.
 3. **Extract `Directory.Build.targets`** to share MSBuild packaged asset verification.
-4. **Refactor `scripts/test_ast_converter.mjs`** to run tests directly against `astConverter.ts` using `tsx`.
+4. **Refactor `scripts/test_ast_converter.mjs`** to run tests directly against `astConverter.ts` using `tsx` (requires adding `tsx` as a direct `devDependency` first).
 5. **Consolidate launcher batch files** into `scripts/launch.bat`.
 
 #### Phase 3: Core Cross-Stack Consolidation & Schema Parity (Medium Risk)
@@ -1225,7 +1231,7 @@ To independently verify the recommendations and confirm zero regressions during 
    ```powershell
    dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj --logger "console;verbosity=normal"
    ```
-   *Pass Criteria*: 15 passed, 0 failed, 0 skipped.
+   *Historical snapshot criterion:* 15 passed, 0 failed, 0 skipped. Establish the current discovered test count from the targeted test project before using this as a release gate.
 
 2. **Verify Node AST Converter Test Execution**:
    ```powershell

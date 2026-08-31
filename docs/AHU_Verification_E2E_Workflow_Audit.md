@@ -3,11 +3,13 @@
 **Document Version:** 1.0.0  
 **Classification:** Quality & Engineering Audit Specification  
 **Application:** AHU Detailing Verification Desktop Application  
-**Runtime Environment:** Windows Desktop (.NET 10 + WebView2) / Embedded React 18 + TypeScript SPA  
-**Workbook Deliverable:** `Detailing Verification List.xlsx` (12 Worksheets, OpenXML 3.1.1 Engine)  
+**Runtime Environment:** Windows Desktop (.NET 8 / `net8.0-windows` + WebView2) / Embedded React 18 + TypeScript SPA
+**Workbook Deliverable:** `Detailing Verification List.xlsx` (12-worksheet template, dynamically pruned output; OpenXML 3.1.1 Engine)
 **Rule Pack Manifest:** Version 14.0.0 (104 Rules Total: 99 Active, 5 Archived; 22 Special Quote Slots)  
 
 ---
+
+> **Maintenance note (2026-08-28):** This is a workflow/audit snapshot, not a replacement for runtime artifacts. The checked-in `resources/rulepack/manifest.json` is authoritative for the active bundle hash; a project’s pinned hash is authoritative for that project. Historical hash examples below are retained only as snapshot evidence.
 
 ## 1. Executive Summary & Purpose
 
@@ -174,7 +176,7 @@ Detailers can onboard an AHU verification project through four distinct entry me
    - Opens previously saved `.dvl` project files.
    - Executes cryptographic integrity audit `inspectDvlIntegrity(...)`:
      - Verifies that embedded XML SHA-256 matches the embedded XML text.
-     - Verifies that the pinned Rule Pack bundle hash matches the active runtime Rule Pack (v14.0.0 `020e8ef...`).
+      - Verifies that the pinned Rule Pack bundle hash matches the active runtime Rule Pack. The current value must be read from `resources/rulepack/manifest.json`, rather than copied from this document.
      - Flags unverified or legacy files with a persistent top banner while allowing seamless editing.
 4. **Manual Unit Setup Wizard (`ManualUnitModal`)**:
    - Enables detailers to create a verified project from scratch when no XML is available.
@@ -195,9 +197,9 @@ The ingestion engine extracts over 22 unit-level facts and $N \times 7$ per-skid
 
 ### Phase 3: Fact Resolution & Engineering Confirmation
 To prevent safety hazards (e.g. lifting lug failures) and compliance violations:
-1. **Strict Skid Weight Semantics**:
-   - Aggregate skid weight is computed by summing segment weights but flagged with `status: 'Derived'` and `confidence: 'RequiresConfirmation'`.
-   - Dependent rules (e.g. `BASE-01`: Lifting lug support > 4,000 lbs) evaluate to `NeedsInput` until explicitly confirmed or overridden.
+1. **Calculated Skid Weight Semantics**:
+   - Aggregate skid weight is computed by summing segment weights with `status: 'Derived'` and `confidence: 'Authoritative'` in both the desktop and browser fact extractors.
+   - Dependent rules (for example `BASE-01`, which tests lifting-lug support above 4,000 lb) evaluate from the calculated value without a mandatory confirmation gate. A detailer can still override a fact when the calculated value is not the value that should be used.
 2. **Unrecognized Code Guard**:
    - Non-standard construction options (e.g. unknown wind load codes) default to `Unknown` / `RequiresConfirmation`, forcing detailer resolution before seismic/NOA rules can evaluate.
 3. **Resolution Pathways**:
@@ -328,7 +330,7 @@ This section details every parameter intended to be reviewed, confirmed, or ente
 
 | Fact Key | Label | Scope | Derivation Logic | UI Resolution Control | User Action & Purpose |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `skid.<id>.weight` | Skid Aggregate Weight | Skid | $\sum_{s \in \text{Skid}} s.\text{weight}$ | Inline Popover / Resolution Center | **Mandatory Action**: Detailer must review calculated weight sum and click "Approve Calculated Weight" or enter authoritative lifting weight to satisfy crane lifting lug rules (`BASE-01`). |
+| `skid.<id>.weight` | Skid Aggregate Weight | Skid | $\sum_{s \in \text{Skid}} s.\text{weight}$ | Inline Popover / Resolution Center | Auto-derived with `Authoritative` confidence. Detailers may override it when the source-calculated value must not be used; confirmation is not a prerequisite for `BASE-01`. |
 | `skid.<id>.hasDrainPan` | Has Drain Pan | Skid | Scans for `segment_CC` or `"drain"` internals | Auto-derived (Authoritative) | Triggers drain pan slope, support, and bulkhead rules (`BASE-08`, `BASE-15`, `BASE-17`, `BASE-19`, `BASE-20`). |
 | `skid.<id>.hasFans` | Has Fans | Skid | Scans for `FS`, `FE`, `FR` segments or `<fan>` | Auto-derived (Authoritative) | Triggers fan wall framing and motor rail checks (`FAN-01..09`). |
 | `skid.<id>.hasCoils` | Has Coils | Skid | Scans for `CC`, `HC`, `IC`, `VC` or `<coil>` | Auto-derived (Authoritative) | Triggers coil panel width and casing rules (`HOUS-06`, `COIL-01..07`). |
@@ -355,6 +357,8 @@ For every applicable rule instance across Unit and Shipping Skids, the detailer 
 | **Detailer Comment** | `C` | `Verification List` Column Y (`Comments`) | String text (e.g. `"Verified per RFI-12"`) | Adds specific clarifying remarks or deviation references for the checker. |
 | **Initials** | Auto | `Verification List` Column Z (`Initials`) | 2-letter uppercase initials (e.g. `"TD"`) | Automatically stamped from the detailer's profile name upon check-off. |
 
+The columns are stable, but verification rows are not fixed template coordinates: the OpenXML patcher rebuilds rows from row 26 onward, grouped under generated skid and general-unit headers. Consumers must use the generated workbook or `template_map.json`, not infer a rule row from a static template row number.
+
 ---
 
 ## 6. Comprehensive Verification Rule Catalog Reference
@@ -374,7 +378,7 @@ The application contains 104 standardized rules transcribed from the master Exce
 | **Internals** | Access Segments | 3 | 3 | `ACC-01` to `ACC-03` | Access Door & Interior Corridor Standard |
 | **Internals** | Filter Segments | 6 | 6 | `FILT-01` to `FILT-06` | Filter Framing & Stiffener Loading Standard |
 | **Internals** | Reconnects | 3 | 3 | `RECON-01` to `RECON-03` | Seismic Reconnect Master Model Standard |
-| **TOTALS** | — | **104** | **99 Active** | — | **Rule Pack v14.0.0 (`020e8ef...`)** |
+| **TOTALS** | — | **104** | **99 Active** | — | **Rule Pack v14.0.0 (read the active bundle hash from `resources/rulepack/manifest.json`)** |
 
 ---
 
@@ -382,8 +386,8 @@ The application contains 104 standardized rules transcribed from the master Exce
 
 When conducting an official audit of a completed verification deliverable, auditors should verify the following 7 checkpoints:
 
-- [ ] **1. Cryptographic File Integrity**: The `.dvl` project file contains valid 64-character SHA-256 hashes matching the embedded `Config.xml` and pinned Rule Pack bundle (`020e8ef38896efc9abcdb820b2dbde73ea251ddccbc646f63e06b337b2e1bc28`).
-- [ ] **2. Fact Confirmation Provenance**: Zero facts remain in `Unknown` or `RequiresConfirmation` state. Every shipping skid has an explicitly confirmed aggregate lifting weight.
+- [ ] **1. Cryptographic File Integrity**: The `.dvl` project file contains valid 64-character SHA-256 hashes matching the embedded `Config.xml` and its pinned Rule Pack bundle. Compare the pin with the active `resources/rulepack/manifest.json` only when assessing active-pack compatibility.
+- [ ] **2. Fact Confirmation Provenance**: No fact required by the selected release path remains `Unknown` or `RequiresConfirmation`. Calculated skid weights are `Derived` / `Authoritative`; an explicit manual weight override is recorded as such but is not mandatory.
 - [ ] **3. Rule Completion Fidelity**: All applicable checks across the General Unit and all Shipping Skids have status `Passed` or `NA` with matching detailer initials in column Z.
 - [ ] **4. Special Quotes Reconciliation**: All customer deviations from the order packet are accounted for in the 22-slot SQ table and linked to their respective shipping skids.
 - [ ] **5. Dynamic Excel Synthesis Fidelity**: The generated `Detailing Verification List.xlsx` workbook prunes inactive category sheets, dynamically adapts `Check Information` formulas without `#REF!` or `#VALUE!` corruption, and renders grouped shipping skid sections containing only applicable checks.

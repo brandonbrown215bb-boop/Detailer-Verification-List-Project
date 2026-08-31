@@ -15,11 +15,13 @@ In actual AHU fabrication, most units do not include every category (for example
    - `OpenXmlTemplatePatcher` dynamically determines active category worksheets by inspecting all `Applicable` checklist instances in the current project.
    - Any category worksheet among the 8 scratchpad tabs with zero applicable checks is cleanly deleted from the OpenXML package (`WorkbookPart.DeletePart` and `Sheet.Remove`).
    - Core tabs (`Revision List`, `Verification List`, `Check Information`, `Comments`) are permanent and never deleted.
+   - Category routing: `Base` → Base; `Paperwork` → Paperwork; `MOM` → MOM; `Housing`, `UTL`, and `Knockdown` → Housing; `Drain Pan` → Drain Pan; `Coil Panels` → Coil Panels; `Reconnects` → Reconnects; `Internal`/`Internals` route by subgroup (`Drain Pan`, `Coil Segments`, `Reconnects`) or default to Internal. Unknown categories default to Housing.
 
 2. **Formula Adaptation Engine on `Check Information`**:
    - Deleting worksheet parts leaves dangling formula references in Excel, which would otherwise evaluate to `#REF!` errors.
    - `AdaptCheckInformationFormulas` scans cells `B8..B15` and `C8..C15` on `Check Information`. If the referenced category worksheet was pruned, its formula cell is cleared and replaced with a static numeric `0`.
    - Dynamic formula sums `B19` (`H1` sum across active categories) and `B20` (`J1` sum across active Base/Housing/Paperwork categories) are dynamically rewritten to sum only currently active category sheets.
+   - `B8..B15` are the checker cells and `C8..C15` the detailer cells. Formula text is a `+`-joined set of active `H1` references for `B19` and active Base/Housing/Paperwork `J1` references for `B20`.
    - The OpenXML `CalculationChainPart` is deleted to force Microsoft Excel to recompute all dependency graphs cleanly upon opening.
 
 3. **Dynamic Skid-Grouped Verification Rows**:
@@ -28,9 +30,14 @@ In actual AHU fabrication, most units do not include every category (for example
      - Section 1: `=== GENERAL UNIT VERIFICATIONS ===` (grouped by category subheaders: Base, Housing, Knockdown, UTL, Paperwork, MOM).
      - Section 2..N: `=== SHIPPING SKID X: [Skid Name] ===` (grouped by Skid Segments and Internals).
    - Only applicable checks are rendered, each styled with category subheaders, alternating zebra striping, check status indicators, and detailer initials.
+   - Row styling uses fixed numeric `StyleIndex` values from the packaged `template.xlsx`. Template style-table changes must be coordinated with `OpenXmlTemplatePatcher`; this dependency is not inferred at runtime.
 
 ## Consequences
 
 - Deliverable Excel workbooks are concise, clean, and contain only sheets and checks relevant to the specific AHU configuration.
 - Eliminates all `#REF!` formula errors on `Check Information`.
 - Reviewers and checkers receive a readable, skid-organized verification list directly aligned with physical unit assembly.
+
+## Implementation limitation
+
+Export performs direct file copy/open operations. A workbook locked by Excel can surface an `IOException`; the current implementation does not retry or choose an alternate name. Close the workbook and export again.

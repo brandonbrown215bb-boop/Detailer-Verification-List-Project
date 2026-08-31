@@ -25,8 +25,9 @@ These failures share one boundary: persisted and distributed artifacts need expl
    - Native writes use a sibling temporary file and replace the destination only after the write is flushed.
 
 4. **Desktop delivery**
-   - The supported artifact is a self-contained publish folder, not a literal single executable.
+   - The supported artifact is a framework-dependent publish folder, not a literal single executable.
    - `dist/` and `resources/rulepack/` are explicit adjacent publish content. Release builds load only those packaged assets; repository and Vite-server probing remain debug conveniences.
+   - The main host requires `dist/index.html`; `RuleEditor.exe` requires `dist/rule-editor.html`. Both publish folders need their adjacent rule-pack assets.
 
 5. **Official workbook boundary**
    - The desktop OpenXML path is the official deliverable generator. Browser SheetJS export remains a preview and is not certification evidence.
@@ -41,5 +42,6 @@ These failures share one boundary: persisted and distributed artifacts need expl
 ## Addendum (2026-08-26)
 
 1. **Native UPZ Binary Assets**: In addition to `dist/` and `resources/rulepack/`, the publish distribution includes `resources/bin/` containing native 32-bit `unpack32.exe` and `ywunpack.dll` for UPZ decompression.
-2. **MSBuild Packaging Verification**: MSBuild target `ValidatePackagedAssets` enforces that `dist/index.html`, all 5 `resources/rulepack/` files, and both `resources/bin/` native binaries exist prior to publish.
+2. **MSBuild Packaging Verification**: `src/backend/Directory.Build.targets` supplies the common publish guard for both Windows hosts and requires the five baseline rule-pack members under `resources/rulepack/`. The App project's `ValidatePackagedAssets` additionally checks `dist/index.html`, `resources/bin/unpack32.exe`, and `resources/bin/ywunpack.dll`; the Rule Editor's target checks `dist/rule-editor.html`. `node scripts/build_rulepack.mjs` still verifies that the manifest hashes match their artifacts, which presence checks alone cannot prove.
+3. **Sync rollback**: `SyncFromRemote` receives staging, active-store, and LKG directories from its caller. It stages, validates, moves the active store to the caller-provided LKG path, promotes staging, and restores LKG on promotion failure; no fixed LKG storage location is defined by the core service.
 

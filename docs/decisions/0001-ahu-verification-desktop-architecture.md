@@ -40,7 +40,8 @@ AHU detailing verification requires validating complex engineering configuration
 
 ## Addendum (2026-08-26)
 
-1. **Framework & Packaging Update**: Standardized on **.NET 10** (`net10.0-windows` / `net10.0`) and folder-based self-contained delivery (`PublishSingleFile=false`) alongside adjacent `dist/`, `resources/rulepack/`, and `resources/bin/` directories.
+1. **Framework & Packaging Correction**: The current projects target **.NET 8** (`net8.0-windows` / `net8.0`), not .NET 10. Delivery remains folder-based (`PublishSingleFile=false`) with adjacent `dist/`, `resources/rulepack/`, and `resources/bin/` directories.
 2. **Dynamic OpenXML Deliverable Synthesis**: Decision 2 is superseded by ADR-0005. Inactive category worksheets are pruned, formula chains on `Check Information` are adapted dynamically to eliminate `#REF!` errors, `CalculationChainPart` is dropped to force Excel recalculation, and `Verification List` rows ($\ge 26$) are built dynamically grouped by shipping skid sections.
 3. **Client Storage & Autosave**: Frontend debounces active state autosaves to WebView2 `localStorage` (`ahu_dvl_autosave`), while `%LOCALAPPDATA%/AHUVerification/WebView2Data/` provides isolated runtime profile storage.
+   This is crash-recovery state, not an atomic `.dvl` file write. If it is unavailable or malformed, the user must reopen/import the source or a saved `.dvl`; no automatic file-level recovery is implemented here.
 

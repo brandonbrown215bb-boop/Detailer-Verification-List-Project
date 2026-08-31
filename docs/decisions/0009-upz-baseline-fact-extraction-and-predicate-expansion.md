@@ -46,5 +46,11 @@ Previously, fact extraction and graph normalization captured top-level unit opti
 ## Consequences
 
 - The visual AST Rule & Logic Editor has full access to 50+ strongly-typed domain facts across openings, components, subfloors, and structural geometries.
-- XML parsing across all 18 UPZ unit examples achieves 100% reliable extraction in both C# (.NET 8/10) and TypeScript (browser/Vite).
+- XML parsing across all 18 UPZ unit examples is intended to run in both C# (.NET 8) and TypeScript (browser/Vite); native-UPZ extraction still requires the licensed unpacker assets to be staged.
 - Existing checklist evaluation remains backward-compatible with 0 regressions in existing test suites.
+
+## Addendum (2026-08-28): fact and geometry conventions
+
+Opening facts are indexed by source ID: `door.{id}.width` (with related door fields), `damper.{id}.type`/`.actuator`/`.width`/`.height`, and `floorDrain.{id}.holeDiameter`. The floor-drain diameter is a derived fact. Tier classification requires `y > defaultBaseHeight + 10` and no base with `abs(base.y - segment.y) < 5`; stacked bases remain `y > 15`.
+
+`testingOptions/deflectionTest` is published as `unit.deflectionTest` for AST rules. These keys, rather than presentation labels, are the supported rule-authoring contract.

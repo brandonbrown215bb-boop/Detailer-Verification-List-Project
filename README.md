@@ -13,7 +13,7 @@ The root directory contains pre-configured Windows batch files for instant launc
 | Launcher / Script | Purpose | Quick Action |
 | :--- | :--- | :--- |
 | 🎛️ **[`menu.bat`](menu.bat)** | **Command Center** — Interactive numeric menu for all operations | Double-click to launch menu |
-| 🚀 **[`launch-app.bat`](launch-app.bat)** | **Detailing Verification Desktop App** (.NET 10 + WebView2) | Direct app launch |
+| 🚀 **[`launch-app.bat`](launch-app.bat)** | **Detailing Verification Desktop App** (.NET 8 + WebView2) | Direct app launch |
 | 🛠️ **[`launch-rule-editor.bat`](launch-rule-editor.bat)** | **Rule & Logic Editor Studio** (`RuleEditor.exe`) | Direct editor launch |
 | 🌐 **[`start-dev.bat`](start-dev.bat)** | **Vite Web Dev Server** (Fast HMR on `localhost:5173`) | Launch dev web server |
 | 🏗️ **[`build-all.bat`](build-all.bat)** | **Full Build** (Frontend + Rule Pack + All .NET Projects) | Rebuild entire solution |
@@ -37,7 +37,7 @@ The root directory contains pre-configured Windows batch files for instant launc
 | [`build-rulepack.bat`](build-rulepack.bat) | Validates rule definitions and regenerates canonical LF-normalized SHA-256 integrity hashes in `manifest.json`. | `node scripts/build_rulepack.mjs` |
 | [`run-tests.bat`](run-tests.bat) | Executes xUnit automated verification tests and Node.js AST converter test suite. | `dotnet test` + `node scripts/test_ast_converter.mjs` |
 | [`publish-release.bat`](publish-release.bat) | Generates production release distributions in `publish\AHUVerification` and `publish\RuleEditor`. | `dotnet publish -c Release -r win-x64` |
-| [`setup.bat`](setup.bat) | Verifies .NET 10 SDK & Node.js prerequisites, installs dependencies, builds all binaries, and runs verification tests. | Comprehensive validation |
+| [`setup.bat`](setup.bat) | Verifies .NET 8+ SDK and Node.js prerequisites, installs dependencies, builds all binaries, and runs verification tests. | Comprehensive validation |
 
 ---
 
@@ -62,17 +62,10 @@ Detailer-Verification-List-Project/
 │   ├── ruleEditor/                   # Rule & Logic Editor visual interface
 │   ├── components/                   # Reusable React UI components
 │   ├── services/                     # IPC Bridge, Rulepack API, and Fact resolvers
-│   ├── rulepack/                     # Baseline Rule Pack definitions & manifests
-│   │   ├── rules.json                # Semantic verification rules & JSON-AST predicates
-│   │   ├── template_map.json         # Physical cell mappings for Excel output
-│   │   ├── approved_mappings.json    # Confirmed equipment & component code mappings
-│   │   ├── template.xlsx             # Official baseline Excel template
-│   │   └── manifest.json             # SHA-256 integrity hash bundle manifest
-│   │
 │   └── backend/
 │       ├── AHUVerification.Core/     # Domain Engine: XML parsing, Fact Registry, AST Evaluator, OpenXML Patcher
-│       ├── AHUVerification.App/      # Main Desktop Host (.NET 10 + WebView2 Form + Typed IPC Bridge)
-│       └── AHUVerification.RuleEditor/ # Rule Studio Host (.NET 10 + WebView2 Form + Rule Sync Bridge)
+│       ├── AHUVerification.App/      # Main Desktop Host (.NET 8 + WebView2 Form + Typed IPC Bridge)
+│       └── AHUVerification.RuleEditor/ # Rule Studio Host (.NET 8 + WebView2 Form + Rule Sync Bridge)
 │
 ├── tests/
 │   └── AHUVerification.Tests/        # xUnit Test Suite (XML Parser, Rulepack, OpenXML, Persistence)
@@ -95,7 +88,7 @@ Detailer-Verification-List-Project/
 ## 🛠️ Prerequisites & Requirements
 
 - **Operating System**: Windows 10 (Build 19041+) or Windows 11 x64
-- **.NET SDK**: [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later)
+- **.NET SDK**: [.NET 8 SDK](https://dotnet.microsoft.com/download) or later, with the .NET 8 targeting pack (`net8.0` / `net8.0-windows`)
 - **Node.js**: [Node.js v18+](https://nodejs.org/) and `npm`
 - **WebView2 Runtime**: Included by default in Windows 10/11 (or install the Evergreen WebView2 Runtime)
 
@@ -110,6 +103,8 @@ Detailer-Verification-List-Project/
    - **Rule & Logic Editor Studio**: `http://localhost:5173/rule-editor.html`
 3. Any changes saved in `src/` will hot-reload instantly.
 
+Browser preview has no WebView2 bridge: native file dialogs, UPZ extraction, and the official OpenXML export are desktop-host features. Browser storage and SheetJS download fallbacks are useful for preview, not certification.
+
 ### 2. Developing Desktop Hosts & .NET Backend
 1. Double-click [`launch-app.bat`](launch-app.bat) to launch the desktop application in Debug mode.
 2. When the Vite dev server is running, the desktop app automatically connects to `http://localhost:5173` for live development; otherwise, it serves the packaged assets from `dist\`.
@@ -119,6 +114,8 @@ Detailer-Verification-List-Project/
 1. Launch the Studio via [`launch-rule-editor.bat`](launch-rule-editor.bat).
 2. Edit condition trees, test AST rules in the sandbox against sample configurations, and save.
 3. Run [`build-rulepack.bat`](build-rulepack.bat) to verify schema adherence and re-calculate SHA-256 hashes across `manifest.json`.
+
+Run this after every change to `resources/rulepack` JSON and before tests; an out-of-date manifest intentionally fails integrity tests.
 
 ### 4. Running Automated Tests
 Run [`run-tests.bat`](run-tests.bat) before submitting changes. This executes:
@@ -133,8 +130,11 @@ Run [`run-tests.bat`](run-tests.bat) before submitting changes. This executes:
 - **Node.js AST Converter Tests**:
   - Predicate generation, roundtrip AST conversion, and required fact derivation.
 
+Shared test helpers include `TestGraphFactory`, `TestPipelineContext`, and `TestPathHelper`.
+
 ### 5. Packaging & Deploying Releases
 1. Run [`publish-release.bat`](publish-release.bat).
+   If publishing manually, run `npm run build` first: MSBuild validates required frontend/native assets before publish.
 2. Standalone release packages will be generated in:
    - `publish\AHUVerification\AHUVerification.App.exe`
    - `publish\RuleEditor\RuleEditor.exe`

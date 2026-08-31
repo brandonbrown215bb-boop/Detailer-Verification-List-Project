@@ -23,6 +23,7 @@ Detailers require an efficient, reliable, and high-clarity desktop user interfac
    - Inline dynamic SQ manager on the General Unit tab with drag-and-drop reordering, active slot counter (`X / 22 slots used`), and optional tagging to specific Skids or Rules.
    - Linked SQs automatically display contextual badges on the tagged Skid headers and Rule cards.
    - Automatically maps up to 22 entries into rows 4–25 (columns G & H) of the official `Verification List` sheet at export.
+   - Entries beyond the 22 physical template slots remain in application state; the current workbook mapping does not place them in additional rows.
 
 4. **Skid-Centric Verification View**:
    - Dynamic Skid tabs showing skid boundary metadata (detected segments, internals, base type, weight status).
@@ -41,6 +42,7 @@ Detailers require an efficient, reliable, and high-clarity desktop user interfac
      - **Final Verification Deliverable**: 1-click generation when 100% checks and facts are satisfied.
      - **Draft Export**: Watermarked/flagged export allowed with confirmation.
      - Auto-generated default filename pattern: `<JobName>_<COM>_Detailing_Verification_List.xlsx`.
+     - Missing tokens currently fall back to `AHU_Project` and `COM-000000` (for example, `AHU_Project_COM-000000_Detailing_Verification_List.xlsx`).
      - Post-export instant actions: 'Open in Excel' and 'Show in Explorer'.
 
 7. **Productivity & Keyboard Navigation Suite**:
@@ -53,3 +55,7 @@ Detailers require an efficient, reliable, and high-clarity desktop user interfac
 - Delivers a streamlined, high-productivity interface purpose-built for AHU engineering workflows.
 - Eliminates guesswork by surfacing fact provenance and rule evaluation logic transparently.
 - Protects output data integrity through proactive pre-flight validation.
+
+## Addendum (2026-08-28)
+
+Re-importing XML re-extracts source facts. Existing manual overrides are user state and require review in the resolution UI; this ADR does not claim an automatic conflict-merge policy.

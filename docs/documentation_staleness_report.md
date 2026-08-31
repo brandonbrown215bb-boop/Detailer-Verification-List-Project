@@ -9,6 +9,8 @@
 
 ---
 
+> **Archived point-in-time report (superseded for current-state decisions):** The commit SHAs, directory layout, framework conclusions, test counts, and command outcomes below are evidence from the 2026-08-26 audit only. They must not be used as present repository instructions. In the current checkout, C# projects target `net8.0` / `net8.0-windows`, `resources/rulepack/` is the rule-pack location, and the temporary `docs/roolz/`, `src/rulepack/`, `spike/`, and `implementation_plan.md` paths referenced below are absent. Verify current Git state and source before acting on any remediation recommendation in this archive.
+
 ## 1. Executive Summary
 
 A systematic, adversarial review and comprehensive audit was conducted across the entire codebase (`src/`, `tests/`, `scripts/`, `spike/`, `resources/`, and build/project configuration) against all documentation artifacts under `docs/`, `AGENTS.md`, `GEMINI.md`, `.agents/`, and `implementation_plan.md`.

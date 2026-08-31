@@ -1,5 +1,7 @@
 # AHU Detailing Verification: Field Derivation & Classification Report
 
+> **Maintenance note (2026-08-28):** This catalog describes the current fact-extraction contract. It supersedes older audit language that treated calculated skid weight as a confirmation gate. The fact registry and rule pack remain the executable source of truth.
+
 ## Executive Summary
 
 The AHU Detailing Verification system ingests unit specifications and transforms them into a **Layer 2 Provenance-Aware Fact Registry** and **Scoped AST Checklist Instances**, which ultimately patch the official `Detailing Verification List.xlsx` workbook via OpenXML.
@@ -97,6 +99,8 @@ flowchart TD
 - **In Standalone Config.xml Mode**: `Config.xml` does not contain order-level tags (only raw internal IDs). Order fields initialize with standard defaults and prompt notes directing the detailer to confirm against the MAPICS order packet.
 - **COM # Boundary**: `unit.comNumber` (MAPICS COM #) is never stored in engineering selection files (`Config.xml` or `.upz`) and remains an explicit, prompt-guided manual entry field for detailers across all ingestion modes.
 
+**Final-export boundary:** Standalone `Config.xml` imports may populate the documented placeholder/default identity values. The UI permits a detailer to replace them; this report does not treat a placeholder as evidence that an official order value was confirmed for final release.
+
 ### 3.2. Geometry, Structural Casing & Thermal Break
 - **`unit.shellType`**: Extracted directly from `<housingStyle>` (e.g., `ThermalBreak` or `Standard`).
 - **`unit.wallThickness`**: Extracted from `<surfaceDetail_Front>/<housingThickness>` or derived as `2.0"` if standard thermal break casing is indicated.
@@ -157,14 +161,14 @@ graph LR
     SR --> HW
 ```
 
-### 4.1. Strict Skid Weight Semantics
+### 4.1. Calculated Skid Weight Semantics
 - **Extraction Logic**: For each skid, the parser iterates through referenced `segmentID`s and sums their individual `<weight>` properties:
   $$\text{calculatedWeight} = \sum_{s \in \text{SkidSegments}} s.\text{weight}$$
-- **Provenance Invariant**:
+- **Runtime provenance:**
   - `status`: **`Derived`**
-  - `confidence`: **`RequiresConfirmation`**
-  - `promptNote`: *"Sum of segments = X lbs. Confirm or override official lifting weight."*
-  - **Rationale**: To prevent lifting lug failures and crane accidents, the system never assumes aggregate calculated segment weight is authoritative without detailer verification.
+  - `confidence`: **`Authoritative`**
+  - The extractor records the derivation as the sum of segment weights. There is no mandatory prompt note or confirmation action in the current extraction contract.
+  - A detailer may manually override a fact when the calculated value is unsuitable; that override is distinct from an automatic confirmation requirement.
 
 ### 4.2. Internal Feature Detection
 For every shipping skid, the system evaluates boolean presence flags derived from segment types and child nodes:
@@ -177,6 +181,29 @@ For every shipping skid, the system evaluates boolean presence flags derived fro
 ### 4.3. Motor Controls Extraction
 - Extracted from `<electricalOptions>/<motorControlList>/<motorControl>`.
 - Extracts: `userDefinedName`, `unitSide`, `motorControlType`, `fla`, `voltage`, `horsePower`, `disconnectSize`, `weight`, and `serviceSegmentReferenceList/segmentID`.
+
+### 4.4. Opening-Schedule Fact Families
+
+The catalog in section 2 is not limited to unit-level fields. For each entity in the normalized graph, the extractor emits the following fact-key families. Unless noted, these are `Known` / `Authoritative` facts sourced from the parsed opening schedule.
+
+| Family | Fact suffixes | Notes |
+| :--- | :--- | :--- |
+| `door.<id>` | `width`, `height`, `swing`, `hingeSide`, `hasWindow`, `segmentId` | One family per door. |
+| `damper.<id>` | `type`, `actuator`, `width`, `height` | One family per damper. |
+| `floorDrain.<id>` | `type`, `pipingMaterial`, `connectionDiameter`, `holeDiameter`, `segmentId` | `holeDiameter` is `Derived` / `Authoritative`; the remaining suffixes are known values. |
+| Aggregate counts | `door.totalCount`, `damper.totalCount`, `floorDrain.totalCount` | Derived / Authoritative counts for the parsed graph. |
+
+### 4.5. Component-Subtree Fact Families
+
+Component facts are emitted only when the corresponding configuration exists on a segment. They are `Known` / `Authoritative` values from the parsed component subtree.
+
+| Family | Fact suffixes |
+| :--- | :--- |
+| `fan.<segmentId>` | `isFanArray`, `arrayGrid`, `hasRedundancy`, `hasStand`, `hasRemovalRail`, `isolationType`, `motorHp`, `voltage` |
+| `coil.<segmentId>` | `bulkheadMaterial`, `hasStackingRack`, `dripPanMaterial`, `staggeredOverlap`, `connectionHand` |
+| `filter.<segmentId>` | `loadMethod`, `bulkheadMaterial`, `gaugeType`, `gaugeDoorId` |
+| `wheel.<segmentId>` | `hasPurge`, `mediaType`, `allowVariableSpeed` |
+| `motorControl.<name>` | `disconnectSize`, `fla`, `voltage`, `hp`, `unitSide` |
 
 ---
 
@@ -203,7 +230,7 @@ graph TD
 1. **Rule `BASE-01` (Lifting Lug Support > 4000 lbs)**:
    - **Predicate**: `skid.weight > 4000`
    - **Required Fact**: `skid.weight`
-   - If `skid.weight` is unconfirmed, evaluates to `NeedsInput`. Once confirmed, evaluates to `Applicable` (if > 4000 lbs) or `NotApplicable` (if $\le$ 4000 lbs).
+   - The runtime-derived `skid.weight` is `Authoritative`, so the rule evaluates to `Applicable` (if > 4000 lb) or `NotApplicable` (if $\le$ 4000 lb) without a confirmation gate. It becomes `NeedsInput` only when the required fact is missing, unknown, or otherwise marked `RequiresConfirmation`.
 2. **Rule `BASE-05` (Drain Pan Handing)**:
    - **Predicate**: `skid.hasDrainPan === true`
    - **Required Fact**: `skid.hasDrainPan`
@@ -218,10 +245,8 @@ graph TD
 ## 6. Synthesis Architecture in Manual Creation Mode
 
 When a detailer initializes a unit without `Config.xml` (`manualUnitFactory.ts`):
-1. **Skid & Segment Generation**: Creates $N$ shipping skids (based on `config.skidCount`).
-   - Skid 1 is synthesized with an **Inlet Plenum** (`segment_IP`).
-   - Intermediary Skids are synthesized with **Access Sections** (`segment_XA`).
-   - Final Skid is synthesized with a **Supply Fan Section** (`segment_FS`).
+1. **Skid & Segment Generation**: Accepts explicitly configured `skids` and `segments`, including custom segment types, dimensions, weights, internals, and per-skid base/weight fields. The legacy `config.skidCount` path is only a fallback when an explicit skid list is absent.
+   - The fallback creates $N$ shipping skids and distributes default segments as an **Inlet Plenum** (`segment_IP`) on the first skid, **Access Sections** (`segment_XA`) on intermediary skids, and a **Supply Fan Section** (`segment_FS`) on the final skid.
 2. **Base Geometry**: Synthesizes matching `unitBase` objects with height `config.baseHeight` (6", 8", 10", or 12") and housing style `config.housingStyle`.
 3. **Synthetic XML Serialization**: Emits a clean, standard XML configuration header:
    ```xml

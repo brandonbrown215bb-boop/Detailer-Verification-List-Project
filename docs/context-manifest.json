@@ -1,18 +1,28 @@
 {
   "schema_version": 1,
   "documents": [
-    {
-      "path": "docs/architecture/README.md",
-      "scope": [
-        "implementation_plan.md",
-        "docs/decisions/**",
-        "spike/**",
-        "src/**",
-        "tests/**",
-        "scripts/**",
-        "resources/**"
-      ],
-      "verified_at_commit": "7a8ff4489f01b6891c1e32721737176353fb976b"
-    }
+    { "path": "README.md", "scope": ["src/**", "resources/**", "scripts/**", "tests/**", "package.json", "publish-release.bat"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "PROJECT.md", "scope": ["src/**", "resources/**", "tests/**", "scripts/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "AGENTS.md", "scope": [".agents/**", "docs/architecture/**", "docs/decisions/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "GEMINI.md", "scope": ["AGENTS.md"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/architecture/README.md", "scope": ["docs/decisions/**", "src/**", "tests/**", "scripts/**", "resources/**", "package.json"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/README.md", "scope": ["docs/decisions/000*.md"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0001-ahu-verification-desktop-architecture.md", "scope": ["src/backend/**", "src/**", "resources/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0002-ui-ux-design-specification.md", "scope": ["src/App.tsx", "src/components/**", "src/styles/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0003-rulepack-persistence-and-desktop-delivery.md", "scope": ["src/backend/**", "src/services/projectStorage.ts", "resources/rulepack/**", "scripts/build_rulepack.mjs", "publish-release.bat"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0004-upz-bundle-ingestion-and-order-metadata-traces.md", "scope": ["src/backend/**", "src/services/**", "resources/bin/**", "tests/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0005-dynamic-openxml-deliverable-synthesis.md", "scope": ["src/backend/**", "resources/rulepack/template.xlsx", "resources/rulepack/template_map.json", "tests/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0006-manual-unit-graph-synthesis.md", "scope": ["src/services/manualUnitFactory.ts", "src/components/**", "src/types.ts", "tests/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0007-typed-ipc-bridge-protocol.md", "scope": ["src/backend/**/Bridge/**", "src/services/desktopBridge.ts"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0008-rule-editor-desktop-studio-and-visual-ast-authoring.md", "scope": ["src/backend/AHUVerification.RuleEditor/**", "src/ruleEditor/**", "src/rule-editor.html", "resources/rulepack/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/decisions/0009-upz-baseline-fact-extraction-and-predicate-expansion.md", "scope": ["src/backend/AHUVerification.Core/**", "src/services/factRegistry.ts", "src/services/ruleEvaluator.ts", "tests/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/operations/development.md", "scope": ["package.json", "scripts/**", "*.bat", "src/backend/**/*.csproj", "publish-release.bat"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/operations/validation.md", "scope": ["tests/**", "scripts/**", "package.json", "src/backend/**/*.csproj"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/rule_and_logic_editor_guide.md", "scope": ["src/ruleEditor/**", "src/rule-editor.html", "resources/rulepack/**", "src/backend/AHUVerification.RuleEditor/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/AHU_Verification_E2E_Workflow_Audit.md", "scope": ["src/backend/**", "src/services/**", "src/components/**", "resources/rulepack/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/documentation_staleness_report.md", "scope": ["docs/**", "src/**", "tests/**", "scripts/**", "resources/**", "package.json", "*.bat"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/field_derivation_report.md", "scope": ["src/backend/AHUVerification.Core/**", "src/services/factRegistry.ts", "src/services/manualUnitFactory.ts", "src/types.ts"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "audits/code_duplication_audit.md", "scope": ["src/**", "tests/**", "scripts/**", "*.bat", "package.json", "src/backend/**/*.csproj"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/context-manifest.json", "scope": ["README.md", "PROJECT.md", "AGENTS.md", "GEMINI.md", "docs/**", "audits/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" }
   ]
 }

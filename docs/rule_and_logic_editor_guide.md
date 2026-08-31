@@ -65,8 +65,11 @@ flowchart TD
 ```
 
 ### Launching the Rule Editor
-- Run `launch-rule-editor.bat` from the repository root, or
-- Select **Option 3** from `menu.bat`.
+- Run `launch-rule-editor.bat` from the repository root, or select **Option 2** from `menu.bat`.
+- To run the desktop host directly, first build the Vite bundle, then run `dotnet run --project src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj`.
+- For browser development, run `npm run dev` and open `http://localhost:5173/rule-editor.html`. Vite is configured with `rule-editor.html` as a separate Rollup entry point.
+
+The web page is an authoring preview, not a local publishing host. It loads bundled rule-pack JSON and can export/import a draft JSON array. Only the WebView2 desktop host supplies `getRulePack`, folder selection, and `publishRulePack` bridge actions. In browser mode, **Publish Release** updates the in-memory editor baseline and displays a success notification, but it does not write a bundle or download one; use **Export Draft JSON** for handoff.
 
 ---
 
@@ -89,7 +92,7 @@ Every verification rule is defined using the internal `RuleDefinition` contract:
 | **Required Facts** | `requiredFacts` | `string[]` | `["skid.weight"]` | Set of XML fact keys required to evaluate this rule. Auto-derived from the AST condition tree. |
 | **Applicability Logic** | `predicate` | `ASTPredicate?` | `AST JSON Object` or `undefined` | Boolean AST condition tree. When absent (`undefined`), rule is unconditionally applicable. |
 | **Allow N/A Toggle** | `allowNA` | `boolean` | `true` / `false` | When `false`, detailers cannot mark the check N/A; it must be checked Pass/Fail. |
-| **Verification Mode** | `verificationMode` | `string` | `'ManualCheckbox'`, `'AutoEvaluated'`, `'MeasurementVerify'` | Interaction style in the detailer desktop interface. |
+| **Verification Mode** | `verificationMode` | `string` | `'ManualCheckbox'`, `'AutoEvaluated'`, `'MeasurementVerify'` | The Rule Editor exposes all three values, but the detailer workspace has no mode-specific renderer or measurement-threshold engine. The shipped rules use `ManualCheckbox`; do not use the other values as if they automate a check. |
 | **Archived** | `isArchived` | `boolean?` | `true` / `false` | When `true`, rule is soft-deleted and excluded from active checklist synthesis. |
 
 ---
@@ -121,50 +124,18 @@ Every verification rule is defined using the internal `RuleDefinition` contract:
 
 ### 2.3 Fact Dictionary Catalog
 
-The visual condition builder integrates domain facts across Unit, Skid, Segment, Component, and Opening scopes:
+`src/ruleEditor/components/FactDictionaryCatalog.ts` is the authoritative catalog for the visual condition-builder selector. It currently exposes a curated, static set; it does **not** enumerate every fact emitted by the backend extractor.
 
-| Fact Key | Scope | Data Type | Units / Enum Options | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `unit.unitType` | `Unit` | `string` | `Outdoor`, `Indoor` | Installation environment. |
-| `unit.shellType` | `Unit` | `string` | `ThermalBreak`, `Standard` | Casing profile and thermal break construction. |
-| `unit.thermalBreak` | `Unit` | `boolean` | `true`, `false` | Thermal-break framing profile parameter. |
-| `unit.baseHeight` | `Unit` | `number` | `inches` (e.g. `6`, `8`, `10`, `12`) | Structural base channel height. |
-| `unit.lipHeight` | `Unit` | `number` | `inches` (e.g. `2.0`, `0.0`) | Base perimeter upturned lip height. |
-| `unit.hasUTL` | `Unit` | `boolean` | `true`, `false` | Base perimeter upturned lip presence (`lipHeight > 0`). |
-| `unit.curbrest` | `Unit` | `boolean` | `true`, `false` | Roof curb rest mounting configuration. |
-| `unit.isTiered` | `Unit` | `boolean` | `true`, `false` | Tiered unit topology (segments atop segments without bases). |
-| `unit.isStacked` | `Unit` | `boolean` | `true`, `false` | Stacked unit topology (distinct upper base). |
-| `unit.hasFloorDrains` | `Unit` | `boolean` | `true`, `false` | Floor drain cutouts present in unit. |
-| `unit.knockdown` | `Unit` | `boolean` | `true`, `false` | Disassembled field-assembled unit flag (KD). |
-| `unit.shippingProtection` | `Unit` | `string` | `ShrinkWrap`, `Tarp`, `Crate` | Shipping protection packaging type. |
-| `unit.noa` | `Unit` | `boolean` | `true`, `false` | Florida / Miami-Dade NOA hurricane wind load certification. |
-| `unit.isSeismic` | `Unit` | `boolean` | `true`, `false` | Structural seismic calculation requirement (IBC/OSHPD). |
-| `unit.deflectionTest` | `Unit` | `string` | `None`, `StandardDeflection`, `CustomDeflection` | Deflection structural test specification. |
-| `unit.totalStaticPressure` | `Unit` | `number` | `in. w.g.` (e.g. `2.5`) | Design total static pressure (TSP). |
-| `casing.thicknessFront` | `Unit` | `number` | `inches` (e.g. `2.0`, `3.0`, `4.0`) | Front wall casing thickness. |
-| `casing.thicknessTop` | `Unit` | `number` | `inches` (e.g. `2.0`, `3.0`, `4.0`) | Roof top casing thickness. |
-| `casing.exteriorMaterial` | `Unit` | `string` | `STL GALV PPC`, `STL GALV`, `ALUM`, `SS304`, `SS316` | Outer skin metal material. |
-| `casing.exteriorGauge` | `Unit` | `number` | `ga` (e.g. `18`, `16`) | Outer skin metal gauge. |
-| `casing.interiorMaterial` | `Unit` | `string` | `STL GALV`, `ALUM`, `SS304`, `SS316`, `PERF GALV` | Inner liner sheet metal material. |
-| `casing.interiorGauge` | `Unit` | `number` | `ga` (e.g. `22`, `20`, `18`) | Inner liner sheet metal gauge. |
-| `casing.floorMaterial` | `Unit` | `string` | `STL GALV`, `ALUM`, `ALUM TREAD`, `SS304`, `SS316` | Floor skin sheet metal material. |
-| `casing.floorGauge` | `Unit` | `number` | `ga` (e.g. `16`, `14`, `12`) | Floor metal thickness gauge. |
-| `casing.insulationType` | `Unit` | `string` | `Foam`, `Fiberglass`, `MineralWool` | Panel core insulation material. |
-| `roof.hasSlopedRoof` | `Unit` | `boolean` | `true`, `false` | Sloped roof for rain runoff. |
-| `roof.roofPeak` | `Unit` | `string` | `Center`, `Left`, `Right`, `Flat` | Roof peak high side position. |
-| `roof.roofSlope` | `Unit` | `number` | `in/ft` (e.g. `0.25`) | Roof pitch slope. |
-| `skid.weight` | `Skid` | `number` | `lbs` (e.g. `4500`) | Aggregate shipping skid weight for lifting calculations. |
-| `skid.segmentCount` | `Skid` | `number` | `count` (e.g. `3`) | Number of casing segments on this base skid. |
-| `skid.hasDrainPan` | `Skid` | `boolean` | `true`, `false` | Drain pan presence on this skid. |
-| `skid.hasFans` | `Skid` | `boolean` | `true`, `false` | Fans present on this skid. |
-| `skid.hasCoils` | `Skid` | `boolean` | `true`, `false` | Heating or cooling coils present on this skid. |
-| `skid.hasFilters` | `Skid` | `boolean` | `true`, `false` | Filter banks present on this skid. |
-| `skid.hasHeatWheel` | `Skid` | `boolean` | `true`, `false` | Energy recovery heat wheel on this skid. |
-| `skid.hasSubFloor` | `Skid` | `boolean` | `true`, `false` | Base subfloor presence on this skid. |
-| `skid.floorDrainCount` | `Skid` | `number` | `count` | Number of floor drains on this skid. |
-| `door.totalCount` | `Unit` | `number` | `count` | Total access doors on unit. |
-| `damper.totalCount` | `Unit` | `number` | `count` | Total dampers on unit. |
-| `floorDrain.totalCount` | `Unit` | `number` | `count` | Total floor drains on unit. |
+| Selector scope | Currently selectable key families |
+| :--- | :--- |
+| Unit | `unit.shellType`, `unit.unitType`, `unit.wallThickness`, `unit.baseHeight`, `unit.thermalBreak`, `unit.knockdown`, `unit.washdown`, `unit.hasUTL`, `unit.isSeismic`, `unit.unitConstructionType`, `unit.noa`, `unit.totalStaticPressure`, material/insulation keys, `unit.slopedRoof`, `unit.roofSlope`, `unit.curbrest`, `unit.brandOption`, and `unit.productType`; plus `roof.roofPeak`. |
+| Skid | `skid.weight`, `skid.segmentCount`, dimensions, `skid.hasDrainPan`, `skid.hasFans`, `skid.hasCoils`, `skid.hasFilters`, `skid.hasHeatWheel`, and `skid.hasBaseSteel`. |
+| Segment | `segment.typeCode`, `segment.airPressureType`, `segment.airVolume`, `segment.hasMotorRemovalRail`, and `segment.internals`. |
+| Component | `motorControl.motorControlType`, `motorControl.fla`, `motorControl.hp`, and `motorControl.voltage`. |
+
+The backend does extract additional, instance-keyed facts, including `door.{id}.width|height|swing|hingeSide|hasWindow|segmentId`, `damper.{id}.type|actuator|width|height`, `floorDrain.{id}.type|pipingMaterial|connectionDiameter|holeDiameter|segmentId`, `fan.{segmentId}.*`, `coil.{segmentId}.*`, `filter.{segmentId}.*`, `wheel.{segmentId}.*`, and `motorControl.{name}.disconnectSize|unitSide`. They are not offered by the current visual selector. Raw AST editing can reference an exact key only when the author knows the instance ID and verifies it against a real extracted fact registry; robust selector support for dynamic opening/component instances requires a code change to build the catalog from the loaded unit.
+
+`unit.curbrest` is currently modeled by the selector as the enum `Yes`/`No`, not a boolean. Treat the catalog and a sample unit's fact registry as the authoring authority rather than the historical example values in older documents.
 
 ---
 
@@ -465,18 +436,19 @@ sequenceDiagram
     actor Lead as Engineering Lead
     participant Studio as Rule Editor Studio
     participant Mgr as RulePackManager.cs
-    participant Disk as Staged RulePack Folder
+    participant Disk as RulePack Destination
 
     Lead->>Studio: Click Publish Release
     Studio->>Studio: Compute visual diff (added, modified, archived)
     Lead->>Studio: Select Version Bump (Patch / Minor / Major) + Release Notes
-    Studio->>Mgr: PublishRulePack(payload)
+    Studio->>Mgr: publishRulePack(payload) (desktop only)
     Mgr->>Disk: Write LF-normalized rules.json & template_map.json
     Mgr->>Disk: Copy template.xlsx
     Mgr->>Mgr: Calculate SHA-256 for all 4 artifacts
     Mgr->>Mgr: Compute canonical bundleSha256
     Mgr->>Disk: Write manifest.json
-    Mgr-->>Studio: Validation Success (RulePackBundle)
+    Mgr->>Mgr: Reload and validate the written bundle
+    Mgr-->>Studio: Success or surfaced error
     Studio-->>Lead: Success Notification (v14.1.0 Ready)
 ```
 
@@ -487,5 +459,13 @@ sequenceDiagram
 
 ### Integrity & Hashing Invariants
 1. **LF Normalization**: All JSON artifacts (`rules.json`, `template_map.json`, `approved_mappings.json`, `manifest.json`) are serialized with LF line endings (`\n`) and UTF-8 encoding (no BOM).
-2. **Deterministic Hashes**: `RulePackManager.ComputeBundleSha256` computes the master `bundleSha256` from the individual artifact hashes.
-3. **Atomic Deployment**: The desktop application verifies bundle integrity on startup and rejects tampered rule packs, falling back to the Last Known Good (LKG) version.
+2. **Deterministic hashes**: `rules.json`, `template_map.json`, and `approved_mappings.json` are SHA-256 hashed after LF normalization; `template.xlsx` is hashed as bytes. `bundleSha256` is the SHA-256 of newline-separated, required artifact entries in this exact order: `rules.json:<hash>`, `template_map.json:<hash>`, `approved_mappings.json:<hash>`, `template.xlsx:<hash>`.
+3. **Manifest is derived last**: `manifest.json` records those four artifact hashes and is then written in LF UTF-8. The release-notes field is sent by the UI but is not persisted by the current backend manifest contract.
+
+### Publishing boundaries and recovery
+
+Desktop publishing writes directly to the editor's active pack, then to repository `resources/rulepack` when that directory is found, and finally to an optional distribution folder. Each destination is written and reloaded independently; this path is **not** a staged, atomic multi-destination deployment. If the optional distribution write fails, the earlier local destinations may already have changed. Read the displayed error, inspect those local packs, and republish only after resolving the destination issue.
+
+The main application uses a separate sync path for remote updates. That path validates a staging directory and can restore `%LOCALAPPDATA%\AHUVerification\lkg_rulepack` when promotion fails. It is not used by the Rule Editor's Publish button, so it does not make editor publishing transactional.
+
+Before publishing, close any program that has `rules.json`, `template_map.json`, `approved_mappings.json`, `template.xlsx`, or `manifest.json` open. A write or template-copy failure is returned to the Publish modal; retain the draft (or export it as JSON) and retry after the lock or permissions problem is fixed.
