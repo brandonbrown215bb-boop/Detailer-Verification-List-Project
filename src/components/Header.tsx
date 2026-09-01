@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   User
 } from 'lucide-react';
-import { Fact, ThemeMode } from '../types';
+import { Fact, ChecklistInstance, ThemeMode } from '../types';
+import { UnitReadiness, computeUnitReadiness } from '../utils/readiness';
 
 interface HeaderProps {
   jobName: string;
@@ -25,6 +26,8 @@ interface HeaderProps {
   unitTag?: string;
   dimensions?: { length: number; width: number; height: number };
   facts: Record<string, Fact>;
+  checklists?: ChecklistInstance[];
+  readiness?: UnitReadiness;
   onGoHome: () => void;
   onOpenResolutionCenter: () => void;
   onOpenPreFlight: () => void;
@@ -51,6 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
   unitTag,
   dimensions,
   facts,
+  checklists,
+  readiness,
   onGoHome,
   onOpenResolutionCenter,
   onOpenPreFlight,
@@ -71,10 +76,10 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Count pending unconfirmed facts (exclude weight)
-  const pendingFactsCount = Object.values(facts).filter(
-    f => (f.status === 'Unknown' || f.confidence === 'RequiresConfirmation') && !f.key.includes('weight')
-  ).length;
+  // Derive centralized readiness predicate (no weight fact exclusions)
+  const unitReadiness = readiness || computeUnitReadiness(facts, checklists || []);
+  const { unconfirmedFactsCount, blockedChecksCount } = unitReadiness;
+  const totalPendingActionCount = unconfirmedFactsCount + blockedChecksCount;
 
   const detailerName = facts['unit.detailer']?.value ? String(facts['unit.detailer'].value) : '';
 
@@ -240,18 +245,26 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Resolution Center */}
         <button
           onClick={onOpenResolutionCenter}
-          title="Facts & Provenance Resolution Center"
+          title={
+            totalPendingActionCount > 0
+              ? `Facts & Provenance Resolution Center (${unconfirmedFactsCount} unconfirmed facts, ${blockedChecksCount} blocked checks)`
+              : 'Facts & Provenance Resolution Center (All facts confirmed and checks unblocked)'
+          }
           className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-            pendingFactsCount > 0
+            totalPendingActionCount > 0
               ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-800 dark:text-amber-300'
               : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
           }`}
         >
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          {totalPendingActionCount > 0 ? (
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          )}
           <span className="hidden sm:inline">Facts</span>
-          {pendingFactsCount > 0 && (
+          {totalPendingActionCount > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-900 dark:text-amber-200 font-mono text-[10px] font-bold">
-              {pendingFactsCount}
+              {totalPendingActionCount}
             </span>
           )}
         </button>

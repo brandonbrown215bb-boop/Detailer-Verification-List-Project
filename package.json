@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scripts/test_readiness.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs",
+    "test:readiness": "node scripts/test_readiness.mjs",
+    "test:accessibility": "node scripts/test_modal_accessibility.mjs",
+    "test:ingestion": "node scripts/test_ingestion_feedback.mjs",
+    "test:copy": "node scripts/test_copy_linter.mjs",
+    "test:contrast": "node scripts/test_responsive_contrast.mjs"
   },
   "dependencies": {
     "file-saver": "^2.0.5",

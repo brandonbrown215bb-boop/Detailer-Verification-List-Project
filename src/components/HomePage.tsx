@@ -8,17 +8,29 @@ import {
   Clock,
   Trash2,
   Snowflake,
-  ArrowRight
+  ArrowRight,
+  AlertTriangle,
+  AlertCircle,
+  Loader2,
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { DvlProjectFile, UpzBundle } from '../types';
 import { desktopBridge } from '../services/desktopBridge';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from '../services/rulesCatalog';
 
+export interface ImportErrorState {
+  fileName?: string;
+  title: string;
+  message: string;
+  recoverySteps?: string[];
+}
+
 interface HomePageProps {
   autosavedProject: DvlProjectFile | null;
   onResumeAutosave: () => void;
   onClearAutosave: () => void;
-  onImportXml: (xmlContent: string, bundle?: UpzBundle, sourceFileName?: string) => void;
+  onImportXml: (xmlContent: string, bundle?: UpzBundle, sourceFileName?: string) => void | Promise<void>;
   onOpenDvl: (project: DvlProjectFile, rawJson?: string, filePath?: string) => void | Promise<void>;
   onOpenManualModal: () => void;
   onLoadSample: () => void;
@@ -38,40 +50,103 @@ export const HomePage: React.FC<HomePageProps> = ({
   ruleCount = RULES_CATALOG.filter(rule => !rule.isArchived).length
 }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState<string>('');
+  const [importError, setImportError] = useState<ImportErrorState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = async (file: File) => {
+    setImportError(null);
+    setIsProcessing(true);
+
     if (file.name.toLowerCase().endsWith('.upz')) {
+      setProcessingMessage(`Unpacking UPZ bundle: ${file.name}...`);
       const filePath = (file as any).path;
       if (desktopBridge.isRunningInDesktop() && filePath) {
         try {
           const res = await desktopBridge.extractUpz(filePath);
-          onImportXml(res.content, res.bundle, res.fileName);
+          setProcessingMessage(`Ingesting extracted configuration: ${res.fileName}...`);
+          await onImportXml(res.content, res.bundle, res.fileName);
+          setIsProcessing(false);
           return;
         } catch (err: any) {
-          alert(`Error unpacking UPZ bundle: ${err.message}`);
+          setIsProcessing(false);
+          setImportError({
+            fileName: file.name,
+            title: 'Failed to Extract UPZ Package',
+            message: err?.message || 'An unexpected error occurred while extracting the UPZ bundle.',
+            recoverySteps: [
+              'Ensure the .upz file is not locked by another application or corrupted.',
+              'Confirm the package contains a valid Johnson Controls AHU Config.xml and manifest.',
+              'Alternatively, extract Config.xml manually or configure the unit using Manual Unit Setup.'
+            ]
+          });
           return;
         }
       } else {
-        alert(
-          'UPZ bundle decompression requires the desktop application runtime. In browser preview mode, please import standalone Config.xml or .dvl project files.'
-        );
+        setIsProcessing(false);
+        setImportError({
+          fileName: file.name,
+          title: 'Desktop App Required for UPZ Bundles',
+          message: 'Direct .upz bundle extraction requires the desktop application runtime.',
+          recoverySteps: [
+            'In browser preview mode, import standalone Config.xml or .dvl project files.',
+            'Launch the application via the desktop executable (AHUVerification.App.exe) for automated native UPZ extraction.'
+          ]
+        });
         return;
       }
     }
 
+    setProcessingMessage(`Reading file: ${file.name}...`);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onerror = () => {
+      setIsProcessing(false);
+      setImportError({
+        fileName: file.name,
+        title: 'File Read Failure',
+        message: 'Failed to read the selected file from disk.',
+        recoverySteps: ['Check file permissions and try selecting the file again.']
+      });
+    };
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       if (file.name.toLowerCase().endsWith('.dvl')) {
         try {
+          setProcessingMessage(`Validating project file: ${file.name}...`);
           const project = JSON.parse(text);
-          onOpenDvl(project, text);
+          await onOpenDvl(project, text);
+          setIsProcessing(false);
         } catch (err: any) {
-          alert(`Error reading .dvl project file: ${err.message}`);
+          setIsProcessing(false);
+          setImportError({
+            fileName: file.name,
+            title: 'Invalid .dvl Project File',
+            message: err?.message || 'Failed to parse project JSON data.',
+            recoverySteps: [
+              'Verify that the .dvl file is not corrupted or truncated.',
+              'Ensure the file is a valid Detailing Verification List project export.'
+            ]
+          });
         }
       } else {
-        onImportXml(text, undefined, file.name);
+        try {
+          setProcessingMessage(`Parsing AHU configuration: ${file.name}...`);
+          await onImportXml(text, undefined, file.name);
+          setIsProcessing(false);
+        } catch (err: any) {
+          setIsProcessing(false);
+          setImportError({
+            fileName: file.name,
+            title: 'Failed to Ingest AHU Configuration',
+            message: err?.message || 'The XML configuration does not match expected AHU schema specifications.',
+            recoverySteps: [
+              'Verify that this is an exported Johnson Controls MOM Config.xml file.',
+              'Ensure the XML file contains <unitOptions>, <skidList>, or <segmentList> definitions.',
+              'If you do not have a MOM export, configure the unit from scratch using Manual Unit Setup.'
+            ]
+          });
+        }
       }
     };
     reader.readAsText(file);
@@ -101,24 +176,52 @@ export const HomePage: React.FC<HomePageProps> = ({
     if (file) {
       void processFile(file);
     }
+    e.target.value = '';
   };
 
   const handleNativeOpen = async () => {
+    setImportError(null);
     if (desktopBridge.isRunningInDesktop()) {
-      const result = await desktopBridge.openFileDialog();
-      if (result) {
-        if (result.isDvl) {
-          try {
-            const project = JSON.parse(result.content);
-            void onOpenDvl(project, result.content, result.filePath);
-          } catch (err: any) {
-            alert(`Error reading .dvl project: ${err.message}`);
+      try {
+        setIsProcessing(true);
+        setProcessingMessage('Opening file dialog...');
+        const result = await desktopBridge.openFileDialog();
+        if (result) {
+          setProcessingMessage(`Ingesting ${result.fileName}...`);
+          if (result.isDvl) {
+            try {
+              const project = JSON.parse(result.content);
+              await onOpenDvl(project, result.content, result.filePath);
+              setIsProcessing(false);
+            } catch (err: any) {
+              setIsProcessing(false);
+              setImportError({
+                fileName: result.fileName,
+                title: 'Invalid .dvl Project File',
+                message: err?.message || 'Failed to parse project JSON structure.',
+                recoverySteps: [
+                  'Ensure the .dvl file is valid and complete.',
+                  'Try opening another saved project or importing Config.xml.'
+                ]
+              });
+            }
+          } else if (result.isUpz && result.bundle) {
+            await onImportXml(result.content, result.bundle, result.fileName);
+            setIsProcessing(false);
+          } else {
+            await onImportXml(result.content, undefined, result.fileName);
+            setIsProcessing(false);
           }
-        } else if (result.isUpz && result.bundle) {
-          onImportXml(result.content, result.bundle, result.fileName);
         } else {
-          onImportXml(result.content, undefined, result.fileName);
+          setIsProcessing(false);
         }
+      } catch (err: any) {
+        setIsProcessing(false);
+        setImportError({
+          title: 'File Ingestion Error',
+          message: err?.message || 'An error occurred while opening the file.',
+          recoverySteps: ['Try selecting the file again or use drag-and-drop.']
+        });
       }
     } else {
       fileInputRef.current?.click();
@@ -167,7 +270,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {/* Main Hero & Launch Grid */}
-      <div className="w-full max-w-5xl my-auto py-8 space-y-8">
+      <div className="w-full max-w-5xl my-auto py-8 space-y-6">
         {/* Title */}
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
@@ -177,6 +280,96 @@ export const HomePage: React.FC<HomePageProps> = ({
             Ingest MOM Config.xml engineering configuration, load an existing .dvl project, or configure a custom unit.
           </p>
         </div>
+
+        {/* Durable Error Banner */}
+        {importError && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="p-5 rounded-2xl bg-red-50/95 dark:bg-red-950/50 border-2 border-red-300 dark:border-red-800/80 shadow-lg animate-in fade-in slide-in-from-top-2 space-y-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-bold text-red-900 dark:text-red-200">
+                      {importError.title}
+                    </h3>
+                    {importError.fileName && (
+                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-red-200/60 dark:bg-red-900/60 text-red-800 dark:text-red-300 font-semibold">
+                        {importError.fileName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed font-mono">
+                    {importError.message}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setImportError(null)}
+                title="Dismiss error banner"
+                className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {importError.recoverySteps && importError.recoverySteps.length > 0 && (
+              <div className="pt-2 border-t border-red-200 dark:border-red-900/50 pl-12 space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-red-800 dark:text-red-400">
+                  Suggested Recovery Steps:
+                </span>
+                <ul className="list-disc list-inside text-xs text-red-700 dark:text-red-300/90 space-y-1">
+                  {importError.recoverySteps.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-red-200 dark:border-red-900/50 flex flex-wrap items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setImportError(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-850 hover:bg-red-100/50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={handleNativeOpen}
+                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Try Another File</span>
+              </button>
+              <button
+                type="button"
+                onClick={onOpenManualModal}
+                className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Create Manually</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Ingestion Loading Indicator */}
+        {isProcessing && (
+          <div className="p-4 rounded-2xl bg-blue-50/90 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/40 shadow-sm flex items-center gap-3.5 animate-in fade-in">
+            <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-400 animate-spin shrink-0" />
+            <div className="space-y-0.5">
+              <h4 className="text-xs font-bold text-blue-900 dark:text-blue-200">Processing AHU Ingestion</h4>
+              <p className="text-xs text-blue-700 dark:text-blue-300 font-mono">{processingMessage || 'Extracting configuration data...'}</p>
+            </div>
+          </div>
+        )}
 
         {/* Autosave Resume Banner (if present) */}
         {autosavedProject && (

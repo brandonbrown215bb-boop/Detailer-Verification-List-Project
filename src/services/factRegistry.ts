@@ -549,6 +549,7 @@ export function extractFactsFromGraph(
   // Per-Skid Facts
   graph.skids.forEach((skid) => {
     const skidSegs = graph.segments.filter(s => skid.segmentIds.includes(s.id));
+    const hasSplit = graph.skids.length > 1;
     const hasDrainPan = skidSegs.some(s => s.tag === 'segment_CC' || s.internals.some(i => i.toLowerCase().includes('drain')));
     const hasFans = skidSegs.some(s => s.typeCode === 'FE' || s.typeCode === 'FR' || s.typeCode === 'FS');
     const hasCoils = skidSegs.some(s => s.typeCode === 'CC' || s.typeCode === 'HC');
@@ -558,6 +559,15 @@ export function extractFactsFromGraph(
     const skidBases = graph.bases.filter(b => skid.baseIds.includes(b.id));
     const hasSubFloor = skidBases.some(b => b.hasSubFloor);
     const drainCount = skidSegs.reduce((acc, s) => acc + (s.floorDrains?.length || 0), 0);
+
+    facts[`skid.${skid.id}.hasSplit`] = createFact(
+      `skid.${skid.id}.hasSplit`,
+      `${skid.name} Has Shipping Split`,
+      skid.name,
+      hasSplit,
+      'Derived',
+      'Authoritative'
+    );
 
     facts[`skid.${skid.id}.weight`] = createFact(
       `skid.${skid.id}.weight`,

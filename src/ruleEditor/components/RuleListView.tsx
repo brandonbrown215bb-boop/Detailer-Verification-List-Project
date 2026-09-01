@@ -43,17 +43,26 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
     'All',
     'Base',
     'Housing',
+    'Internals',
+    'Knockdown',
+    'UTL',
+    'Paperwork',
+    'MOM',
     'Drain Pan',
     'Coil Panels',
-    'Internal',
-    'Reconnects',
-    'Paperwork',
-    'MOM'
+    'Reconnects'
   ];
+
+  const isCatMatch = (ruleCat: string, targetCat: string) => {
+    if (targetCat === 'All') return true;
+    if (targetCat === ruleCat) return true;
+    if ((targetCat === 'Internals' || targetCat === 'Internal') && (ruleCat === 'Internals' || ruleCat === 'Internal')) return true;
+    return false;
+  };
 
   // Filter rules based on search, category, scope, and status
   const filteredRules = rules.filter(r => {
-    if (selectedCategory !== 'All' && r.category !== selectedCategory) return false;
+    if (selectedCategory !== 'All' && !isCatMatch(r.category, selectedCategory)) return false;
     if (selectedScope !== 'All' && r.scope !== selectedScope) return false;
 
     if (statusFilter === 'active' && r.isArchived) return false;
@@ -65,8 +74,9 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
       const matchId = r.id.toLowerCase().includes(q);
       const matchText = r.text.toLowerCase().includes(q);
       const matchKey = r.semanticKey.toLowerCase().includes(q);
+      const matchSub = (r.subgroup || '').toLowerCase().includes(q);
       const matchFacts = r.requiredFacts.some(f => f.toLowerCase().includes(q));
-      if (!matchId && !matchText && !matchKey && !matchFacts) return false;
+      if (!matchId && !matchText && !matchKey && !matchSub && !matchFacts) return false;
     }
 
     return true;
@@ -81,8 +91,8 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
             const count =
               cat === 'All'
                 ? rules.filter(r => !r.isArchived).length
-                : rules.filter(r => r.category === cat && !r.isArchived).length;
-            const isSelected = selectedCategory === cat;
+                : rules.filter(r => isCatMatch(r.category, cat) && !r.isArchived).length;
+            const isSelected = selectedCategory === cat || (cat === 'Internals' && selectedCategory === 'Internal');
 
             return (
               <button
@@ -208,6 +218,11 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1">
+                    {rule.subgroup && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.2 bg-blue-950/80 text-blue-300 border border-blue-800/60 rounded truncate max-w-[110px]">
+                        {rule.subgroup}
+                      </span>
+                    )}
                     <span className="text-[10px] font-medium px-1.5 py-0.2 bg-slate-800 text-slate-300 rounded">
                       {rule.scope}
                     </span>

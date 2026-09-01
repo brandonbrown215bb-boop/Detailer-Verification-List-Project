@@ -1,14 +1,15 @@
-# Progress — Explorer 2 (Backend & Core Logic Duplication Audit)
+# Progress Log
 
-- Last visited: 2026-08-28T17:11:30Z
-- Status: Completed codebase survey for backend, services, utilities, validation rules, algorithms, data handlers, and file operations.
-
-## Steps
-- [x] Initialized DISPATCH.md, BRIEFING.md, progress.md
-- [x] Reviewed repository instructions (ORIGINAL_REQUEST.md, PROJECT.md, AGENTS.md, etc.)
-- [x] Mapped out all files and modules under `src/backend/`, `src/services/`, `src/ruleEditor/`, `scripts/`, and `tests/`
-- [x] Deep inspection for exact, near, and structural duplications across all backend & core logic modules
-- [x] Quantified duplication metrics, exact file paths, line ranges, and refactoring recommendations
-- [x] Compiled comprehensive 5-component handoff report in `handoff.md`
-- [x] Updated BRIEFING.md and progress.md
-- [x] Notify parent orchestrator via send_message
+- **Current Status**: Complete — deliverables written and verified
+- **Last visited**: 2026-08-31T19:46:00Z
+- **Tasks**:
+  - [x] Initialize briefing and progress tracking
+  - [x] Read ORIGINAL_REQUEST.md & ui-ux-review/findings.md
+  - [x] Investigate facts & readiness computation and consumption (Header, Sidebar, Facts Resolution Center, GeneralUnitTab, SkidViews, PreflightModal)
+  - [x] Investigate modal dialog architecture, focus trapping, ARIA, Ctrl+K
+  - [x] Investigate file ingestion logic (.xml, .upz, errors, loading state) & Settings external action handlers
+  - [x] Investigate copy, LaTeX formatting ($N \ge 1$), raw enum tokens, internal jargon, nested borders, pill badges
+  - [x] Investigate table layouts, column widths, rule description rendering, expandable rows, sidebar responsive behavior, theme tokens
+  - [x] Write `survey_frontend.md`
+  - [x] Write `handoff.md`
+  - [x] Send message to caller

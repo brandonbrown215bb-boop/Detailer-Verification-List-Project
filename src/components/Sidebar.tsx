@@ -1,5 +1,6 @@
 import React from 'react';
-import { NormalizedXmlGraph, ChecklistInstance, SpecialQuote } from '../types';
+import { NormalizedXmlGraph, ChecklistInstance, SpecialQuote, Fact } from '../types';
+import { UnitReadiness, computeUnitReadiness, computeScopeReadiness } from '../utils/readiness';
 import {
   Box,
   Layers,
@@ -17,34 +18,41 @@ interface SidebarProps {
   activeTab: string; // 'general' | 'unit-checks' | 'skid-1' | 'skid-2' | etc.
   onSelectTab: (tabId: string) => void;
   graph: NormalizedXmlGraph | null;
+  facts?: Record<string, Fact>;
   checklists: ChecklistInstance[];
   sqItems: SpecialQuote[];
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  readiness?: UnitReadiness;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
   graph,
+  facts,
   checklists,
   sqItems,
   isCollapsed,
-  onToggleCollapse
+  onToggleCollapse,
+  readiness
 }) => {
   if (!graph) return null;
 
-  // Compute unit-level checklist progress
-  const unitChecks = checklists.filter(c => c.scopeTargetId === 'unit');
-  const unitApplicable = unitChecks.filter(c => c.applicability === 'Applicable');
-  const unitPassed = unitApplicable.filter(c => c.status === 'Passed').length;
-  const unitNeedsInput = unitChecks.filter(c => c.applicability === 'NeedsInput').length;
+  // Global centralized readiness
+  const unitReadiness = readiness || computeUnitReadiness(facts || {}, checklists);
+  const {
+    totalApplicableChecksCount,
+    completedChecksCount,
+    blockedChecksCount,
+    unconfirmedFactsCount,
+    percentComplete: overallPercent
+  } = unitReadiness;
 
-  // Compute grand total overall progress across whole unit and all skids
-  const allApplicable = checklists.filter(c => c.applicability === 'Applicable');
-  const allPassed = allApplicable.filter(c => c.status === 'Passed').length;
-  const allNeedsInput = checklists.filter(c => c.applicability === 'NeedsInput').length;
-  const overallPercent = allApplicable.length > 0 ? Math.round((allPassed / allApplicable.length) * 100) : 0;
+  const unitScope = unitReadiness.scopeReadinessMap['unit'] || computeScopeReadiness(facts || {}, checklists, 'unit');
+  const unitPassed = unitScope.completedChecksCount;
+  const unitApplicableCount = unitScope.totalApplicableChecksCount;
+  const unitNeedsInput = unitScope.blockedChecksCount;
 
   return (
     <aside
@@ -107,18 +115,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
-            <span>{allPassed} / {allApplicable.length} Verified</span>
-            {allNeedsInput > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5">
+            <span>{completedChecksCount} / {totalApplicableChecksCount} Verified</span>
+            {blockedChecksCount > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${blockedChecksCount} rules blocked by missing facts`}>
                 <AlertTriangle className="w-2.5 h-2.5" />
-                {allNeedsInput} input needed
+                {blockedChecksCount} input needed
               </span>
-            )}
+            ) : unconfirmedFactsCount > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${unconfirmedFactsCount} project facts require confirmation`}>
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {unconfirmedFactsCount} facts pending
+              </span>
+            ) : null}
           </div>
         </div>
       ) : (
         <div
-          title={`Overall Progress: ${overallPercent}% (${allPassed}/${allApplicable.length} verified)`}
+          title={`Overall Progress: ${overallPercent}% (${completedChecksCount}/${totalApplicableChecksCount} verified)`}
           className="mx-2 mt-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col items-center gap-1 cursor-default"
         >
           <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
@@ -167,7 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Button 2: Unit Verifications Checklist */}
             <button
               onClick={() => onSelectTab('unit-checks')}
-              title={isCollapsed ? `Unit Verifications (${unitPassed}/${unitApplicable.length} verified)` : undefined}
+              title={isCollapsed ? `Unit Verifications (${unitPassed}/${unitApplicableCount} verified)` : undefined}
               className={`w-full flex items-center rounded-xl font-medium transition-all ${
                 isCollapsed
                   ? 'p-2.5 justify-center'
@@ -192,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   )}
                   <span className="text-xs font-mono opacity-90 whitespace-nowrap">
-                    {unitPassed}/{unitApplicable.length}
+                    {unitPassed}/{unitApplicableCount}
                   </span>
                 </div>
               )}
@@ -217,13 +230,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="space-y-1.5">
             {graph.skids.map((skid) => {
-              const skidChecks = checklists.filter(c => c.scopeTargetId === skid.id);
-              const applicable = skidChecks.filter(c => c.applicability === 'Applicable');
-              const passed = applicable.filter(c => c.status === 'Passed').length;
-              const needsInput = skidChecks.filter(c => c.applicability === 'NeedsInput').length;
+              const skidScope = unitReadiness.scopeReadinessMap[skid.id] || computeScopeReadiness(facts || {}, checklists, skid.id);
+              const applicableCount = skidScope.totalApplicableChecksCount;
+              const passed = skidScope.completedChecksCount;
+              const needsInput = skidScope.blockedChecksCount;
+              const percent = skidScope.percentComplete;
               const isSelected = activeTab === skid.id;
-
-              const percent = applicable.length > 0 ? Math.round((passed / applicable.length) * 100) : 0;
 
               return (
                 <button
@@ -231,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => onSelectTab(skid.id)}
                   title={
                     isCollapsed
-                      ? `${skid.name}: ${percent}% (${passed}/${applicable.length} checks)`
+                      ? `${skid.name}: ${percent}% (${passed}/${applicableCount} checks)`
                       : undefined
                   }
                   className={`w-full flex flex-col rounded-xl text-left transition-all relative ${

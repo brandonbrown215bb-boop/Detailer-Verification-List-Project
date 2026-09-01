@@ -1788,21 +1788,31 @@
   {
     "id": "INT-RECON-01",
     "semanticKey": "RECONNECT_TYPE_CORRECT",
-    "scope": "Unit",
+    "scope": "Skid",
     "category": "Internals",
     "subgroup": "Reconnects",
     "order": 1,
     "text": "Reconnects are the correct type for its use in the unit.",
     "reference": "Split Reconnect Schedule",
     "excelRow": 209,
-    "requiredFacts": [],
+    "requiredFacts": [
+      "skid.hasSplit"
+    ],
+    "predicate": {
+      "===": [
+        {
+          "var": "skid.hasSplit"
+        },
+        true
+      ]
+    },
     "allowNA": true,
     "verificationMode": "ManualCheckbox"
   },
   {
     "id": "INT-RECON-02",
     "semanticKey": "RECONNECT_LINER_MATERIAL_MATCH",
-    "scope": "Unit",
+    "scope": "Skid",
     "category": "Internals",
     "subgroup": "Reconnects",
     "order": 2,
@@ -1810,36 +1820,65 @@
     "reference": "Materials Specification Sec 2",
     "excelRow": 210,
     "requiredFacts": [
-      "unit.linerMaterial"
+      "unit.linerMaterial",
+      "skid.hasSplit"
     ],
+    "predicate": {
+      "===": [
+        {
+          "var": "skid.hasSplit"
+        },
+        true
+      ]
+    },
     "allowNA": false,
     "verificationMode": "ManualCheckbox"
   },
   {
     "id": "INT-RECON-03",
     "semanticKey": "RECONNECT_QUANTITY_PER_SPLIT",
-    "scope": "Unit",
+    "scope": "Skid",
     "category": "Internals",
     "subgroup": "Reconnects",
     "order": 3,
     "text": "Each Split has the correct quantity of reconnects.",
     "reference": "Split Connection Table",
     "excelRow": 211,
-    "requiredFacts": [],
+    "requiredFacts": [
+      "skid.hasSplit"
+    ],
+    "predicate": {
+      "===": [
+        {
+          "var": "skid.hasSplit"
+        },
+        true
+      ]
+    },
     "allowNA": true,
     "verificationMode": "ManualCheckbox"
   },
   {
     "id": "INT-RECON-04",
     "semanticKey": "RECONNECT_IW_IH_TUNNEL_FIT",
-    "scope": "Unit",
+    "scope": "Skid",
     "category": "Internals",
     "subgroup": "Reconnects",
     "order": 4,
     "text": "Reconnects have the correct IW and IH for the tunnel they are in. IW parameter should be reduced 0.50\" from tunnel IW.",
     "reference": "Reconnect Sizing Rule",
     "excelRow": 212,
-    "requiredFacts": [],
+    "requiredFacts": [
+      "skid.hasSplit"
+    ],
+    "predicate": {
+      "===": [
+        {
+          "var": "skid.hasSplit"
+        },
+        true
+      ]
+    },
     "allowNA": true,
     "verificationMode": "ManualCheckbox"
   }

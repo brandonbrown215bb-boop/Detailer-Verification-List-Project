@@ -362,6 +362,7 @@ namespace AHUVerification.Core.Services
                         var skidContext = new Dictionary<string, object?>(unitContext)
                         {
                             ["__skidId"] = skid.Id,
+                            ["skid.hasSplit"] = factRegistry.TryGetValue($"skid.{skid.Id}.hasSplit", out var fhs) ? fhs.Value : (graph.Skids.Count > 1),
                             ["skid.weight"] = factRegistry.TryGetValue($"skid.{skid.Id}.weight", out var fw) ? fw.Value : skid.CalculatedWeight,
                             ["skid.segmentCount"] = factRegistry.TryGetValue($"skid.{skid.Id}.segmentCount", out var fsc) ? fsc.Value : skid.SegmentIds.Count,
                             ["skid.hasDrainPan"] = factRegistry.TryGetValue($"skid.{skid.Id}.hasDrainPan", out var fdp) ? fdp.Value : false,

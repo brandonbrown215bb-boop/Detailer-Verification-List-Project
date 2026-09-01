@@ -72,6 +72,7 @@ namespace AHUVerification.App.Bridge
                     "checkRulePackUpdate" => CheckRulePackUpdate(req.Payload),
                     "syncRulePack" => SyncRulePack(req.Payload),
                     "selectFolderDialog" => ShowSelectFolderDialog(),
+                    "launchRuleEditor" => LaunchRuleEditor(),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
@@ -385,6 +386,35 @@ namespace AHUVerification.App.Bridge
                 approvedMappings = _activeRulePack?.ApprovedMappings,
                 manifest = _activeRulePack?.Manifest
             };
+        }
+
+        private object LaunchRuleEditor()
+        {
+            try
+            {
+                string distEditor = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dist", "rule-editor.html");
+                if (File.Exists(distEditor))
+                {
+                    Process.Start(new ProcessStartInfo(distEditor) { UseShellExecute = true });
+                    return new { success = true, path = distEditor };
+                }
+
+                string repoRoot = PathUtils.FindRepoRoot();
+                string repoEditor = Path.Combine(repoRoot, "dist", "rule-editor.html");
+                if (File.Exists(repoEditor))
+                {
+                    Process.Start(new ProcessStartInfo(repoEditor) { UseShellExecute = true });
+                    return new { success = true, path = repoEditor };
+                }
+
+                string devUrl = "http://localhost:5173/rule-editor.html";
+                Process.Start(new ProcessStartInfo(devUrl) { UseShellExecute = true });
+                return new { success = true, url = devUrl };
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Could not launch Rule & Logic Editor: {ex.Message}", ex);
+            }
         }
     }
 }

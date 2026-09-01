@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useId } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import {
   X,
   PlusCircle,
@@ -74,6 +75,15 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
   onClose,
   onCreateUnit
 }) => {
+  const id = useId();
+  const cleanId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+  const titleId = `manual-unit-title-${cleanId}`;
+  const descId = `manual-unit-desc-${cleanId}`;
+
+  const containerRef = useFocusTrap<HTMLDivElement>(isOpen, {
+    onEscape: onClose
+  });
+
   // Wizard Navigation Step
   const [activeStep, setActiveStep] = useState<'general' | 'skids' | 'segments' | 'review'>('general');
   const [selectedPresetId, setSelectedPresetId] = useState<string>('preset-standard-vav');
@@ -348,8 +358,19 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100">
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descId}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-200 outline-none"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100"
+      >
         {/* Top Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-850">
           <div className="flex items-center gap-3">
@@ -358,14 +379,14 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 id={titleId} className="text-base font-bold text-slate-900 dark:text-white">
                   Manual Unit Setup & Architecture Wizard
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/30">
                   Custom Engineering
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p id={descId} className="text-xs text-slate-500 dark:text-slate-400">
                 Configure arbitrary skids, custom segment sequencing, dimensions, and materials.
               </p>
             </div>
@@ -392,7 +413,9 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close wizard"
               className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
@@ -729,7 +752,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <span>Shipping Skids & Base Structure</span>
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Configure any number of skids ($N \ge 1$), custom skid names, and base profiles.
+                      Configure one or more shipping skids, custom skid names, and base profiles.
                     </p>
                   </div>
 
@@ -1256,7 +1279,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       Ready to Initialize Verification Project
                     </div>
                     <div className="text-slate-600 dark:text-slate-300">
-                      The application will synthesize a fully-formed normalized XML model, register all domain facts with authoritative manual provenance, evaluate all AST verification rules across unit and skids, and generate compliant OpenXML deliverables.
+                      The application will generate the AHU configuration model, register all project facts with authoritative detailer verification, evaluate verification rules across unit and shipping skids, and produce official Excel deliverables.
                     </div>
                   </div>
                 </div>

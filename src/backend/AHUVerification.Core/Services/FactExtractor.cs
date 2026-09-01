@@ -679,6 +679,7 @@ namespace AHUVerification.Core.Services
             foreach (var skid in graph.Skids)
             {
                 var skidSegs = graph.Segments.Where(s => skid.SegmentIds.Contains(s.Id)).ToList();
+                bool hasSplit = graph.Skids.Count > 1;
                 bool hasDrainPan = skidSegs.Any(s => s.Tag.Equals("segment_CC", StringComparison.OrdinalIgnoreCase) || s.Internals.Any(i => i.Contains("drain", StringComparison.OrdinalIgnoreCase)));
                 bool hasFans = skidSegs.Any(s => s.TypeCode.Equals("FE", StringComparison.OrdinalIgnoreCase) || s.TypeCode.Equals("FR", StringComparison.OrdinalIgnoreCase) || s.TypeCode.Equals("FS", StringComparison.OrdinalIgnoreCase));
                 bool hasCoils = skidSegs.Any(s => s.TypeCode.Equals("CC", StringComparison.OrdinalIgnoreCase) || s.TypeCode.Equals("HC", StringComparison.OrdinalIgnoreCase));
@@ -688,6 +689,15 @@ namespace AHUVerification.Core.Services
                 var skidBases = graph.Bases.Where(b => skid.BaseIds.Contains(b.Id)).ToList();
                 bool hasSubFloor = skidBases.Any(b => b.HasSubFloor);
                 int drainCount = skidSegs.Sum(s => s.FloorDrains.Count);
+
+                facts[$"skid.{skid.Id}.hasSplit"] = CreateFact(
+                    $"skid.{skid.Id}.hasSplit",
+                    $"{skid.Name} Has Shipping Split",
+                    skid.Name,
+                    hasSplit,
+                    FactStatus.Derived,
+                    FactConfidence.Authoritative
+                );
 
                 facts[$"skid.{skid.Id}.weight"] = CreateFact(
                     $"skid.{skid.Id}.weight",

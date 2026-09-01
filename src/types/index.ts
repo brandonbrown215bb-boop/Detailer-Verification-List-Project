@@ -455,3 +455,47 @@ export interface RulePackManifest {
   bundleSha256: string;
   files: Record<string, RulePackManifestFileEntry>;
 }
+
+/** Type aliases for domain clarity and backwards compatibility */
+export type DomainFact = Fact;
+export type ChecklistItem = ChecklistInstance;
+
+export interface ScopeReadiness {
+  scopeTargetId: string;
+  totalChecks: number;
+  totalChecksCount: number;
+  applicableChecks: number;
+  totalApplicableChecksCount: number;
+  passedChecks: number;
+  completedChecksCount: number;
+  incompleteChecks: number;
+  incompleteChecksCount: number;
+  blockedChecks: number;
+  blockedChecksCount: number;
+  naChecksCount: number;
+  percentComplete: number;
+  isComplete: boolean;
+  isFullyVerified: boolean;
+  blockedRules: ChecklistInstance[];
+  incompleteRules: ChecklistInstance[];
+  passedRules: ChecklistInstance[];
+}
+
+export interface UnitReadiness {
+  unconfirmedFactsCount: number;
+  blockedChecksCount: number;
+  incompleteChecksCount: number;
+  completedChecksCount: number;
+  naChecksCount: number;
+  totalApplicableChecksCount: number;
+  totalChecksCount: number;
+  percentComplete: number;
+  isReadyForFinal: boolean;
+  blockedRules: ChecklistInstance[];
+  unconfirmedFacts: Fact[];
+  incompleteRules: ChecklistInstance[];
+  passedRules: ChecklistInstance[];
+  scopeReadinessMap: Record<string, ScopeReadiness>;
+}
+
+

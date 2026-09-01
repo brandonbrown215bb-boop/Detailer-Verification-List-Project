@@ -17,6 +17,7 @@ import { generateChecklists } from './services/ruleEvaluator';
 import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
 import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
 import { desktopBridge } from './services/desktopBridge';
+import { computeUnitReadiness } from './utils/readiness';
 import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
 
 import { HomePage } from './components/HomePage';
@@ -229,6 +230,38 @@ export const AppContent: React.FC = () => {
     localStorage.setItem('dvl_sidebar_collapsed', String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
+  // Responsive Auto-Collapse Sidebar < 1200px
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1200) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    if (typeof window !== 'undefined' && window.innerWidth < 1200) {
+      setIsSidebarCollapsed(true);
+    }
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Global Keyboard Shortcuts (Ctrl+K: OmniSearch, Ctrl+B: Toggle Sidebar)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarCollapsed(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Autosave when active data changes
   useEffect(() => {
     if (isProjectLoaded && graph && facts && sqItems && checklists) {
@@ -270,42 +303,38 @@ export const AppContent: React.FC = () => {
 
   // Handler for loading new XML or UPZ bundle
   const loadXmlData = useCallback((xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
-    try {
-      const newGraph = parseAhuXml(xmlString);
+    const newGraph = parseAhuXml(xmlString);
 
-      let orderRev = bundle?.orderRevision;
-      if (!orderRev && bundle?.rawOrderRevXml) {
-        orderRev = parseOrderRevXml(bundle.rawOrderRevXml);
-      }
-
-      const newFacts = extractFactsFromGraph(newGraph, orderRev);
-      const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
-
-      const meta = {
-        fileName: sourceFileName || (bundle ? 'bundle.upz' : 'Config.xml'),
-        isUpzBundle: !!bundle,
-        orderRevision: orderRev
-      };
-
-      setSourceMetadata(meta);
-      setRawXml(xmlString);
-      setGraph(newGraph);
-      setFacts(newFacts);
-      setChecklists(newChecklists);
-      setSqItems([]);
-      setCurrentProjectPath(null);
-      setProjectIntegrityWarning(null);
-      setActiveTab('general');
-      setIsProjectLoaded(true);
-
-      // Prompt for COM# if not populated
-      if (!newFacts['unit.comNumber']?.value) {
-        setIsComModalOpen(true);
-      }
-    } catch (err: any) {
-      alert(`Error parsing AHU XML: ${err.message}`);
+    let orderRev = bundle?.orderRevision;
+    if (!orderRev && bundle?.rawOrderRevXml) {
+      orderRev = parseOrderRevXml(bundle.rawOrderRevXml);
     }
-  }, []);
+
+    const newFacts = extractFactsFromGraph(newGraph, orderRev);
+    const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
+
+    const meta = {
+      fileName: sourceFileName || (bundle ? 'bundle.upz' : 'Config.xml'),
+      isUpzBundle: !!bundle,
+      orderRevision: orderRev
+    };
+
+    setSourceMetadata(meta);
+    setRawXml(xmlString);
+    setGraph(newGraph);
+    setFacts(newFacts);
+    setChecklists(newChecklists);
+    setSqItems([]);
+    setCurrentProjectPath(null);
+    setProjectIntegrityWarning(null);
+    setActiveTab('general');
+    setIsProjectLoaded(true);
+
+    // Prompt for COM# if not populated
+    if (!newFacts['unit.comNumber']?.value) {
+      setIsComModalOpen(true);
+    }
+  }, [activeRules]);
 
   // Handler for loading saved .dvl project
   const handleOpenDvl = useCallback(async (project: DvlProjectFile, _rawJson?: string, filePath?: string) => {
@@ -642,6 +671,8 @@ export const AppContent: React.FC = () => {
     dimensions: graph.dimensions
   };
 
+  const readiness = computeUnitReadiness(facts, checklists);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Left Navigation Rail */}
@@ -649,10 +680,12 @@ export const AppContent: React.FC = () => {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         graph={graph}
+        facts={facts}
         checklists={checklists}
         sqItems={sqItems}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+        readiness={readiness}
       />
 
       {/* Main Workspace Area */}
@@ -665,6 +698,8 @@ export const AppContent: React.FC = () => {
           unitTag={String(facts['unit.tag']?.value || '')}
           dimensions={graph.dimensions}
           facts={facts}
+          checklists={checklists}
+          readiness={readiness}
           onGoHome={() => setIsProjectLoaded(false)}
           onOpenResolutionCenter={() => setIsResolutionOpen(true)}
           onOpenPreFlight={() => setIsPreFlightOpen(true)}
@@ -821,8 +856,15 @@ export const AppContent: React.FC = () => {
         isOpen={isResolutionOpen}
         onClose={() => setIsResolutionOpen(false)}
         facts={facts}
+        checklists={checklists}
+        rules={activeRules}
+        readiness={readiness}
         onUpdateFact={handleUpdateFact}
         onBatchResolveDefaults={handleBatchResolveDefaults}
+        onNavigateToRule={(scopeTargetId) => {
+          setActiveTab(scopeTargetId === 'unit' ? 'unit-checks' : scopeTargetId);
+          setIsResolutionOpen(false);
+        }}
       />
 
       <PreFlightModal
@@ -832,6 +874,7 @@ export const AppContent: React.FC = () => {
         rules={activeRules}
         facts={facts}
         sqItems={sqItems}
+        readiness={readiness}
         onExportExcel={handleExportExcel}
         onExportDvl={handleSaveDvl}
         onNavigateToRule={(scopeTargetId) => {

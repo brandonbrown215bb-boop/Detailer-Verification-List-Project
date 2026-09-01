@@ -1,47 +1,38 @@
-# BRIEFING — 2026-08-28T17:11:00Z
+# BRIEFING — 2026-08-31T19:46:00Z
 
 ## Mission
-Conduct a thorough duplication audit of backend/core logic, services, utilities, validation rules, algorithms, data handlers, and file operations across the codebase.
+Comprehensive technical survey of the frontend codebase for UI/UX remediation and live validation suite.
 
 ## 🔒 My Identity
 - Archetype: explorer
-- Roles: investigation, synthesis
+- Roles: Frontend Codebase Explorer
 - Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2
-- Original parent: b46e84ca-dbf1-4b83-b51d-686ed0eaf382
-- Milestone: Codebase Survey - Backend/Core Logic Duplication Audit
+- Original parent: 52919dba-58f2-4525-8ff2-81599136d595
+- Milestone: Frontend Survey
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement
-- Focus on backend/core logic, services, utilities, validation rules, algorithms, data handlers, file operations
-- Write only to .agents/explorer_survey_2/
-- Follow Handoff Protocol (5-Component Handoff Report)
+- Read-only investigation — do NOT implement changes to application source code
+- Deliver thorough technical report to survey_frontend.md and handoff.md
 
 ## Current Parent
-- Conversation ID: b46e84ca-dbf1-4b83-b51d-686ed0eaf382
-- Updated: 2026-08-28T17:11:00Z
+- Conversation ID: 52919dba-58f2-4525-8ff2-81599136d595
+- Updated: 2026-08-31T19:46:00Z
 
 ## Investigation State
-- **Explored paths**:
-  - `src/backend/AHUVerification.App/` (Program.cs, MainForm.cs, BridgeHandler.cs)
-  - `src/backend/AHUVerification.RuleEditor/` (Program.cs, MainForm.cs, RuleEditorBridgeHandler.cs)
-  - `src/backend/AHUVerification.Core/` (Models: Rules.cs, FactRegistry.cs, DvlProject.cs, NormalizedGraph.cs, UpzBundle.cs; Parsers: NormalizedXmlParser.cs, OrderRevParser.cs; Services: AstRuleEvaluator.cs, DvlProjectManager.cs, FactExtractor.cs, OpenXmlTemplatePatcher.cs, RulePackManager.cs, UpzBundleExtractor.cs)
-  - `src/services/` (desktopBridge.ts, xmlParser.ts, ruleEvaluator.ts, factRegistry.ts, projectStorage.ts, excelExporter.ts, manualUnitFactory.ts, rulesCatalog.ts)
-  - `src/ruleEditor/` (types.ts, services/astConverter.ts, components/FactDictionaryCatalog.ts)
-  - `scripts/` (build_rulepack.mjs, test_ast_converter.mjs)
-  - `tests/AHUVerification.Tests/` (AstEvaluatorTests.cs, DvlProjectTests.cs, FactRegistryTests.cs, OpenXmlPatcherTests.cs, RulePackManagerTests.cs, TestPathHelper.cs, UpzExtractorTests.cs, XmlParserTests.cs)
+- **Explored paths**: `src/App.tsx`, `src/types/index.ts`, `src/components/*` (all 16 components), `src/services/*` (all 8 services), `src/ruleEditor/*`, `src/backend/AHUVerification.App/Bridge/*`, `ui-ux-review/findings.md`
 - **Key findings**:
-  - 12 major duplication clusters identified with exact line numbers and metrics.
-  - Large cross-language dual implementations: XML parsing (~750 LOC each), AST rule evaluator (~350 LOC each), Fact extractor (~750 LOC each), Excel deliverable builders (~500 LOC each).
-  - Exact copy-paste script: `test_ast_converter.mjs` (168 LOC exact copy of `astConverter.ts`).
-  - Internal C# boilerplate duplicates: `FindRepoRoot()` (4 copies), SHA-256 helpers (2 copies), Bridge DTOs (2 copies).
-  - Triple-redundant fact dictionaries across C#, TS, and Rule Editor.
-- **Unexplored areas**: None within Explorer 2 backend/core scope.
+  1. Identified exact predicate divergence across Header, Sidebar, Resolution Center, GeneralUnitTab, SkidViewTab, and Preflight causing "All Facts Confirmed" false-success state.
+  2. Identified missing ARIA semantics, focus trap deficiency, focus restoration omission, and subtitle clipping across `ModalShell` and standalone modals.
+  3. Identified `Ctrl+K` 50ms setTimeout focus race and lack of `.select()`.
+  4. Identified file ingestion silent returns and missing loading/error state in `HomePage.tsx`.
+  5. Identified exact LaTeX math artifact (`$N \ge 1$` in `ManualUnitModal.tsx:732`), PascalCase enums, and 8 leaked internals jargon strings.
+  6. Measured contrast failures for `text-slate-400` on light (2.88:1) and `text-slate-500` on dark (3.67:1); identified grid column horizontal overflow at 1086px width.
+- **Unexplored areas**: None within frontend survey scope.
 
 ## Key Decisions Made
-- Fully documented all 12 duplication findings with exact line references, importance scores, effort estimates, and concrete DRY remediation snippets.
-- Completed comprehensive 5-component handoff report in `handoff.md`.
+- Structured findings into five detailed technical sections in `survey_frontend.md` with exact line references, root cause logic chains, and concrete remediation specifications.
 
 ## Artifact Index
-- `handoff.md` — Comprehensive 5-component duplication survey report
-- `progress.md` — Execution status and heartbeat
-- `DISPATCH.md` — Dispatch history
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\survey_frontend.md` — Technical survey deliverable
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\handoff.md` — 5-component handoff report
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\progress.md` — Progress log

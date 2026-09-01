@@ -134,7 +134,8 @@ export function exportToExcel(
 
     Object.entries(skidCatMap).forEach(([category, subMap]) => {
       Object.entries(subMap).forEach(([subgroup, items]) => {
-        const headerLabel = category === 'Internals' ? `[Internals: ${subgroup}]` : `[Category: ${category}]`;
+        const isInternals = category === 'Internals' || category === 'Internal';
+        const headerLabel = isInternals ? (subgroup && subgroup !== 'General' ? `[Internals: ${subgroup}]` : '[Internals: General]') : `[Category: ${category}]`;
         vlData.push(['', headerLabel]);
 
         items.forEach(inst => {

@@ -247,6 +247,21 @@ class DesktopBridge {
     }
     return { success: true };
   }
+
+  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
+    if (this.isDesktop) {
+      return this.sendRequest('launchRuleEditor');
+    }
+    try {
+      const win = window.open('/rule-editor.html', '_blank');
+      if (!win) {
+        throw new Error('Popup window was blocked by browser. Please allow popups for this site.');
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
+    }
+  }
 }
 
 export { DesktopBridge };

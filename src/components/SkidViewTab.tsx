@@ -21,6 +21,8 @@ import {
   Keyboard
 } from 'lucide-react';
 import { InlineFactPopover } from './InlineFactPopover';
+import { resolveFactForScope } from '../utils/readiness';
+import { formatEnumLabel, sanitizeDomainText } from '../utils/formatters';
 
 interface SkidViewTabProps {
   skid: ShippingSkid;
@@ -253,11 +255,12 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
             const catApplicable = items.filter(i => i.instance.applicability === 'Applicable');
             const catPassed = catApplicable.filter(i => i.instance.status === 'Passed').length;
             const catNeedsInput = items.filter(i => i.instance.applicability === 'NeedsInput').length;
+            const isInternals = category === 'Internals' || category === 'Internal';
             const distinctSubgroups = Array.from(new Set(items.map(i => i.rule.subgroup || '')));
             const hasMultipleSubgroups = distinctSubgroups.length > 1 || (distinctSubgroups.length === 1 && !!distinctSubgroups[0]);
             const subgroupMap: Record<string, typeof items> = {};
             items.forEach(item => {
-              const sgKey = item.rule.subgroup || 'Standard Items';
+              const sgKey = item.rule.subgroup || (isInternals ? 'General Internals' : 'Standard Items');
               if (!subgroupMap[sgKey]) subgroupMap[sgKey] = [];
               subgroupMap[sgKey].push(item);
             });
@@ -282,15 +285,15 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                        <tr className="bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
                           <th className="py-2.5 px-3 w-14 text-center"># / Info</th>
-                          <th className="py-2.5 px-3 w-36">Rule ID</th>
-                          <th className="py-2.5 px-4 min-w-[280px]">Verification Description</th>
-                          <th className="py-2.5 px-3 w-32 text-center">Applicability</th>
-                          <th className="py-2.5 px-3 w-28 text-center">Check Off</th>
-                          <th className="py-2.5 px-3 w-16 text-center">N/A</th>
-                          <th className="py-2.5 px-4 min-w-[220px]">Detailer Comments</th>
-                          <th className="py-2.5 px-3 w-24 text-center">SQ Link</th>
+                          <th className="py-2.5 px-3 w-32">Rule ID</th>
+                          <th className="py-2.5 px-4 min-w-[320px]">Verification Description</th>
+                          <th className="py-2.5 px-3 w-28 text-center">Applicability</th>
+                          <th className="py-2.5 px-3 w-24 text-center">Check Off</th>
+                          <th className="py-2.5 px-3 w-14 text-center">N/A</th>
+                          <th className="py-2.5 px-4 min-w-[180px] w-48">Detailer Comments</th>
+                          <th className="py-2.5 px-3 w-20 text-center">SQ Link</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
@@ -332,14 +335,14 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                         : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                                     }`}
                                   >
-                                    <td className="py-2 px-3 text-center text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                                    <td className="py-2 px-3 text-center text-[11px] font-mono text-slate-500 dark:text-slate-400">
                                       <div className="flex items-center justify-center gap-1">
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             toggleRowExpansion(instance.instanceKey);
                                           }}
-                                          title={isRowExpanded ? 'Collapse logic details' : 'Expand AST logic trace & full reference'}
+                                          title={isRowExpanded ? 'Collapse verification details' : 'Expand rule logic trace & full reference'}
                                           className={`p-1 rounded transition-colors ${
                                             isRowExpanded
                                               ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300'
@@ -365,7 +368,7 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                     >
                                       <div className="line-clamp-2">{rule.text}</div>
                                       {rule.reference && (
-                                        <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                        <div className="text-[10px] font-mono text-slate-600 dark:text-slate-400 mt-0.5">
                                           Ref: {rule.reference}
                                         </div>
                                       )}
@@ -381,17 +384,24 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                           N/A
                                         </span>
                                       )}
-                                      {instance.applicability === 'NeedsInput' && (
-                                        <div className="flex justify-center">
-                                          <InlineFactPopover
-                                            factKey={rule.requiredFacts[0] || 'unknown'}
-                                            fact={facts[rule.requiredFacts[0]]}
-                                            onUpdateFact={onUpdateFact}
-                                            triggerButtonText="Needs Input"
-                                            compact={true}
-                                          />
-                                        </div>
-                                      )}
+                                       {instance.applicability === 'NeedsInput' && (
+                                         <div className="flex justify-center">
+                                           {(() => {
+                                             const firstReq = rule.requiredFacts[0] || 'unknown';
+                                             const { resolvedKey, fact } = resolveFactForScope(facts, firstReq, skid.id);
+                                             return (
+                                               <InlineFactPopover
+                                                 factKey={resolvedKey}
+                                                 fact={fact}
+                                                 label={fact?.label || rule.text}
+                                                 onUpdateFact={onUpdateFact}
+                                                 triggerButtonText="Needs Input"
+                                                 compact={true}
+                                               />
+                                             );
+                                           })()}
+                                         </div>
+                                       )}
                                     </td>
                                     <td className="py-2 px-3 text-center">
                                       <button
@@ -475,14 +485,14 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                               <span>{rule.reference}</span>
                                             </div>
                                           )}
-                                          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-1.5 shadow-sm">
-                                            <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-bold text-xs">
-                                              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                                              <span>AST Rule Logic Trace:</span>
-                                            </div>
-                                            <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                                              {instance.applicabilityReason || 'Rule evaluated against unit normalized graph.'}
-                                            </p>
+                                            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-1.5 shadow-sm">
+                                              <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-bold text-xs">
+                                                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                                                <span>Rule Verification Logic:</span>
+                                              </div>
+                                              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                                                {sanitizeDomainText(instance.applicabilityReason || 'Rule evaluated against AHU configuration model.')}
+                                              </p>
                                             {instance.factTraces && instance.factTraces.length > 0 && (
                                               <div className="flex flex-wrap gap-1.5 pt-2 mt-1.5 border-t border-slate-100 dark:border-slate-800">
                                                 {instance.factTraces.map(f => (

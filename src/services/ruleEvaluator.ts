@@ -248,6 +248,7 @@ export function generateChecklists(
         const skidContext: Record<string, any> = {
           ...unitContext,
           __skidId: skid.id,
+          'skid.hasSplit': factRegistry[`skid.${skid.id}.hasSplit`]?.value ?? (graph.skids.length > 1),
           'skid.weight': factRegistry[`skid.${skid.id}.weight`]?.value ?? skid.calculatedWeight,
           'skid.segmentCount': factRegistry[`skid.${skid.id}.segmentCount`]?.value ?? skid.segmentIds.length,
           'skid.hasDrainPan': factRegistry[`skid.${skid.id}.hasDrainPan`]?.value ?? false,

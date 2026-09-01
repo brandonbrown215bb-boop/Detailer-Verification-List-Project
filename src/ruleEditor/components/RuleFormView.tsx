@@ -22,12 +22,14 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
   const categories = [
     'Base',
     'Housing',
+    'Internals',
+    'Knockdown',
+    'UTL',
+    'Paperwork',
+    'MOM',
     'Drain Pan',
     'Coil Panels',
-    'Internal',
-    'Reconnects',
-    'Paperwork',
-    'MOM'
+    'Reconnects'
   ];
 
   const internalSubgroups = [
@@ -51,6 +53,8 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
     const autoKey = `${cleanCategory}_${words || 'CHECK'}`;
     onUpdate({ ...rule, semanticKey: autoKey });
   };
+
+  const isInternalCategory = rule.category === 'Internal' || rule.category === 'Internals';
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 h-full">
@@ -78,8 +82,13 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Category: <strong className="text-slate-200">{rule.category}</strong> • Scope:{' '}
-                <strong className="text-slate-200">{rule.scope}</strong>
+                Category: <strong className="text-slate-200">{rule.category}</strong>
+                {rule.subgroup && (
+                  <>
+                    {' '}• Subgroup: <strong className="text-slate-200">{rule.subgroup}</strong>
+                  </>
+                )}
+                {' '}• Scope: <strong className="text-slate-200">{rule.scope}</strong>
               </p>
             </div>
           </div>
@@ -114,7 +123,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
             Rule Metadata & Classification
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {/* Category */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
@@ -134,16 +143,17 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
             </div>
 
             {/* Subgroup (for Internals) */}
-            {rule.category === 'Internal' ? (
+            {isInternalCategory && (
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Internal Subgroup
                 </label>
                 <select
-                  value={rule.subgroup || 'Access Segments'}
-                  onChange={e => onUpdate({ ...rule, subgroup: e.target.value })}
+                  value={rule.subgroup || ''}
+                  onChange={e => onUpdate({ ...rule, subgroup: e.target.value || undefined })}
                   className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
+                  <option value="">(None / Global Internals)</option>
                   {internalSubgroups.map(sub => (
                     <option key={sub} value={sub}>
                       {sub}
@@ -151,23 +161,24 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                   ))}
                 </select>
               </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Scope
-                </label>
-                <select
-                  value={rule.scope}
-                  onChange={e => onUpdate({ ...rule, scope: e.target.value as RuleScope })}
-                  className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="Unit">Unit (Global)</option>
-                  <option value="Skid">Skid (Per Shipping Section)</option>
-                  <option value="Segment">Segment (Per AHU Segment)</option>
-                  <option value="Component">Component (Per Fan/Coil/VFD)</option>
-                </select>
-              </div>
             )}
+
+            {/* Scope */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                Scope
+              </label>
+              <select
+                value={rule.scope}
+                onChange={e => onUpdate({ ...rule, scope: e.target.value as RuleScope })}
+                className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="Unit">Unit (Global)</option>
+                <option value="Skid">Skid (Per Shipping Section)</option>
+                <option value="Segment">Segment (Per AHU Segment)</option>
+                <option value="Component">Component (Per Fan/Coil/VFD)</option>
+              </select>
+            </div>
 
             {/* Verification Mode */}
             <div>

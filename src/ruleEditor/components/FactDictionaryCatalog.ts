@@ -277,6 +277,15 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
   // SKID SCOPE FACTS
   // ==========================================
   {
+    key: 'skid.hasSplit',
+    label: 'Skid Has Shipping Split',
+    scope: 'Skid',
+    category: 'Skid Logistics',
+    dataType: 'boolean',
+    sampleValue: true,
+    description: 'Indicates whether the unit is split across multiple shipping skids requiring field reconnects.'
+  },
+  {
     key: 'skid.weight',
     label: 'Skid Shipping Weight',
     scope: 'Skid',
