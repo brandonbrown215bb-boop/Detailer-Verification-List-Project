@@ -257,7 +257,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">
               York AHU Detailing Verification System
             </h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+            <p className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
               Engineering Configuration Ingestion & Verification Deliverables
             </p>
           </div>
@@ -429,7 +429,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-blue-600 dark:text-blue-400 font-medium">
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-blue-700 dark:text-blue-400 font-semibold">
               <span>Select File</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -452,7 +452,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
               <span>Browse Projects</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -475,7 +475,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </p>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-400 font-semibold">
               <span>Configure Unit</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -499,7 +499,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </p>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-amber-800 dark:text-amber-400 font-semibold">
                 <span>Launch Demo</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -509,7 +509,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {/* Footer Notes */}
-      <div className="w-full max-w-5xl text-center border-t border-slate-200 dark:border-slate-900 pt-4 text-xs text-slate-500 font-mono flex items-center justify-between">
+      <div className="w-full max-w-5xl text-center border-t border-slate-200 dark:border-slate-900 pt-4 text-xs text-slate-600 dark:text-slate-400 font-mono flex items-center justify-between">
         <span>Johnson Controls York Custom Air Handling Units</span>
         <span>OpenXML 3.1.1 Deliverable Engine &bull; Zero Schema Corruption</span>
       </div>

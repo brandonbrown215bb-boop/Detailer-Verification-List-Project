@@ -115,3 +115,66 @@ export function sanitizeDomainText(text: string | null | undefined): string {
     .replace(/Download\s+Excel/gi, 'Export Excel (.xlsx)')
     .replace(/Download\s+Verification\s+List/gi, 'Export Verification List (.xlsx)');
 }
+
+/**
+ * Sanitizes a string for safe inclusion in Excel worksheets.
+ * Removes LaTeX artifacts, domain jargon, invalid OpenXML control characters,
+ * and neutralizes spreadsheet formula injection prefixes (=, +, -, @).
+ */
+export function sanitizeForExcel(text: string | null | undefined): string {
+  if (!text || typeof text !== 'string') return '';
+
+  let sanitized = sanitizeDomainText(text);
+
+  // Remove invalid OpenXML / XML 1.0 control characters (except tab, LF, CR)
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  const trimmed = sanitized.trim();
+  if (!trimmed) return '';
+
+  // Neutralize CSV/Excel formula injection vectors
+  if (/^[=+\-@\t\r]/.test(trimmed)) {
+    return `'${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+/**
+ * Formats a numeric dimension with unit symbol.
+ * E.g. 120 -> '120"', 48.5 -> '48.5"'
+ */
+export function formatDimension(
+  value: number | string | null | undefined,
+  unit: string = '"'
+): string {
+  if (value === null || value === undefined || value === '') {
+    return `0${unit}`;
+  }
+
+  const num = typeof value === 'number' ? value : parseFloat(String(value));
+  if (isNaN(num)) {
+    return `0${unit}`;
+  }
+
+  // Format cleanly without trailing .0 if integer
+  const formattedNum = Number.isInteger(num) ? num.toString() : num.toString();
+  return `${formattedNum}${unit}`;
+}
+
+/**
+ * Formats a 3D dimension tuple into standard engineering L × W × H summary.
+ * E.g. (120, 84, 96) -> '120"L × 84"W × 96"H'
+ */
+export function formatDimensionSummary(
+  length?: number | string | null,
+  width?: number | string | null,
+  height?: number | string | null,
+  unit: string = '"'
+): string {
+  const l = formatDimension(length, unit);
+  const w = formatDimension(width, unit);
+  const h = formatDimension(height, unit);
+  return `${l}L × ${w}W × ${h}H`;
+}
+

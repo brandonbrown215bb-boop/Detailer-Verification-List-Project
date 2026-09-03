@@ -6,6 +6,14 @@ graphify-out/
 .qmd/
 # AGENT_GROUND_END
 
+# Transient agent runtime execution records
+.agents/worker_*
+.agents/auditor_*
+.agents/challenger_*
+.agents/reviewer_*
+.agents/sentinel_*
+
+
 # Node / Web
 node_modules/
 dist/
@@ -13,11 +21,15 @@ dist-ssr/
 *.local
 .npm
 *.tsbuildinfo
+playwright-report/
+test-results/
+.playwright/
 
 # .NET / C#
 bin/
 obj/
 publish/
+TestResults/
 [Dd]ebug/
 [Rr]elease/
 *.user

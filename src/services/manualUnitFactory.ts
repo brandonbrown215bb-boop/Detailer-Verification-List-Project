@@ -1,7 +1,7 @@
-import { NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance, ShippingSkid, UnitBase, Segment } from '../types';
-import { extractFactsFromGraph, overrideFact } from './factRegistry';
-import { RULES_CATALOG } from './rulesCatalog';
-import { generateChecklists } from './ruleEvaluator';
+import type { NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance, ShippingSkid, UnitBase, Segment } from '../types/index.ts';
+import { extractFactsFromGraph, overrideFact } from './factRegistry.ts';
+import { RULES_CATALOG } from './rulesCatalog.ts';
+import { generateChecklists } from './ruleEvaluator.ts';
 
 export interface ManualSegmentItem {
   id: string;

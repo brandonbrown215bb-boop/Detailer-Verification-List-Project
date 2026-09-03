@@ -1,38 +1,48 @@
-# BRIEFING — 2026-08-31T19:46:00Z
+# BRIEFING — 2026-09-02T12:50:45Z
 
 ## Mission
-Comprehensive technical survey of the frontend codebase for UI/UX remediation and live validation suite.
+Investigate the business logic and dual-engine architecture across C# and TypeScript, cataloging divergence, calculation/parsing duplication, AST evaluation, and browser preview mode decoupling requirements.
 
 ## 🔒 My Identity
-- Archetype: explorer
-- Roles: Frontend Codebase Explorer
+- Archetype: Explorer
+- Roles: Investigation, Synthesis
 - Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2
-- Original parent: 52919dba-58f2-4525-8ff2-81599136d595
-- Milestone: Frontend Survey
+- Original parent: db58321e-5951-480e-859b-164602eb9f30
+- Milestone: Survey Phase
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement changes to application source code
-- Deliver thorough technical report to survey_frontend.md and handoff.md
+- Read-only investigation — do NOT modify source code or implement fixes.
+- Metadata and reports go only inside `.agents/explorer_survey_2/`.
+- Produce evidence-backed observations with exact paths and line numbers.
 
 ## Current Parent
-- Conversation ID: 52919dba-58f2-4525-8ff2-81599136d595
-- Updated: 2026-08-31T19:46:00Z
+- Conversation ID: db58321e-5951-480e-859b-164602eb9f30
+- Updated: 2026-09-02T12:50:45Z
 
 ## Investigation State
-- **Explored paths**: `src/App.tsx`, `src/types/index.ts`, `src/components/*` (all 16 components), `src/services/*` (all 8 services), `src/ruleEditor/*`, `src/backend/AHUVerification.App/Bridge/*`, `ui-ux-review/findings.md`
+- **Explored paths**:
+  - `src/backend/AHUVerification.Core/` (Parsers, Services, Models, Bridge, Utils)
+  - `src/backend/AHUVerification.App/Bridge/BridgeHandler.cs`
+  - `src/backend/AHUVerification.RuleEditor/Bridge/RuleEditorBridgeHandler.cs`
+  - `tests/AHUVerification.Tests/`
+  - `src/services/` (`xmlParser.ts`, `factRegistry.ts`, `ruleEvaluator.ts`, `desktopBridge.ts`, `excelExporter.ts`, `manualUnitFactory.ts`, `projectStorage.ts`, `rulesCatalog.ts`)
+  - `src/ruleEditor/services/astConverter.ts`
+  - `src/utils/` (`readiness.ts`, `formatters.ts`, `segmentCatalog.ts`)
+  - `src/App.tsx`
 - **Key findings**:
-  1. Identified exact predicate divergence across Header, Sidebar, Resolution Center, GeneralUnitTab, SkidViewTab, and Preflight causing "All Facts Confirmed" false-success state.
-  2. Identified missing ARIA semantics, focus trap deficiency, focus restoration omission, and subtitle clipping across `ModalShell` and standalone modals.
-  3. Identified `Ctrl+K` 50ms setTimeout focus race and lack of `.select()`.
-  4. Identified file ingestion silent returns and missing loading/error state in `HomePage.tsx`.
-  5. Identified exact LaTeX math artifact (`$N \ge 1$` in `ManualUnitModal.tsx:732`), PascalCase enums, and 8 leaked internals jargon strings.
-  6. Measured contrast failures for `text-slate-400` on light (2.88:1) and `text-slate-500` on dark (3.67:1); identified grid column horizontal overflow at 1086px width.
-- **Unexplored areas**: None within frontend survey scope.
+  1. Full mapping of C# and TS engines complete.
+  2. Identified specific divergence in XML fallback defaults (`xmlParser.ts` hardcoded fallback dimensions 411x110x194 and weight 31376 vs C# `0`).
+  3. Identified `thermalBreak` logic divergence on custom housing styles.
+  4. Identified desktop runtime execution path disconnect (desktop UI calls TS DOMParser at runtime rather than C# parser).
+  5. Identified deliverable generation divergence (C# OpenXML on `template.xlsx` vs TS SheetJS `aoa_to_sheet`).
+  6. Detailed clean decoupling strategy between desktop host and browser preview mode.
+- **Unexplored areas**: None within the survey scope.
 
 ## Key Decisions Made
-- Structured findings into five detailed technical sections in `survey_frontend.md` with exact line references, root cause logic chains, and concrete remediation specifications.
+- Completed survey report in `.agents/explorer_survey_2/handoff.md`.
 
 ## Artifact Index
-- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\survey_frontend.md` — Technical survey deliverable
-- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\handoff.md` — 5-component handoff report
-- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\progress.md` — Progress log
+- `.agents/explorer_survey_2/handoff.md` — Final 5-component handoff report
+- `.agents/explorer_survey_2/progress.md` — Progress tracker and heartbeat
+- `.agents/explorer_survey_2/DISPATCH.md` — Dispatch log
+- `.agents/explorer_survey_2/BRIEFING.md` — Agent memory and identity

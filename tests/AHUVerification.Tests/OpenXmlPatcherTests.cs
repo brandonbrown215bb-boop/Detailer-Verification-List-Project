@@ -19,7 +19,7 @@ namespace AHUVerification.Tests
             string templatePath = TestPathHelper.GetRepoPath("Detailing Verification List.xlsx");
             Assert.True(File.Exists(templatePath), $"Template file should exist at {templatePath}");
 
-            string xmlContent = File.ReadAllText(TestPathHelper.GetRepoPath("Config.xml"));
+            string xmlContent = File.ReadAllText(TestPathHelper.GetFixturePath("Config.xml"));
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
 

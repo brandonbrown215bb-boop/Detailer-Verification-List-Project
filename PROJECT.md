@@ -1,109 +1,96 @@
-# Project: UI/UX Remediation & Live Validation Suite
+# Project: Detailer Verification List Project Remediation
 
 ## Architecture
-The AHU Detailing Verification desktop application is an Electron/WebView2 + React 18 + TypeScript + Tailwind CSS desktop app backed by a .NET 8 C# verification engine and OpenXML spreadsheet deliverable patcher.
-
-### Component & State Architecture
-- **State Store**: React state in `App.tsx` coordinating facts registry (`Record<string, DomainFact>`), checklist items (`ChecklistItem[]`), unit metadata (`UnitInfo`), active tab navigation, and dialog modal states.
-- **Readiness Logic**: Centralized in `src/utils/readiness.ts` exporting canonical `UnitReadiness` and `ScopeReadiness` interfaces and deterministic readiness predicates (`computeUnitReadiness`, `computeScopeReadiness`, `resolveFactForScope`).
-- **Dialog System**: `src/components/common/ModalShell.tsx` and custom modal dialogs (`OmniSearchModal`, `ManualUnitModal`, `SettingsModal`, `PreFlightModal`, `ResolutionCenterModal`, `ProjectIdentityModal`, `ComNumberModal`, `DetailerNameModal`), implementing WAI-ARIA `role="dialog"`, `aria-modal="true"`, focus trapping (`useFocusTrap`), background inertness, and focus restoration to invoking elements.
-- **File Ingestion Pipeline**: `HomePage.tsx` and `desktopBridge.ts`, providing explicit state machines (`idle` | `loading` | `error` | `success`), durable error banners, filename display, and desktop process launching (`launchRuleEditor`).
-- **Formatting & Typography**: `src/utils/formatters.ts` providing domain formatters for enums (`StructuralSteel` -> `Structural Steel`), clean engineering terminology, and removal of LaTeX artifacts (`$N \ge 1$`).
-- **Responsive Layout & Themes**: Responsive grid in `SkidViewTab.tsx` with priority description column, expandable row detail drawers, auto-collapsible sidebar below 1200px, and WCAG 2.2 AA certified color tokens.
-
----
+The repository is an AHU (Air Handling Unit) Detailing Verification desktop and web application built with a dual architecture:
+- **Frontend**: TypeScript, React 18, Tailwind CSS, Vite. Located in `src/`. Provides interactive checklist verification, skid visualization, fact overrides, manual unit creation, and a rule editor.
+- **Backend Core**: .NET 8 C# Class Library in `src/backend/AHUVerification.Core/`. Provides authoritative XML parsing (`NormalizedXmlParser`), fact extraction (`FactExtractor`), AST predicate rule evaluation (`AstRuleEvaluator`), OpenXML Excel deliverable synthesis (`OpenXmlTemplatePatcher`), UPZ archive decompression (`UpzBundleExtractor`), and atomic project persistence (`DvlProjectManager`).
+- **Backend Host Applications**: Windows Forms + Microsoft Edge WebView2 hosts in `src/backend/AHUVerification.App/` and `src/backend/AHUVerification.RuleEditor/`. Bridge messages via `BridgeHandler.cs` and `RuleEditorBridgeHandler.cs`.
+- **Rule Pack Subsystem**: JSON-based rule pack in `resources/rulepack/` managed and fingerprinted via SHA-256 by `scripts/build_rulepack.mjs` and verified at runtime by `RulePackManager.cs`.
+- **Testing Pyramid**:
+  - Backend xUnit tests in `tests/AHUVerification.Tests/`.
+  - Frontend Node unit and property/adversarial test scripts in `scripts/`.
+  - Playwright E2E and axe-core accessibility smoke test suite in `tests/e2e/`.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Centralized Readiness Predicate | Single `computeUnitReadiness` / `useProjectReadiness` function calculating synchronized unconfirmed facts, blocked checks, completed checks | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Synchronized Header & Sidebar Badges | Header fact pill, sidebar badges, and resolution center all display identical pending counts and blocked states | M1 | ORIGINAL_REQUEST §R1 |
-| 3 | Resolution Center Fact Resolution | Resolution Center displays blocked checklist rules, handles all unconfirmed facts (including weights), and never shows "All Facts Confirmed!" when items are pending | M1 | ORIGINAL_REQUEST §R1 |
-| 4 | PreFlight Modal Synchronized Gating | PreFlight summary cards and export buttons rely on the unified readiness predicate | M1 | ORIGINAL_REQUEST §R1 |
-| 5 | Instant Ctrl+K Focus & Selection | `Ctrl+K` omni-search immediately focuses and selects the search input, traps `Tab` focus, and restores focus on `Escape` | M2 | ORIGINAL_REQUEST §R2 |
-| 6 | WAI-ARIA Modal Dialog Semantics | All modal shells render `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, `aria-describedby` | M2 | ORIGINAL_REQUEST §R2 |
-| 7 | Modal Focus Trap & Restoration | Programmatic `Tab` / `Shift+Tab` focus trapping, backdrop inertness, and focus restoration upon dismissal | M2 | ORIGINAL_REQUEST §R2 |
-| 8 | Subtitle Text Auto-Wrapping | Remove `truncate max-w-[320px]` in `ModalShell` to prevent premature ellipsis clipping at desktop resolutions | M2 | ORIGINAL_REQUEST §R2 |
-| 9 | ManualUnitModal Escape & Focus | Add `Escape` key dismissal and standard dialog focus semantics to `ManualUnitModal` | M2 | ORIGINAL_REQUEST §R2 |
-| 10 | Durable Import Error States & Banners | `HomePage` displays visible loading spinner and durable error banner with filename and recovery steps on XML/.upz ingestion errors | M3 | ORIGINAL_REQUEST §R3 |
-| 11 | Desktop Rule Editor Launch & Feedback | Add IPC action to desktop bridge for launching Rule Editor, with status toast/notifications on success or failure | M3 | ORIGINAL_REQUEST §R3 |
-| 12 | LaTeX Math Formatting Removal | Eliminate `$N \ge 1$` in `ManualUnitModal` and replace with natural desktop wording ("one or more skids") | M4 | ORIGINAL_REQUEST §R4 |
-| 13 | Human-Readable Enum Formatters | Convert PascalCase enum tokens (`StructuralSteel`, `FormedChannel`, etc.) to natural title-cased labels | M4 | ORIGINAL_REQUEST §R4 |
-| 14 | Leaked Internal Jargon Eradication | Clean up technical developer jargon ("normalized XML", "domain facts", "AST verification rules", "OpenXML deliverables", "Download .dvl") | M4 | ORIGINAL_REQUEST §R4 |
-| 15 | De-cluttered Container Cards & Pills | Streamline nested cards, remove repetitive badge pills, and format list summaries cleanly | M4 | ORIGINAL_REQUEST §R4 |
-| 16 | Responsive Sidebar Auto-Collapse | Sidebar automatically collapses to compact icon mode when window width is below 1200px | M5 | ORIGINAL_REQUEST §R5 |
-| 17 | Priority Table Column Grid | Primary flex width for rule description, fixed status/action columns, eliminating horizontal scroll at 1086px | M5 | ORIGINAL_REQUEST §R5 |
-| 18 | Expandable Row Metadata Drawers | Secondary metadata (provenance, comments, AST logic traces) moved into expandable row drawers | M5 | ORIGINAL_REQUEST §R5 |
-| 19 | WCAG 2.2 AA Contrast Compliance | Uplift subdued text tokens (`text-slate-400`/`500`) to certified contrast ratios ($\ge 4.5:1$) in Light & Dark modes | M5 | ORIGINAL_REQUEST §R5 |
-| 20 | Light Mode Modal Frame Cohesion | Unify light theme modal backdrops and containers to avoid dark frame bleed | M5 | ORIGINAL_REQUEST §R5 |
-| 21 | Automated Live Validation Suite | Lightweight automated test harnesses for readiness predicates, copy/terminology linter, modal semantics, and build verification | Test Track | AGENTS.md / ORIGINAL_REQUEST |
-
----
+| 1 | .gitignore Test Artifact Exclusions | Exclude `TestResults/`, `playwright-report/`, `test-results/`, `.playwright/` to prevent dirty git status after tests | M1 | Survey (Explorer 1) |
+| 2 | Idempotent Rule Pack Generator | Make `scripts/build_rulepack.mjs` preserve `generatedAt` when `bundleSha256` is unchanged to avoid git diff churn | M1 | Survey (Explorer 1) |
+| 3 | Package.json Toolchain Dependencies | Add `@playwright/test` and `@axe-core/playwright` to `devDependencies` in `package.json` | M1 | Survey (Explorer 1) |
+| 4 | Clean CI Workflow Verification | Verify `.github/workflows/codex-verification.yml` across Windows and Linux runners | M1 | ORIGINAL_REQUEST §R1 |
+| 5 | Single Authoritative XML Defaults | Eliminate hardcoded sample values (`31376`, `6.26`, `411`, `110`, `194`) in `src/services/xmlParser.ts`, strictly default to `0` | M2 | Survey (Explorer 2) |
+| 6 | ThermalBreak Semantic Alignment | Align `thermalBreak` logic in `xmlParser.ts` with C# `NormalizedXmlParser.cs` (`rawStyle.Contains("ThermalBreak") || !rawStyle.Equals("Standard")`) | M2 | Survey (Explorer 2) |
+| 7 | Decoupled Browser Preview Mode | Explicit `INativeBridge` abstraction separating `WebView2DesktopBridge` from `BrowserPreviewBridge`, with clear watermarking on browser export | M2 | ORIGINAL_REQUEST §R2 |
+| 8 | Cross-Engine Parity Verification | Ensure zero silent divergence between TS and C# fact derivation and rule evaluations | M2 | ORIGINAL_REQUEST §R2 |
+| 9 | Frontend Unit Test Expansion | Implement truthful unit tests for state reducers, formatters, readiness validators, and AST converters | M3 | ORIGINAL_REQUEST §R3 |
+| 10 | Rendered Component & Axe Tests | Implement real rendered DOM component tests and dialog focus trap / axe-core accessibility verification | M3 | ORIGINAL_REQUEST §R3 |
+| 11 | Local Automation Script Parity | Update `build-all.bat` and `run-tests.bat` to mirror CI validation gates and include all test suites | M3 | ORIGINAL_REQUEST §R3 |
+| 12 | Bridge IPC Schema Validation | Enforce runtime validation on all IPC request/response payloads between WebView2 frontend and C# `BridgeHandler` | M4 | ORIGINAL_REQUEST §R4 |
+| 13 | Bridge Error Propagation & Request ID Preservation | Ensure failed deserialization and execution preserves `id` in `BridgeResponse` to prevent frontend promise hangs | M4 | Survey (Explorer 3) |
+| 14 | Bridge Action Catalog Parity & xUnit Tests | Align action catalogs across `BridgeHandler`, `RuleEditorBridgeHandler`, and `desktopBridge.ts`; add xUnit tests in `tests/AHUVerification.Tests/` | M4 | ORIGINAL_REQUEST §R4 |
+| 15 | Test Fixture Directory Isolation | Move `Config.xml` and `UPZ_Unit_Examples/` into `tests/fixtures/` and update all path helpers | M5 | ORIGINAL_REQUEST §R5 |
+| 16 | UPZ Sanitization & Portable Paths | Ensure test fixtures contain no proprietary data and remove hardcoded developer paths in `UpzBundleExtractor.cs` | M5 | ORIGINAL_REQUEST §R5 |
+| 17 | Architecture & Context Manifest Refresh | Update `docs/context-manifest.json`, `docs/architecture/README.md`, and ADRs to match verified repository state | M5 | ORIGINAL_REQUEST §R5 |
+| 18 | Acceptance Gate 1 & 2 Validation | Full validation of Gate 1 (CI & workflow integrity) and Gate 2 (Architecture & contract verification) | M6 | ORIGINAL_REQUEST Acceptance Criteria |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Single Readiness Predicate & Fact Synchronization (R1) | `src/utils/readiness.ts`, `src/components/Header.tsx`, `src/components/Sidebar.tsx`, `src/components/ResolutionCenterModal.tsx`, `src/components/PreFlightModal.tsx`, `src/components/GeneralUnitTab.tsx`, `src/components/SkidViewTab.tsx` | none | DONE |
-| M2 | Keyboard Speed & Accessible Dialog Focus Semantics (R2) | `src/hooks/useFocusTrap.ts`, `src/components/common/ModalShell.tsx`, `src/components/OmniSearchModal.tsx`, `src/components/ManualUnitModal.tsx`, `src/components/SettingsModal.tsx`, `src/components/ProjectIdentityModal.tsx`, `src/components/ComNumberModal.tsx`, `src/components/DetailerNameModal.tsx` | none | IN_PROGRESS |
-| M3 | File Ingestion & Action Feedback (R3) | `src/components/HomePage.tsx`, `src/services/desktopBridge.ts`, `src/components/SettingsModal.tsx`, `src/App.tsx`, `BridgeHandler.cs` | none | PLANNED |
-| M4 | User Copy & Typography Cleanup (R4) | `src/utils/formatters.ts`, `src/components/ManualUnitModal.tsx`, `src/components/HomePage.tsx`, `src/components/PreFlightModal.tsx`, `src/components/ResolutionCenterModal.tsx`, `src/components/SkidViewTab.tsx` | none | PLANNED |
-| M5 | Responsive Column Layout & Theme Contrast Hardening (R5) | `src/components/SkidViewTab.tsx`, `src/components/Sidebar.tsx`, `src/styles/index.css`, Tailwind theme classes across components | M1, M4 | PLANNED |
-| TEST | E2E & Live Validation Suite | `scripts/test_readiness.mjs`, `scripts/test_copy_linter.mjs`, `scripts/test_ast_converter.mjs`, `run-tests.bat`, integration checks | none | IN_PROGRESS |
-
----
+| M1 | Phase 1: Unblock & Harden Codex Verification Loop | Features 1, 2, 3, 4 (.gitignore, build_rulepack.mjs, package.json, CI workflow) | none | DONE |
+| M2 | Phase 2: Eliminate Dual-Engine Divergence & Align Business Logic | Features 5, 6, 7, 8 (TS parser defaults, thermalBreak parity, bridge abstraction, parity verification) | M1 | DONE |
+| M3 | Phase 3: Establish Truthful Frontend Test Pyramid & Quality Gates | Features 9, 10, 11 (Unit tests, rendered component axe/focus tests, script parity) | M1, M2 | DONE |
+| M4 | Phase 4: Harden Typed Bridge Protocol & Host Integration | Features 12, 13, 14 (IPC schema validation, error propagation, catalog parity, xUnit bridge tests) | M1, M2 | DONE |
+| M5 | Phase 5: Repository Fixture Sanitization, Boundaries & Ground Refresh | Features 15, 16, 17 (tests/fixtures/ isolation, path portability, docs & manifest refresh) | M1, M2, M3, M4 | IN_PROGRESS |
+| M6 | Phase 6: Acceptance Gate & Dual Track Verification | Feature 18 (Full Gate 1 & Gate 2 validation, clean worktree verification) | M1, M2, M3, M4, M5 | PLANNED |
 
 ## Interface Contracts
 
-### 1. Readiness Service Contract (`src/utils/readiness.ts`)
-```typescript
-export interface UnitReadiness {
-  unconfirmedFactsCount: number;
-  blockedChecksCount: number;
-  incompleteChecksCount: number;
-  completedChecksCount: number;
-  totalApplicableChecksCount: number;
-  isReadyForFinal: boolean;
-  blockedRules: ChecklistItem[];
-  unconfirmedFacts: DomainFact[];
-}
-
-export function computeUnitReadiness(
-  facts: Record<string, DomainFact>,
-  checklists: ChecklistItem[]
-): UnitReadiness;
-
-export function computeScopeReadiness(
-  facts: Record<string, DomainFact>,
-  checklists: ChecklistItem[],
-  scopeTargetId?: string
-): ScopeReadiness;
-```
-
-### 2. Focus Trap Hook Contract (`src/hooks/useFocusTrap.ts`)
-```typescript
-export function useFocusTrap(
-  isOpen: boolean,
-  options?: {
-    initialFocusRef?: React.RefObject<HTMLElement>;
-    onEscape?: () => void;
-    returnFocusRef?: React.RefObject<HTMLElement>;
+### TypeScript Frontend <-> C# BridgeHandler IPC Contract
+- Request wire envelope:
+  ```typescript
+  interface BridgeRequest<T = any> {
+    id: string;        // UUIDv4
+    action: string;    // Action identifier
+    payload?: T;       // Action-specific payload
   }
-): React.RefObject<HTMLDivElement>;
-```
+  ```
+- Response wire envelope:
+  ```typescript
+  interface BridgeResponse<T = any> {
+    id: string;        // Echoes BridgeRequest.id (MUST NEVER be empty, even on deserialization error)
+    success: boolean;  // True if executed successfully
+    data?: T;          // Action-specific response payload
+    error?: string;    // Error message if success === false
+  }
+  ```
+- Supported Actions:
+  - `getAppInfo`: Returns host version and platform metadata.
+  - `getRulePack`: Returns active rule pack contents and hash.
+  - `openFileDialog`: Opens native file picker (`filter`, `title`).
+  - `saveFileDialog`: Opens native save picker (`defaultName`, `filter`, `title`).
+  - `extractUpz`: Extracts UPZ archive to temp workspace.
+  - `saveDvl`: Persists `.dvl` project bundle atomically.
+  - `exportExcelDeliverable`: Generates OpenXML deliverable from `template.xlsx`.
+  - `openFile`: Opens file with default system handler.
+  - `showInExplorer`: Selects file in Windows File Explorer.
+  - `checkRulePackUpdate`: Checks remote UNC/SharePoint staged rule pack.
+  - `syncRulePack`: Atomic sync with LKG rollback.
+  - `selectFolderDialog`: Opens folder browser dialog.
+  - `launchRuleEditor`: Spawns RuleEditor executable.
+  - `publishRulePack` (RuleEditor only): Publishes edited rule pack with integrity verification.
 
-### 3. Formatting Helper Contract (`src/utils/formatters.ts`)
-```typescript
-export function formatEnumLabel(enumValue: string): string;
-export function sanitizeDomainText(text: string): string;
-```
-
----
+### XML Parser & Fact Registry Semantic Contract
+- Missing numeric fields (`cabLength`, `cabHeight`, `cabWidth`, `unitWeight`, `totalStaticPressure`) strictly default to `0`.
+- `thermalBreak` boolean rule: `rawStyle.Contains("ThermalBreak") || !rawStyle.Equals("Standard")` (case-insensitive).
+- Override provenance: User overrides maintain timestamp, author, previous value, and audit trail across both engines.
 
 ## Code Layout
-- `src/utils/` — `readiness.ts`, `formatters.ts`
-- `src/hooks/` — `useFocusTrap.ts`, `useMediaQuery.ts`
-- `src/components/` — UI views, tabs, modals, header, sidebar
-- `src/components/common/` — `ModalShell.tsx`, reusable UI primitives
-- `src/services/` — `desktopBridge.ts`, `ruleEvaluator.ts`, `xmlParser.ts`
-- `scripts/` — `build_rulepack.mjs`, `test_readiness.mjs`, `test_copy_linter.mjs`, `test_ast_converter.mjs`
-- `tests/AHUVerification.Tests/` — C# xUnit test suite
+- Frontend: `src/` (Components, Services, Utils, RuleEditor)
+- Backend Core: `src/backend/AHUVerification.Core/` (Parsers, Services, Models)
+- Backend Hosts: `src/backend/AHUVerification.App/` (WinForms + WebView2), `src/backend/AHUVerification.RuleEditor/`
+- Tests:
+  - C# xUnit tests: `tests/AHUVerification.Tests/`
+  - Playwright E2E & Accessibility: `tests/e2e/`
+  - Isolated test fixtures: `tests/fixtures/`
+- Scripts & Toolchain: `scripts/`, `build-all.bat`, `run-tests.bat`, `.github/workflows/codex-verification.yml`
+- Documentation: `docs/`, `docs/architecture/`, `docs/decisions/`, `docs/context-manifest.json`

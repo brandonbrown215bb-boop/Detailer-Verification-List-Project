@@ -77,7 +77,7 @@ flowchart TD
 
 ### 3. Desktop Host & Typed Asynchronous IPC Bridge
 - **Responsibility**: C#/.NET 8 hosting Edge WebView2 interface.
-- **Typed Asynchronous IPC Bridge**: Main-host actions are `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, and `selectFolderDialog`. XML parsing is currently invoked in the TypeScript frontend; it is not registered in `BridgeHandler`. The Rule Editor has its own bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
+- **Typed Asynchronous IPC Bridge**: Main-host actions are `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, `selectFolderDialog`, and `launchRuleEditor`. XML parsing is currently invoked in the TypeScript frontend; it is not registered in `BridgeHandler`. The Rule Editor has its own bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
 - **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, checklist completion states, full source XML SHA-256, and pinned Rule Pack bundle identity.
 - **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file.
 
@@ -130,4 +130,6 @@ flowchart TD
 - **Roundtrip Project Persistence**: Unit tests verify `.dvl` save/load fidelity, full Rule Pack identity, source XML identity, and absolute atomic save behavior.
 - **Rule Pack Integrity**: Unit tests reject missing or tampered members and accept JSON line-ending conversion without weakening content hashes.
 - **UPZ Decompression**: Automated unit tests verify native extraction of XML artifacts and order metadata parsing.
+- **E2E & Accessibility Smoke Suite**: Automated Playwright smoke tests verify WCAG 2.2 AA accessibility compliance (zero serious/critical violations), focus trap management, keyboard shortcuts (`Ctrl+K`, `Escape`), and durable error handling across responsive viewports.
+- **Cross-Engine Parity & IPC Bridge Hardening**: Node.js and C# test suites verify strict semantic parity across dual XML parsers, typed message contract validation, and WebView2 IPC isolation.
 

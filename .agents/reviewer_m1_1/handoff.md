@@ -1,67 +1,172 @@
-# Handoff Report: Reviewer Milestone 1 (R1: Single Readiness Predicate & Fact Synchronization)
+# Reviewer 1 Handoff Report: Milestone 1 (Phase 1: Unblock & Harden Codex Verification Loop)
 
-**Author**: Reviewer 1 (`reviewer_m1_1`)  
-**Timestamp**: 2026-08-31T19:55:00Z  
-**Milestone**: M1 (R1: Single Readiness Predicate & Fact Synchronization)  
-**Verdict**: **`APPROVE`**  
-**Target Repository**: `Detailer-Verification-List-Project`
+**Verdict**: **APPROVE**
 
 ---
 
 ## 1. Observation
 
-1. **Mandatory Guidance & Specs**:
-   - Inspected `ORIGINAL_REQUEST.md` (§R1) and `PROJECT.md` (§Feature 1-4, Milestones §M1, Interface Contracts §1).
-2. **Worker Implementation & Source Code**:
-   - `src/utils/readiness.ts`: Implements pure deterministic functions `computeUnitReadiness`, `computeScopeReadiness`, `isFactUnconfirmed`, `isChecklistBlocked`, `isChecklistPassed`, `isChecklistCompleted`, `isChecklistIncomplete`, and `resolveFactForScope`.
-   - `src/types/index.ts`: Declares canonical `UnitReadiness` and `ScopeReadiness` interfaces and domain type aliases `DomainFact` and `ChecklistItem`.
-   - `src/components/Header.tsx` (lines 79-83): Computes readiness via `unitReadiness = readiness || computeUnitReadiness(facts, checklists || [])` and surfaces `totalPendingActionCount = unconfirmedFactsCount + blockedChecksCount` in the fact pill without excluding skid weights.
-   - `src/components/Sidebar.tsx` (lines 42-56, 97-147, 230-297): Progress bar, badge counters, and skid cards rely on `unitReadiness` and `scopeReadinessMap`, displaying synchronized blocked and pending counts.
-   - `src/components/ResolutionCenterModal.tsx` (lines 42-52, 78-85): Gated on `isFullyResolved = unconfirmedFactsCount === 0 && blockedChecksCount === 0`. Never displays "All Facts Confirmed & Checks Unblocked!" while facts or checklist items remain pending. Provides resolvers for skid weights, identity parameters, and jump navigation to blocked checks.
-   - `src/components/PreFlightModal.tsx` (lines 42-54, 184-204, 230-239): Gated strictly on `isReadyForFinal`, dynamically offering "Export Draft .xlsx" vs "Export Final .xlsx".
-   - `src/components/SkidViewTab.tsx` (lines 387-402): Utilizes `resolveFactForScope` to map generic skid fact keys (e.g. `skid.weight`) to scoped targets (`skid.skid-1.weight`).
-   - `src/App.tsx` (lines 631-635, 664, 678, 837, 853): Calculates `readiness` with `useMemo(() => computeUnitReadiness(facts, checklists), [facts, checklists])` and distributes it to all child surfaces.
-3. **Independent Command Execution**:
-   - `npm run build`: Exited with code 0 (`tsc && vite build` passed with zero errors, 1635 modules transformed).
-   - `node scripts/test_readiness.mjs`: Exited with code 0 (all 21 / 21 test suites passed with 104 assertions).
-   - `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj`: Exited with code 0 (29 passed, 0 failed).
-   - `node scripts/build_rulepack.mjs`: Exited with code 0 (Rule pack v14.0.0 built with 104 rules).
+### 1.1 `.gitignore` Modifications
+- **File**: `.gitignore` (lines 16-18, line 24)
+- **Changes**:
+  ```gitignore
+  # Node / Web
+  playwright-report/
+  test-results/
+  .playwright/
+  ...
+  # .NET / C#
+  TestResults/
+  ```
+- **Direct Verification**:
+  - Command: `git check-ignore -v TestResults/ahu-verification.trx playwright-report/index.html test-results/trace.zip .playwright/package.json`
+  - Output:
+    ```
+    .gitignore:24:TestResults/	TestResults/ahu-verification.trx
+    .gitignore:16:playwright-report/	playwright-report/index.html
+    .gitignore:17:test-results/	test-results/trace.zip
+    .gitignore:18:.playwright/	.playwright/package.json
+    ```
+  - Running `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults` created `TestResults/ahu-verification.trx`.
+  - `git status --porcelain` showed zero untracked entries for `TestResults/`.
+
+### 1.2 `scripts/build_rulepack.mjs` Idempotence
+- **File**: `scripts/build_rulepack.mjs` (lines 112-127)
+- **Changes**:
+  ```javascript
+  let version = '14.0.0';
+  let name = 'AHU Detailing Verification Rule Pack';
+  let generatedAt = new Date().toISOString();
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (existing.version) version = existing.version;
+      if (existing.name) name = existing.name;
+      if (existing.bundleSha256 === bundleSha256 && existing.generatedAt) {
+        generatedAt = existing.generatedAt;
+      }
+    } catch (e) {
+      // ignore parse error on old manifest
+    }
+  }
+  ```
+- **Direct Verification**:
+  - Ran `node scripts/build_rulepack.mjs` consecutively twice.
+  - Output:
+    ```
+    Rule Pack v14.0.0 built successfully.
+    Bundle SHA-256 : cdecf315b8dc55ed3eaed96c043dff8c8a03cdc73ef905764a25c39822ccaf0e
+    Total Rules    : 104 (99 active, 5 archived)
+    Rules Hash     : 083456eceb16cc43a42829c562feac630d56a8443ffc4ae2eef8bc12d3a666dc
+    Template Hash  : 406f6a516635deef612b540171a665e157c282bac0f2d3d4bdf77a07e70fbc44
+    ```
+  - Executed `git diff resources/rulepack/manifest.json`: 0 lines changed / clean diff.
+
+### 1.3 `package.json` DevDependencies
+- **File**: `package.json` (lines 25-26)
+- **Changes**:
+  ```json
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.55.0",
+  ```
+- **Direct Verification**:
+  - `npm run build` ran `tsc && vite build`.
+  - Output:
+    ```
+    ✓ 1637 modules transformed.
+    ✓ built in 8.26s
+    ```
+  - Exited with returncode 0 and zero packaging/TypeScript errors.
+
+### 1.4 Test Suite Execution
+- **.NET Tests**:
+  - Command: `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release`
+  - Output:
+    ```
+    Passed!  - Failed: 0, Passed: 29, Skipped: 0, Total: 29, Duration: 4 s - AHUVerification.Tests.dll (net8.0)
+    ```
+- **Static & Automation Verification Scripts**:
+  - `node scripts/test_ast_converter.mjs` -> Passed
+  - `node scripts/test_readiness.mjs` -> Passed
+  - `node scripts/stress_test_readiness_adversarial.mjs` -> Passed
+  - `node scripts/test_modal_accessibility.mjs` -> Passed (49/49 suites, 70 assertions)
+  - `node scripts/test_ingestion_feedback.mjs` -> Passed (24/24 assertions)
+  - `node scripts/test_copy_linter.mjs` -> Passed (33/33 assertions)
+  - `node scripts/test_responsive_contrast.mjs` -> Passed (26/26 assertions)
+
+### 1.5 Integrity Audit
+- Scanned for hardcoded bypasses, dummy facades, fake verification outputs, or shortcut delegators.
+- Result: Clean genuine implementation across all changed files. Zero integrity violations detected.
 
 ---
 
 ## 2. Logic Chain
 
-1. **State Synchronization (Observation 2 & 3)**:
-   - Calculating `readiness` centrally at the top level in `App.tsx` and propagating the resulting `UnitReadiness` structure down to `Header`, `Sidebar`, `ResolutionCenterModal`, and `PreFlightModal` guarantees that every UI surface renders identical numbers for unconfirmed facts, blocked rules, and completed checks.
-2. **False Success Elimination (Observation 2)**:
-   - In `ResolutionCenterModal.tsx`, the success view is guarded by `isFullyResolved = unconfirmedFactsCount === 0 && blockedChecksCount === 0`.
-   - In `PreFlightModal.tsx`, the final export is guarded by `isReadyForFinal = totalApplicableChecksCount > 0 && unconfirmedFactsCount === 0 && blockedChecksCount === 0 && incompleteChecksCount === 0`.
-   - Therefore, neither dialog can ever present an "All Facts Confirmed" or "Ready" state while items remain unconfirmed, blocked, or incomplete.
-3. **No Weight Exclusions (Observation 2)**:
-   - `isFactUnconfirmed` evaluates all domain facts uniformly regardless of key, and `ResolutionCenterModal` contains explicit weight resolvers.
-4. **Adversarial Integrity & Edge Case Invariants (Observation 2 & 3)**:
-   - The safe-zero invariant (`totalApplicableChecksCount > 0`), flagged item handling (`isChecklistIncomplete`), and scoped skid key mapping (`resolveFactForScope`) prevent silent false positives on empty data or multi-skid projects.
+1. **Test Churn Elimination**:
+   - Observations 1.1 show that test output directories (`TestResults/`, `playwright-report/`, `test-results/`, `.playwright/`) were previously untracked by `.gitignore`, causing `git status --porcelain` to flag a dirty worktree during CI post-test verification.
+   - By explicitly adding these four paths to `.gitignore`, local and CI test executions leave the repository worktree clean.
+
+2. **Rule Pack Manifest Idempotence**:
+   - Observations 1.2 demonstrate that `scripts/build_rulepack.mjs` previously stamped `new Date().toISOString()` unconditionally on every execution, dirtying `resources/rulepack/manifest.json`.
+   - The conditional assignment preserves `existing.generatedAt` when `existing.bundleSha256 === bundleSha256`, preventing false-positive git churn while correctly refreshing timestamps when rule definitions or templates change.
+
+3. **Toolchain Alignment**:
+   - Observations 1.3 show `@playwright/test` and `@axe-core/playwright` pinned under `devDependencies`.
+   - Frontend compilation via `npm run build` succeeds cleanly without type collisions or module resolution errors.
+
+4. **Engine & Test Suite Stability**:
+   - Observations 1.4 confirm that all 29 .NET unit and integration tests and all 7 standalone verification suites pass 100% without failures.
 
 ---
 
 ## 3. Caveats
 
-- **No caveats.** The implementation satisfies all acceptance criteria for Requirement R1 without regression. Subsequent milestones (M2 through M5) will address dialog focus/accessibility, file ingestion feedback, and copy cleanup independently.
+- **Linux Headless Browser Verification**: Local verification occurred on Windows (development environment). Linux-specific Playwright browser installation is tested on `ubuntu-latest` in the GitHub Actions workflow (`.github/workflows/codex-verification.yml`).
 
 ---
 
 ## 4. Conclusion
 
-- **Verdict**: **`APPROVE`**
-- Milestone 1 (R1: Single Readiness Predicate & Fact Synchronization) is complete, robust, type-safe, and thoroughly verified.
-- The project is ready to proceed to Milestone 2 (Keyboard Speed & Accessible Dialog Focus Semantics).
+Milestone 1 successfully unblocks and hardens the verification loop:
+- Test artifact directories are properly ignored in `.gitignore`.
+- Rule-pack generation is strictly idempotent.
+- Playwright and axe-core dependencies are properly declared in `package.json`.
+- All local and engine tests pass with 100% success rate.
+- Zero integrity violations found.
+
+**Verdict**: **APPROVE**
 
 ---
 
 ## 5. Verification Method
 
-To independently verify this evaluation:
-1. Run `npm run build` from the project root to ensure zero TypeScript errors.
-2. Run `node scripts/test_readiness.mjs` to execute the 21 live readiness test suites.
-3. Run `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj` to verify the verification engine backend tests.
-4. Inspect `src/utils/readiness.ts` and `src/components/ResolutionCenterModal.tsx` to verify that `isFullyResolved` requires both `unconfirmedFactsCount === 0` and `blockedChecksCount === 0`.
+To independently verify these findings, execute the following commands in PowerShell from the repository root:
+
+```powershell
+# 1. Verify rule pack build idempotence
+node scripts/build_rulepack.mjs
+node scripts/build_rulepack.mjs
+git diff resources/rulepack/manifest.json
+
+# 2. Verify .NET test suite and TestResults ignore rule
+dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults
+git status --porcelain TestResults
+
+# 3. Verify frontend compilation
+npm run build
+
+# 4. Verify all repository verification scripts
+node scripts/test_ast_converter.mjs
+node scripts/test_readiness.mjs
+node scripts/stress_test_readiness_adversarial.mjs
+node scripts/test_modal_accessibility.mjs
+node scripts/test_ingestion_feedback.mjs
+node scripts/test_copy_linter.mjs
+node scripts/test_responsive_contrast.mjs
+```
+
+**Invalidation conditions**:
+- Any non-zero exit code from the commands above.
+- Any diff produced in `resources/rulepack/manifest.json` after consecutive `node scripts/build_rulepack.mjs` runs on an unmodified rulepack.
+- Any appearance of `TestResults/` in `git status --porcelain`.

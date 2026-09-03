@@ -16,7 +16,7 @@ namespace AHUVerification.App.Bridge
 {
     public class BridgeHandler
     {
-        private readonly Form _parentForm;
+        private readonly Form? _parentForm;
         private readonly DvlProjectManager _projectManager = new();
         private readonly OpenXmlTemplatePatcher _patcher = new();
         private readonly RulePackManager _rulePackManager = new();
@@ -25,7 +25,11 @@ namespace AHUVerification.App.Bridge
         private RulePackBundle? _activeRulePack;
         private readonly string _rulePackPath;
 
-        public BridgeHandler(Form parentForm, string rulePackPath)
+        public BridgeHandler(string rulePackPath) : this(null, rulePackPath)
+        {
+        }
+
+        public BridgeHandler(Form? parentForm, string rulePackPath)
         {
             _parentForm = parentForm;
             _rulePackPath = rulePackPath;
@@ -42,6 +46,13 @@ namespace AHUVerification.App.Bridge
 
         public BridgeResponse Handle(string jsonMessage)
         {
+            string reqId = BridgeRequest.ExtractRequestId(jsonMessage);
+
+            if (string.IsNullOrWhiteSpace(jsonMessage))
+            {
+                return BridgeResponse.Fail(reqId, "Invalid empty request message");
+            }
+
             var options = JsonDefaults.CreateFlexibleOptions();
 
             BridgeRequest? req;
@@ -49,11 +60,20 @@ namespace AHUVerification.App.Bridge
             {
                 req = JsonSerializer.Deserialize<BridgeRequest>(jsonMessage, options);
                 if (req == null)
-                    return new BridgeResponse { Success = false, Error = "Invalid null request" };
+                {
+                    return BridgeResponse.Fail(reqId, "Invalid null request");
+                }
             }
             catch (Exception ex)
             {
-                return new BridgeResponse { Success = false, Error = $"Deserialization error: {ex.Message}" };
+                return BridgeResponse.Fail(reqId, $"Deserialization error: {ex.Message}");
+            }
+
+            string effectiveId = !string.IsNullOrEmpty(req.Id) ? req.Id : reqId;
+
+            if (string.IsNullOrWhiteSpace(req.Action))
+            {
+                return BridgeResponse.Fail(effectiveId, "Missing required 'action' field in bridge request");
             }
 
             try
@@ -76,11 +96,11 @@ namespace AHUVerification.App.Bridge
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
-                return new BridgeResponse { Id = req.Id, Success = true, Data = result };
+                return BridgeResponse.Ok(effectiveId, result);
             }
             catch (Exception ex)
             {
-                return new BridgeResponse { Id = req.Id, Success = false, Error = ex.Message };
+                return BridgeResponse.Fail(effectiveId, ex.Message);
             }
         }
 
@@ -110,6 +130,8 @@ namespace AHUVerification.App.Bridge
 
         private object? ShowOpenFileDialog()
         {
+            if (_parentForm == null) return null;
+
             object? result = null;
             _parentForm.Invoke(() =>
             {
@@ -160,8 +182,10 @@ namespace AHUVerification.App.Bridge
 
         private object? ShowSaveFileDialog(JsonElement payload)
         {
-            string defaultName = payload.TryGetProperty("defaultName", out var n) ? n.GetString() ?? "Project.dvl" : "Project.dvl";
-            string filter = payload.TryGetProperty("filter", out var f) ? f.GetString() ?? "DVL Project (*.dvl)|*.dvl" : "DVL Project (*.dvl)|*.dvl";
+            string defaultName = BridgeValidation.GetStringPropertyOrDefault(payload, "defaultName", "Project.dvl");
+            string filter = BridgeValidation.GetStringPropertyOrDefault(payload, "filter", "DVL Project (*.dvl)|*.dvl");
+
+            if (_parentForm == null) return null;
 
             object? result = null;
             _parentForm.Invoke(() =>
@@ -183,7 +207,11 @@ namespace AHUVerification.App.Bridge
 
         private object ExtractUpz(JsonElement payload)
         {
-            string filePath = payload.GetProperty("filePath").GetString() ?? "";
+            string filePath = BridgeValidation.RequireStringProperty(payload, "extractUpz", "filePath");
+
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"UPZ file not found: {filePath}", filePath);
+
             var bundle = _upzExtractor.Extract(filePath);
             return new
             {
@@ -205,14 +233,19 @@ namespace AHUVerification.App.Bridge
 
         private object SaveDvl(JsonElement payload)
         {
-            string targetPath = payload.GetProperty("filePath").GetString() ?? "";
-            string dvlJson = payload.GetProperty("projectJson").GetString() ?? "";
+            string targetPath = BridgeValidation.RequireStringProperty(payload, "saveDvl", "filePath");
+            string dvlJson = BridgeValidation.RequireStringProperty(payload, "saveDvl", "projectJson");
+
             _projectManager.SaveJsonToFile(dvlJson, targetPath);
             return new { saved = true, path = Path.GetFullPath(targetPath) };
         }
 
         private object ExportExcelDeliverable(JsonElement payload)
         {
+            var factsEl = BridgeValidation.RequireObjectProperty(payload, "exportExcelDeliverable", "facts");
+            var sqEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "sqItems");
+            var clEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "checklists");
+
             if (_activeRulePack == null) LoadActiveRulePack();
             if (_activeRulePack == null)
                 throw new InvalidOperationException("Active rule pack bundle not loaded.");
@@ -249,28 +282,47 @@ namespace AHUVerification.App.Bridge
             }
 
             var options = JsonDefaults.CreateFlexibleOptions();
-            var facts = JsonSerializer.Deserialize<Dictionary<string, Fact>>(payload.GetProperty("facts").GetRawText(), options) ?? new();
-            var sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(payload.GetProperty("sqItems").GetRawText(), options) ?? new();
-            var checklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(payload.GetProperty("checklists").GetRawText(), options) ?? new();
-            string generalComments = payload.TryGetProperty("generalComments", out var gc) ? gc.GetString() ?? "" : "";
-            string defaultName = payload.TryGetProperty("defaultName", out var dn) ? dn.GetString() ?? "Detailing_Verification_List.xlsx" : "Detailing_Verification_List.xlsx";
-            bool isDraft = payload.TryGetProperty("isDraft", out var idf) && idf.GetBoolean();
+            var facts = JsonSerializer.Deserialize<Dictionary<string, Fact>>(factsEl.GetRawText(), options) ?? new();
+            var sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(sqEl.GetRawText(), options) ?? new();
+            var checklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(clEl.GetRawText(), options) ?? new();
+            string generalComments = BridgeValidation.GetStringPropertyOrDefault(payload, "generalComments", "");
+            string defaultName = BridgeValidation.GetStringPropertyOrDefault(payload, "defaultName", "Detailing_Verification_List.xlsx");
+            bool isDraft = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isDraft", false);
+
+            List<RuleDefinition> rules = _activeRulePack.Rules;
+            if (payload.TryGetProperty("rules", out var rEl) && rEl.ValueKind == JsonValueKind.Array)
+            {
+                var customRules = JsonSerializer.Deserialize<List<RuleDefinition>>(rEl.GetRawText(), options);
+                if (customRules != null && customRules.Count > 0)
+                {
+                    rules = customRules;
+                }
+            }
 
             string? chosenPath = null;
-            _parentForm.Invoke(() =>
+            if (payload.TryGetProperty("outputPath", out var opEl) &&
+                opEl.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(opEl.GetString()))
             {
-                using var sfd = new SaveFileDialog
+                chosenPath = opEl.GetString();
+            }
+            else if (_parentForm != null)
+            {
+                _parentForm.Invoke(() =>
                 {
-                    Title = "Export Detailing Verification List (.xlsx)",
-                    FileName = defaultName,
-                    Filter = "Excel Workbook (*.xlsx)|*.xlsx"
-                };
+                    using var sfd = new SaveFileDialog
+                    {
+                        Title = "Export Detailing Verification List (.xlsx)",
+                        FileName = defaultName,
+                        Filter = "Excel Workbook (*.xlsx)|*.xlsx"
+                    };
 
-                if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
-                {
-                    chosenPath = sfd.FileName;
-                }
-            });
+                    if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
+                    {
+                        chosenPath = sfd.FileName;
+                    }
+                });
+            }
 
             if (string.IsNullOrEmpty(chosenPath))
             {
@@ -290,7 +342,7 @@ namespace AHUVerification.App.Bridge
                 facts,
                 sqItems,
                 checklists,
-                _activeRulePack.Rules,
+                rules,
                 generalComments,
                 isDraft,
                 graph
@@ -306,7 +358,7 @@ namespace AHUVerification.App.Bridge
 
         private object OpenFile(JsonElement payload)
         {
-            string path = payload.GetProperty("filePath").GetString() ?? "";
+            string path = BridgeValidation.RequireStringProperty(payload, "openFile", "filePath");
             if (!File.Exists(path)) throw new FileNotFoundException("File not found to open.", path);
 
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
@@ -315,7 +367,7 @@ namespace AHUVerification.App.Bridge
 
         private object ShowInExplorer(JsonElement payload)
         {
-            string path = payload.GetProperty("filePath").GetString() ?? "";
+            string path = BridgeValidation.RequireStringProperty(payload, "showInExplorer", "filePath");
             if (!File.Exists(path) && !Directory.Exists(path))
                 throw new FileNotFoundException("Target path not found.", path);
 
@@ -326,7 +378,7 @@ namespace AHUVerification.App.Bridge
 
         private object CheckRulePackUpdate(JsonElement payload)
         {
-            string remotePath = payload.GetProperty("remotePath").GetString() ?? "";
+            string remotePath = BridgeValidation.RequireStringProperty(payload, "checkRulePackUpdate", "remotePath");
             string currentVersion = _activeRulePack?.Manifest.Version ?? "0.0.0";
             string currentBundleSha = _activeRulePack?.Manifest.BundleSha256 ?? "";
 
@@ -344,6 +396,8 @@ namespace AHUVerification.App.Bridge
 
         private object? ShowSelectFolderDialog()
         {
+            if (_parentForm == null) return null;
+
             string? selectedPath = null;
             _parentForm.Invoke(new Action(() =>
             {
@@ -363,7 +417,7 @@ namespace AHUVerification.App.Bridge
 
         private object SyncRulePack(JsonElement payload)
         {
-            string remotePath = payload.GetProperty("remotePath").GetString() ?? "";
+            string remotePath = BridgeValidation.RequireStringProperty(payload, "syncRulePack", "remotePath");
             string localData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AHUVerification");
             string staging = Path.Combine(localData, "staging_rulepack");
             string active = Path.Combine(localData, "active_rulepack");

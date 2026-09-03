@@ -1,15 +1,17 @@
-# Progress Tracking — Challenger 2 (Milestone 1)
+# Progress — challenger_m1_2
 
-**Last visited**: 2026-09-01T00:56:00Z  
-**Status**: COMPLETED
+Last visited: 2026-09-02T12:57:44Z
 
-## Steps Completed
-- [x] Initialized workspace files (DISPATCH.md, BRIEFING.md, progress.md)
-- [x] Read `.agents/ORIGINAL_REQUEST.md` and `PROJECT.md`
-- [x] Inspected Milestone 1 changes and implementation files (`readiness.ts`, `ResolutionCenterModal.tsx`, `PreFlightModal.tsx`, `Header.tsx`, `Sidebar.tsx`, `SkidViewTab.tsx`, `App.tsx`)
-- [x] Formulated empirical test cases & attack scenarios (multi-skid resolution, export boundary gating, modal truthfulness, partition invariant)
-- [x] Implemented and executed automated stress test suite (`scripts/test_challenger_m1_2.mjs`) — 15 suites, 35,225 assertions passed
-- [x] Ran project verification commands (`npm run build`, `dotnet test`, `build_rulepack.mjs`, `test_readiness.mjs`, `test_ast_converter.mjs`)
-- [x] Delivered challenge report (`challenge.md`) with explicit verdict: `APPROVE`
-- [x] Updated BRIEFING.md and wrote 5-component handoff report (`handoff.md`)
-- [x] Delivered verdict to parent agent via send_message
+## Status
+- [x] Initialized workspace and briefing
+- [x] Read ORIGINAL_REQUEST.md and worker_m1/handoff.md
+- [x] Inspected git diff / changes made by worker_m1
+- [x] Tested `node scripts/build_rulepack.mjs` idempotency (VERIFIED)
+- [x] Tested `npm run build` (VERIFIED)
+- [x] Tested `dotnet test` (VERIFIED - 29/29 passed)
+- [x] Tested all 7 JS verification scripts (VERIFIED - 100% passed)
+- [x] Tested publish output assets and detected RuleEditor filename discrepancy
+- [x] Verified git status cleanliness after all builds and tests (VERIFIED)
+- [x] Analyzed `.github/workflows/codex-verification.yml` syntax, step sequence, cross-platform compatibility
+- [x] Wrote challenge handoff report with verdict (APPROVE) to `.agents/challenger_m1_2/handoff.md`
+- [ ] Send message to orchestrator

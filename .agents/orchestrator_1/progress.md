@@ -1,27 +1,20 @@
-# Progress — UI/UX Remediation & Live Validation
+# Progress Log
 
 ## Current Status
-Last visited: 2026-09-01T01:10:00Z
-
-- [x] Initialized orchestrator state files (`DISPATCH.md`, `BRIEFING.md`, `plan.md`, `ORIGINAL_REQUEST.md`)
-- [x] Phase 0: Survey & Scope Mapping (All 3 survey agents completed)
-- [x] Phase 1: Synthesized findings into `PROJECT.md` and `TEST_INFRA.md`
-- [x] Phase 2: Execute Milestone 1 (R1: Single Readiness Predicate & Fact Synchronization - PASSED)
-- [x] Phase 2: Execute Milestone 2 (R2: Dialog Focus & Ctrl+K OmniSearch - PASSED)
-- [x] Phase 2: Execute Milestone 3 (R3: Import States & Settings Feedback - PASSED)
-- [x] Phase 2: Execute Milestone 4 (R4: Copy, Typography & LaTeX Cleanup - PASSED)
-- [x] Phase 2: Execute Milestone 5 (R5: Responsive Layout & Theme Contrast - PASSED)
-- [x] Phase 3: Final Verification & Test Suite Execution (All suites green)
-- [x] Phase 4: Final Synthesis & Human Report
+Last visited: 2026-09-02T13:30:05Z
 
 ## Iteration Status
-Current iteration: 2 / 32
-Spawn Count: 16 / 16 (Succession Complete)
+Current iteration: 4 / 32
 
-## Project Verification Summary
-- **M1 (Readiness & Facts)**: Single source of truth predicate in `src/utils/readiness.ts`, all weight facts included, 21 test suites passed (104 assertions).
-- **M2 (Dialog Focus & OmniSearch)**: Universal `ModalShell.tsx`, `useFocusTrap.ts`, `OmniSearchModal.tsx`, 49 test suites passed (70 assertions).
-- **M3 (Ingestion & Action Feedback)**: Durable `ImportErrorState` banners in `HomePage.tsx`, `desktopBridge.ts` + `BridgeHandler.cs` `launchRuleEditor`, `SettingsModal.tsx` toast feedback, 24 test assertions passed.
-- **M4 (Copy & Typography Cleanup)**: `src/utils/formatters.ts` (`formatEnumLabel`, `sanitizeDomainText`), 0 `$N \ge 1$`, 0 leaked internals, 33 assertions passed.
-- **M5 (Responsive Layout & Contrast)**: `SkidViewTab.tsx` column prioritization & expandable row drawers, `App.tsx` sidebar auto-collapse <1200px, WCAG 2.2 AA contrast verified, 26 assertions passed.
-- **Full Automation Harness**: All suites wired into `run-tests.bat` and `package.json` (`npm test`). Both C# backend and Vite frontend build with 0 errors.
+## Checklist
+- [x] Phase 0: Survey & Project Mapping (Explorers 1, 2, 3 completed)
+- [x] PROJECT.md & TEST_INFRA.md Created
+- [x] Phase 1 (M1): Unblock & Harden Codex Verification Loop (PASSED Gate 1)
+- [x] Phase 2 (M2): Eliminate Dual-Engine Divergence & Align Authoritative Business Logic (PASSED Gate 2)
+- [x] Phase 3 (M3): Establish Truthful Frontend Test Pyramid & Quality Gates (PASSED Gate 3)
+- [ ] Phase 4 (M4): Harden Typed Bridge Protocol & Host Integration (Worker 4 in progress)
+- [ ] Phase 5 (M5): Repository Fixture Sanitization, Boundaries & Ground Refresh
+- [ ] Phase 6: Final Verification, Acceptance Criteria & Gates 1 & 2 Validation
+
+## Subagent Activity
+- Worker 4 (`4a7f2e25-c6ae-4df8-bda9-22bf5df2a567`): Implementing Typed Bridge Protocol hardening, request ID preservation, schema validation, and xUnit bridge tests.

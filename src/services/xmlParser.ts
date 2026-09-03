@@ -1,4 +1,4 @@
-import {
+import type {
   NormalizedXmlGraph,
   Segment,
   ShippingSkid,
@@ -17,8 +17,8 @@ import {
   TestingOptions,
   SurfaceDetail,
   SegmentSurfaces
-} from '../types';
-import { SEGMENT_NAMES } from '../utils/segmentCatalog';
+} from '../types/index.ts';
+import { SEGMENT_NAMES } from '../utils/segmentCatalog.ts';
 
 function getElements(parent: Element | Document, tagName: string): Element[] {
   const list = parent.getElementsByTagName(tagName);
@@ -104,18 +104,29 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
 
   const parseErrors = xmlDoc.getElementsByTagName('parsererror');
-  if (parseErrors.length > 0) {
-    console.warn('DOMParser reported error, applying fallback parser:', parseErrors[0].textContent);
+  if (parseErrors.length > 0 && (!xmlDoc.documentElement || xmlDoc.documentElement.tagName === 'parsererror')) {
+    throw new Error('Invalid XML syntax: failed to parse XML document.');
   }
 
   const root = xmlDoc.documentElement;
+  const isAhuDoc = root && (
+    root.tagName.toLowerCase() === 'ahu' ||
+    root.tagName.toLowerCase() === 'unitrevision' ||
+    getElements(root, 'unit_MOMID').length > 0 ||
+    getElements(root, 'unitOptions').length > 0 ||
+    getElements(root, 'skidList').length > 0 ||
+    getElements(root, 'segmentList').length > 0
+  );
+  if (!isAhuDoc) {
+    throw new Error('The XML configuration does not match expected AHU schema specifications.');
+  }
 
   const unitMOMID = getChildText(root, 'unit_MOMID', '{00000000-0000-0000-0000-000000000000}');
-  const unitWeight = getChildNumber(root, 'unitWeight', 31376);
-  const totalStaticPressure = getChildNumber(root, 'totalStaticPressure', 6.26);
-  const cabLength = getChildNumber(root, 'cabLength', 411);
-  const cabHeight = getChildNumber(root, 'cabHeight', 110);
-  const cabWidth = getChildNumber(root, 'cabWidth', 194);
+  const unitWeight = getChildNumber(root, 'unitWeight', 0);
+  const totalStaticPressure = getChildNumber(root, 'totalStaticPressure', 0);
+  const cabLength = getChildNumber(root, 'cabLength', 0);
+  const cabHeight = getChildNumber(root, 'cabHeight', 0);
+  const cabWidth = getChildNumber(root, 'cabWidth', 0);
 
   // Document version
   const docVerNodes = getElements(root, 'documentVersion');
@@ -139,7 +150,8 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const isSeismic = unitConstructionType.toUpperCase() === 'IBC' || unitConstructionType.toUpperCase() === 'OSHPD';
   const noa = unitConstructionType.toUpperCase() === 'NOA';
   const housingStyle = defaultConstNode ? getChildText(defaultConstNode, 'housingStyle', 'ThermalBreak') : 'ThermalBreak';
-  const thermalBreak = housingStyle.toLowerCase().includes('thermalbreak');
+  const rawStyle = housingStyle;
+  const thermalBreak = rawStyle.toLowerCase().includes('thermalbreak') || !rawStyle.toLowerCase().includes('standard');
 
   const floorMaterialGaugeRaw = defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialGauge', '16') : '16';
   const floorMaterialGaugeInt = parseInt(floorMaterialGaugeRaw, 10) || 16;

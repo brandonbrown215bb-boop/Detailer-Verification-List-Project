@@ -1,6 +1,7 @@
-import { saveAs } from 'file-saver';
-import { DvlProjectFile, NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance } from '../types';
-import { RULE_PACK_IDENTITY } from './rulesCatalog';
+import fileSaver from 'file-saver';
+const saveAs = (fileSaver as any)?.saveAs || fileSaver;
+import type { DvlProjectFile, NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance } from '../types/index.ts';
+import { RULE_PACK_IDENTITY } from './rulesCatalog.ts';
 
 const AUTOSAVE_KEY = 'ahu_dvl_autosave';
 

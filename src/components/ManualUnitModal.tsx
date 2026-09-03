@@ -382,7 +382,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                 <h3 id={titleId} className="text-base font-bold text-slate-900 dark:text-white">
                   Manual Unit Setup & Architecture Wizard
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/30">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-800 dark:text-blue-300 font-bold border border-blue-500/30">
                   Custom Engineering
                 </span>
               </div>
@@ -400,6 +400,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                 Preset:
               </label>
               <select
+                aria-label="Preset template"
                 value={selectedPresetId}
                 onChange={(e) => loadPreset(e.target.value)}
                 className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
@@ -473,6 +474,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <input
                         type="text"
                         required
+                        aria-label="Job Name"
                         value={jobName}
                         onChange={(e) => setJobName(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
@@ -488,6 +490,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <input
                         type="text"
                         required
+                        aria-label="COM Number"
                         value={comNumber}
                         onChange={(e) => setComNumber(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono font-medium"
@@ -503,6 +506,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <input
                         type="text"
                         required
+                        aria-label="Detailer Name"
                         value={detailerName}
                         onChange={(e) => setDetailerName(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
@@ -529,7 +533,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                           className={`py-1.5 rounded-md text-xs font-semibold transition-all ${
                             unitType === 'Outdoor'
                               ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           Outdoor
@@ -540,7 +544,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                           className={`py-1.5 rounded-md text-xs font-semibold transition-all ${
                             unitType === 'Indoor'
                               ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           Indoor
@@ -557,7 +561,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                           className={`py-1.5 rounded-md text-xs font-semibold transition-all ${
                             housingStyle === 'ThermalBreak'
                               ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           Thermal Break
@@ -568,7 +572,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                           className={`py-1.5 rounded-md text-xs font-semibold transition-all ${
                             housingStyle === 'Standard'
                               ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           Standard
@@ -579,6 +583,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                     <div>
                       <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Default Base Height</label>
                       <select
+                        aria-label="Default Base Height"
                         value={defaultBaseHeight}
                         onChange={(e) => setDefaultBaseHeight(parseFloat(e.target.value))}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-medium"
@@ -593,6 +598,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                     <div>
                       <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Wall Thickness</label>
                       <select
+                        aria-label="Wall Thickness"
                         value={defaultWallThickness}
                         onChange={(e) => setDefaultWallThickness(parseFloat(e.target.value))}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-medium"
@@ -611,6 +617,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                         type="number"
                         min={36}
                         max={300}
+                        aria-label="Default Unit Width (in)"
                         value={defaultUnitWidth}
                         onChange={(e) => setDefaultUnitWidth(parseFloat(e.target.value) || 84)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
@@ -623,6 +630,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                         type="number"
                         min={36}
                         max={300}
+                        aria-label="Default Unit Height (in)"
                         value={defaultUnitHeight}
                         onChange={(e) => setDefaultUnitHeight(parseFloat(e.target.value) || 96)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
@@ -636,6 +644,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                         step="0.1"
                         min={0.1}
                         max={20}
+                        aria-label="Total Static Pressure (in.wg)"
                         value={totalStaticPressure}
                         onChange={(e) => setTotalStaticPressure(parseFloat(e.target.value) || 2.5)}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
@@ -657,6 +666,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Material</label>
                         <select
+                          aria-label="Exterior Skin Material"
                           value={exteriorMaterialType}
                           onChange={(e) => setExteriorMaterialType(e.target.value)}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium"
@@ -670,6 +680,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Gauge</label>
                         <select
+                          aria-label="Exterior Skin Gauge"
                           value={exteriorMaterialGauge}
                           onChange={(e) => setExteriorMaterialGauge(parseInt(e.target.value, 10))}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold"
@@ -686,6 +697,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Material</label>
                         <select
+                          aria-label="Interior Liner Material"
                           value={interiorMaterialType}
                           onChange={(e) => setInteriorMaterialType(e.target.value)}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium"
@@ -699,6 +711,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Gauge</label>
                         <select
+                          aria-label="Interior Liner Gauge"
                           value={interiorMaterialGauge}
                           onChange={(e) => setInteriorMaterialGauge(parseInt(e.target.value, 10))}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold"
@@ -715,6 +728,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Floor Material</label>
                         <select
+                          aria-label="Floor Material"
                           value={floorMaterialType}
                           onChange={(e) => setFloorMaterialType(e.target.value)}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium"
@@ -727,6 +741,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       <div>
                         <label className="block text-[10px] text-slate-500 uppercase font-mono">Insulation Type</label>
                         <select
+                          aria-label="Insulation Type"
                           value={insulationType}
                           onChange={(e) => setInsulationType(e.target.value)}
                           className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-medium"
@@ -930,6 +945,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                       Add Segment:
                     </label>
                     <select
+                      aria-label="Select segment template"
                       value={selectedTemplateCode}
                       onChange={(e) => setSelectedTemplateCode(e.target.value)}
                       className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white"
@@ -944,6 +960,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                     <span className="text-xs text-slate-400 font-mono">into</span>
 
                     <select
+                      aria-label="Select target skid"
                       value={targetAddSkidId}
                       onChange={(e) => setTargetAddSkidId(e.target.value)}
                       className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-semibold"

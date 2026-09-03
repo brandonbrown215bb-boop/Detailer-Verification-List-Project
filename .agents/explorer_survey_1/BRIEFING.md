@@ -1,34 +1,47 @@
-# BRIEFING — 2026-08-28T17:12:00Z
+# BRIEFING — 2026-09-02T12:50:00Z
 
 ## Mission
-Conduct a broad survey of the entire repository structure, architectural modules, key files, and prominent duplication hotspots for the Code Duplication Audit.
+Survey CI workflow, test execution, toolchains, and dirty worktree causes across the repository.
 
 ## 🔒 My Identity
 - Archetype: explorer
-- Roles: investigation, synthesis
+- Roles: investigator, synthesizer
 - Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_1
-- Original parent: b46e84ca-dbf1-4b83-b51d-686ed0eaf382
-- Milestone: codebase-survey
+- Original parent: db58321e-5951-480e-859b-164602eb9f30
+- Milestone: survey_phase_ci_and_test_investigation
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement
-- Focus on broad survey of repository structure, architecture, key files, and initial duplication hotspots
-- `.agents/` holds only metadata — no source or test files
+- Read-only investigation — do NOT implement production changes yet
+- Detailed evidence chain with exact file paths and line numbers
+- Full survey of CI, test configs, scripts, gitignore, axe-core, dirty worktree sources
 
 ## Current Parent
-- Conversation ID: b46e84ca-dbf1-4b83-b51d-686ed0eaf382
-- Updated: 2026-08-28T17:12:00Z
+- Conversation ID: db58321e-5951-480e-859b-164602eb9f30
+- Updated: 2026-09-02T12:50:00Z
 
 ## Investigation State
-- **Explored paths**: `src/backend/` (`AHUVerification.Core`, `AHUVerification.App`, `AHUVerification.RuleEditor`), `src/components/`, `src/services/`, `src/ruleEditor/`, `scripts/`, `tests/`, `resources/rulepack/`, `.bat` files.
-- **Key findings**: Identified 4 major duplication tiers: (1) Exact copy-pasted blocks in test scripts, IPC DTOs, MainForm lifecycle, and batch files; (2) Dual-stack C#/TypeScript cross-language duplication across XML parsing, fact extraction, AST evaluation, and DVL project serialization; (3) Structural UI modal boilerplate and C# test setup fixtures; (4) Redundant constant catalogs (segment types, fact dictionaries, localStorage keys).
-- **Unexplored areas**: None for survey scope; deep line-by-line metrics and remediation snippet authoring will proceed in M1 & M2.
+- **Explored paths**:
+  - `.github/workflows/codex-verification.yml` (on `origin/ci/codex-verification-loop`)
+  - `.gitignore`
+  - `package.json`
+  - `build-all.bat`, `run-tests.bat`, `scripts/init_env.bat`
+  - `scripts/build_rulepack.mjs`
+  - `playwright.config.mjs` and `tests/e2e/smoke.spec.mjs` (on `origin/ci/codex-verification-loop`)
+  - All 4 `.csproj` files (`AHUVerification.Core`, `AHUVerification.App`, `AHUVerification.RuleEditor`, `AHUVerification.Tests`)
+  - Node test suite scripts in `scripts/`
+  - UI components (`HomePage.tsx`, `App.tsx`, `ManualUnitModal.tsx`, `OmniSearchModal.tsx`)
+- **Key findings**:
+  - `TestResults/` missing from `.gitignore` causes `git status --porcelain` dirty worktree check to fail after `dotnet test`.
+  - `playwright-report/` and `test-results/` missing from `.gitignore`.
+  - `scripts/build_rulepack.mjs` unconditionally mutates `manifest.json` timestamp on every build.
+  - `@playwright/test` and `@axe-core/playwright` missing from `package.json` devDependencies.
+  - Parity gaps between `run-tests.bat`, `package.json` test script, and CI verification matrix.
+- **Unexplored areas**: None for this survey scope.
 
 ## Key Decisions Made
-- Completed full codebase mapping and documented all findings in `handoff.md`.
-- Cataloged exact line number ranges and files for downstream duplication cataloging.
+- Document complete evidence chains and precise line numbers for remediation.
 
 ## Artifact Index
-- `handoff.md` — Final handoff report for survey phase
-- `progress.md` — Heartbeat and task tracking
-- `DISPATCH.md` — Task dispatch log
+- .agents/explorer_survey_1/DISPATCH.md — Dispatch log
+- .agents/explorer_survey_1/progress.md — Liveness heartbeat
+- .agents/explorer_survey_1/handoff.md — Final handoff report

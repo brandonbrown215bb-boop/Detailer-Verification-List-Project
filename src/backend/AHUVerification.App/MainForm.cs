@@ -122,9 +122,10 @@ namespace AHUVerification.App
 
         private void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
+            string? message = null;
             try
             {
-                string message = e.TryGetWebMessageAsString();
+                message = e.TryGetWebMessageAsString();
                 if (string.IsNullOrEmpty(message)) return;
 
                 if (_bridgeHandler != null)
@@ -136,12 +137,9 @@ namespace AHUVerification.App
             }
             catch (Exception ex)
             {
-                var errorResponse = new BridgeResponse
-                {
-                    Success = false,
-                    Error = ex.Message
-                };
-                string jsonResponse = JsonSerializer.Serialize(errorResponse);
+                string reqId = BridgeRequest.ExtractRequestId(message);
+                var errorResponse = BridgeResponse.Fail(reqId, ex.Message);
+                string jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                 _webView.CoreWebView2.PostWebMessageAsJson(jsonResponse);
             }
         }

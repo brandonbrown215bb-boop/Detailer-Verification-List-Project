@@ -1,22 +1,17 @@
-## 2026-08-31T19:54:05-05:00
-You are Challenger 1 for Milestone 1 (R1: Single Readiness Predicate & Fact Synchronization).
+## 2026-09-02T12:53:37Z
 
-Your working directory is:
+You are Challenger 1 for Milestone 1 (Phase 1: Unblock & Harden Codex Verification Loop).
+Your metadata directory is:
 c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\challenger_m1_1
 
-Project Root:
-c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project
+Read the authoritative requirements in:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\ORIGINAL_REQUEST.md
+Read the worker handoff report in:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\worker_m1\handoff.md
 
-MANDATORY FIRST STEP:
-Read c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\ORIGINAL_REQUEST.md and c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\PROJECT.md before doing anything else.
-
-YOUR MISSION:
-Empirically stress-test the readiness predicate implementation (`src/utils/readiness.ts`) and UI synchronization:
-1. Formulate adversarial stress scenarios (e.g., circular dependencies, 100+ skids, strange fact key naming, boundary combinations of Passed, Failed, NA, NeedsInput, Flagged).
-2. Execute tests against `computeUnitReadiness` and `computeScopeReadiness`.
-3. Verify if any edge-case causes false-positive readiness or count divergence.
-4. Deliver your explicit verdict: `APPROVE` or `REQUEST_CHANGES`.
-
-DELIVERABLE:
-Write your challenge report to `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\challenger_m1_1\challenge.md` and write `handoff.md`.
-Communicate completion back to caller via send_message.
+Empirically challenge the changes:
+1. Stress test `scripts/build_rulepack.mjs`: Test running it 5 times consecutively; test when a file in `resources/rulepack/` is modified vs when unchanged.
+2. Stress test worktree cleanliness: Run `dotnet test ... --results-directory TestResults` and verify untracked files are strictly ignored.
+3. Report your verdict (APPROVE or CHALLENGE_FAILED) and findings to:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\challenger_m1_1\handoff.md
+Send a completion message when done.

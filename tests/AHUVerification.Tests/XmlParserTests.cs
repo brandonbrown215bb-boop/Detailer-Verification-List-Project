@@ -11,7 +11,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void Parse_ValidConfigXml_ExtractsCompleteGraph()
         {
-            string xmlPath = TestPathHelper.GetRepoPath("Config.xml");
+            string xmlPath = TestPathHelper.GetFixturePath("Config.xml");
             Assert.True(File.Exists(xmlPath), $"Config.xml should exist at {xmlPath}");
 
             string xmlContent = File.ReadAllText(xmlPath);
@@ -57,7 +57,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void Parse_OpeningScheduleAndComponents_ExtractsStructuredData()
         {
-            string xmlPath = TestPathHelper.GetRepoPath("Config.xml");
+            string xmlPath = TestPathHelper.GetFixturePath("Config.xml");
             string xmlContent = File.ReadAllText(xmlPath);
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
@@ -87,7 +87,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void Parse_All18UpzExamples_ExtractsWithoutExceptions()
         {
-            string upzDir = TestPathHelper.GetRepoPath("UPZ_Unit_Examples");
+            string upzDir = TestPathHelper.GetFixturePath("UPZ_Unit_Examples");
             if (!Directory.Exists(upzDir)) return;
 
             var extractor = new UpzBundleExtractor();

@@ -15,7 +15,7 @@ namespace AHUVerification.RuleEditor.Bridge
 {
     public class RuleEditorBridgeHandler
     {
-        private readonly Form _parentForm;
+        private readonly Form? _parentForm;
         private readonly RulePackManager _rulePackManager = new();
         private readonly string _rulePackPath;
         private RulePackBundle? _activeRulePack;
@@ -27,7 +27,11 @@ namespace AHUVerification.RuleEditor.Bridge
             Converters = { new JsonStringEnumConverter() }
         };
 
-        public RuleEditorBridgeHandler(Form parentForm, string rulePackPath)
+        public RuleEditorBridgeHandler(string rulePackPath) : this(null, rulePackPath)
+        {
+        }
+
+        public RuleEditorBridgeHandler(Form? parentForm, string rulePackPath)
         {
             _parentForm = parentForm;
             _rulePackPath = rulePackPath;
@@ -36,7 +40,7 @@ namespace AHUVerification.RuleEditor.Bridge
 
         private void LoadRulePack()
         {
-            if (Directory.Exists(_rulePackPath))
+            if (Directory.Exists(_rulePackPath) && File.Exists(Path.Combine(_rulePackPath, "manifest.json")))
             {
                 _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
             }
@@ -44,16 +48,30 @@ namespace AHUVerification.RuleEditor.Bridge
 
         public BridgeResponse Handle(string jsonMessage)
         {
+            string reqId = BridgeRequest.ExtractRequestId(jsonMessage);
+
+            if (string.IsNullOrWhiteSpace(jsonMessage))
+            {
+                return BridgeResponse.Fail(reqId, "Invalid empty request message");
+            }
+
             BridgeRequest? req;
             try
             {
                 req = JsonSerializer.Deserialize<BridgeRequest>(jsonMessage, JsonOptions);
                 if (req == null)
-                    return new BridgeResponse { Success = false, Error = "Invalid null request" };
+                    return BridgeResponse.Fail(reqId, "Invalid null request");
             }
             catch (Exception ex)
             {
-                return new BridgeResponse { Success = false, Error = $"Deserialization error: {ex.Message}" };
+                return BridgeResponse.Fail(reqId, $"Deserialization error: {ex.Message}");
+            }
+
+            string effectiveId = !string.IsNullOrEmpty(req.Id) ? req.Id : reqId;
+
+            if (string.IsNullOrWhiteSpace(req.Action))
+            {
+                return BridgeResponse.Fail(effectiveId, "Missing required 'action' field in bridge request");
             }
 
             try
@@ -65,24 +83,14 @@ namespace AHUVerification.RuleEditor.Bridge
                     "publishRulePack" => PublishRulePack(req.Payload),
                     "openFileDialog" => ShowOpenFileDialog(),
                     "selectFolderDialog" => ShowSelectFolderDialog(),
-                    _ => throw new NotSupportedException($"Unsupported Rule Editor bridge action: {req.Action}")
+                    _ => throw new NotSupportedException($"Unsupported Rule Editor bridge action: '{req.Action}'")
                 };
 
-                return new BridgeResponse
-                {
-                    Id = req.Id,
-                    Success = true,
-                    Data = result
-                };
+                return BridgeResponse.Ok(effectiveId, result);
             }
             catch (Exception ex)
             {
-                return new BridgeResponse
-                {
-                    Id = req.Id,
-                    Success = false,
-                    Error = ex.Message
-                };
+                return BridgeResponse.Fail(effectiveId, ex.Message);
             }
         }
 
@@ -90,11 +98,11 @@ namespace AHUVerification.RuleEditor.Bridge
         {
             return new
             {
-                AppName = "AHU Verification • Rule & Logic Editor",
-                AppVersion = "1.0.0",
-                RulePackVersion = _activeRulePack?.Manifest.Version ?? "14.0.0",
-                RuleCount = _activeRulePack?.Rules.Count ?? 0,
-                IsDesktopHost = true
+                appName = "AHU Verification • Rule & Logic Editor",
+                appVersion = "1.0.0",
+                rulePackVersion = _activeRulePack?.Manifest.Version ?? "14.0.0",
+                ruleCount = _activeRulePack?.Rules.Count ?? 0,
+                isDesktopHost = true
             };
         }
 
@@ -119,10 +127,25 @@ namespace AHUVerification.RuleEditor.Bridge
 
         private object PublishRulePack(JsonElement payload)
         {
-            string version = payload.GetProperty("version").GetString() ?? "14.0.0";
-            var rules = JsonSerializer.Deserialize<List<RuleDefinition>>(payload.GetProperty("rules").GetRawText(), JsonOptions) ?? new();
-            var templateMap = JsonSerializer.Deserialize<TemplateMap>(payload.GetProperty("templateMap").GetRawText(), JsonOptions) ?? new();
-            var approvedMappings = payload.GetProperty("approvedMappings");
+            string version = BridgeValidation.RequireStringProperty(payload, "publishRulePack", "version");
+            var rulesEl = BridgeValidation.RequireArrayProperty(payload, "publishRulePack", "rules");
+            var tmEl = BridgeValidation.RequireObjectProperty(payload, "publishRulePack", "templateMap");
+
+            var rules = JsonSerializer.Deserialize<List<RuleDefinition>>(rulesEl.GetRawText(), JsonOptions) ?? new();
+            var templateMap = JsonSerializer.Deserialize<TemplateMap>(tmEl.GetRawText(), JsonOptions) ?? new();
+
+            JsonElement approvedMappings;
+            if (payload.TryGetProperty("approvedMappings", out var amEl) &&
+                amEl.ValueKind != JsonValueKind.Undefined &&
+                amEl.ValueKind != JsonValueKind.Null)
+            {
+                approvedMappings = amEl;
+            }
+            else
+            {
+                using var emptyDoc = JsonDocument.Parse("{}");
+                approvedMappings = emptyDoc.RootElement.Clone();
+            }
 
             string templatePath = Path.Combine(_rulePackPath, "template.xlsx");
             if (!File.Exists(templatePath))
@@ -130,7 +153,20 @@ namespace AHUVerification.RuleEditor.Bridge
                 // Look for repository fallback
                 string repoRoot = PathUtils.FindRepoRoot();
                 string fallbackRes = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
-                if (File.Exists(fallbackRes)) templatePath = fallbackRes;
+                if (File.Exists(fallbackRes))
+                {
+                    templatePath = fallbackRes;
+                }
+                else
+                {
+                    string rootXlsx = Path.Combine(repoRoot, "Detailing Verification List.xlsx");
+                    if (File.Exists(rootXlsx)) templatePath = rootXlsx;
+                }
+            }
+
+            if (!File.Exists(templatePath))
+            {
+                throw new FileNotFoundException($"Template Excel file 'template.xlsx' not found at: {templatePath}", templatePath);
             }
 
             // 1. Publish directly into local packaged rule pack directory
@@ -143,17 +179,10 @@ namespace AHUVerification.RuleEditor.Bridge
                 templatePath
             );
 
-            // 2. Also publish to resources/rulepack in repository root if available
-            string repoDir = PathUtils.FindRepoRoot();
-            string resRulepack = Path.Combine(repoDir, "resources", "rulepack");
-
-            if (Directory.Exists(resRulepack) && !string.Equals(Path.GetFullPath(resRulepack), Path.GetFullPath(_rulePackPath), StringComparison.OrdinalIgnoreCase))
-            {
-                _rulePackManager.PublishToDirectory(resRulepack, version, rules, templateMap, approvedMappings, templatePath);
-            }
-
-            // 3. If target distribution path was specified (e.g. remote share / OneDrive folder)
-            if (payload.TryGetProperty("targetPath", out var targetProp) && !string.IsNullOrWhiteSpace(targetProp.GetString()))
+            // 2. If target distribution path was specified (e.g. remote share / OneDrive folder)
+            if (payload.TryGetProperty("targetPath", out var targetProp) &&
+                targetProp.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(targetProp.GetString()))
             {
                 string targetDir = targetProp.GetString()!;
                 try
@@ -180,6 +209,8 @@ namespace AHUVerification.RuleEditor.Bridge
 
         private object? ShowOpenFileDialog()
         {
+            if (_parentForm == null) return null;
+
             string? selectedPath = null;
             _parentForm.Invoke(new Action(() =>
             {
@@ -208,6 +239,8 @@ namespace AHUVerification.RuleEditor.Bridge
 
         private object? ShowSelectFolderDialog()
         {
+            if (_parentForm == null) return null;
+
             string? selectedPath = null;
             _parentForm.Invoke(new Action(() =>
             {

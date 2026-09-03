@@ -13,7 +13,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 3. Frontend Web Assets Build
+REM 1. Frontend Web Assets Build
 echo [1/4] Building Vite Frontend (dist\)...
 if not exist "node_modules\" (
     echo [INFO] Installing npm packages...
@@ -31,7 +31,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 4. Rule Pack Validation & Manifest Generation
+REM 2. Rule Pack Validation & Manifest Generation
 echo.
 echo [2/4] Validating Rule Pack ^& Updating Manifest...
 node scripts/build_rulepack.mjs
@@ -41,7 +41,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 5. Backend Core Build
+REM 3. Backend Core Build
 echo.
 echo [3/4] Building C# .NET Core Engine...
 dotnet build src/backend/AHUVerification.Core/AHUVerification.Core.csproj
@@ -51,7 +51,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 6. Backend Desktop Hosts Build
+REM 4. Backend Desktop Hosts Build
 echo.
 echo [4/4] Building Desktop Host Applications...
 dotnet build src/backend/AHUVerification.App/AHUVerification.App.csproj

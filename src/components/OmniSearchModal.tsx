@@ -245,21 +245,22 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
         </div>
 
         {/* Results List */}
-        <div
-          id="omni-search-listbox"
-          role="listbox"
-          aria-label="Search results"
-          className="max-h-96 overflow-y-auto p-3 space-y-4"
-        >
+        <div className="max-h-96 overflow-y-auto p-3 space-y-4">
           {!q ? (
-            <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500 font-mono">
+            <div role="status" className="py-8 text-center text-xs text-slate-600 dark:text-slate-400 font-mono">
               Type keywords like &quot;lifting&quot;, &quot;drain&quot;, &quot;seismic&quot;, &quot;fan&quot;, &quot;gauge&quot;, or &quot;skid 1&quot;
             </div>
           ) : totalResults === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 font-mono">
+            <div role="status" className="py-8 text-center text-xs text-slate-600 dark:text-slate-400 font-mono">
               No matching rules, specifications, or skids found.
             </div>
           ) : (
+            <div
+              id="omni-search-listbox"
+              role="listbox"
+              aria-label="Search results"
+              className="space-y-4"
+            >
             <>
               {/* Matching Rules */}
               {matchingRules.length > 0 && (
@@ -462,6 +463,7 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
                 </div>
               )}
             </>
+            </div>
           )}
         </div>
 

@@ -39,10 +39,15 @@ namespace AHUVerification.Core.Services
             if (Directory.Exists(repoAppBin) && File.Exists(Path.Combine(repoAppBin, "unpack32.exe")))
                 return Path.GetFullPath(repoAppBin);
 
-            // Check repository / dev fallback locations
-            string devPath = @"C:\Users\jbrow263\source\repos\JCI.MOM.Legacy\SolutionSource\BoundaryUpz";
-            if (Directory.Exists(devPath) && File.Exists(Path.Combine(devPath, "unpack32.exe")))
-                return devPath;
+            // Check repository relative resources/bin
+            string repoRootBin = Utils.PathUtils.ResolveRepoPath(Path.Combine("resources", "bin"));
+            if (Directory.Exists(repoRootBin) && File.Exists(Path.Combine(repoRootBin, "unpack32.exe")))
+                return repoRootBin;
+
+            // Check environment variable fallback
+            string? envTools = Environment.GetEnvironmentVariable("UPZ_TOOLS_DIR");
+            if (!string.IsNullOrWhiteSpace(envTools) && Directory.Exists(envTools) && File.Exists(Path.Combine(envTools, "unpack32.exe")))
+                return envTools;
 
             return subDir;
         }

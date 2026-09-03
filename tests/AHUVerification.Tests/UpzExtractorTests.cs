@@ -9,7 +9,7 @@ namespace AHUVerification.Tests
 {
     public class UpzExtractorTests
     {
-        private static string SampleUpzPath => TestPathHelper.GetRepoPath("UPZ_Unit_Examples/6E-060036-04.upz");
+        private static string SampleUpzPath => TestPathHelper.GetFixturePath("UPZ_Unit_Examples/6E-060036-04.upz");
 
         [Fact]
         public void Extract_ValidUpz_ExtractsXmlsAndParsesMetadata()

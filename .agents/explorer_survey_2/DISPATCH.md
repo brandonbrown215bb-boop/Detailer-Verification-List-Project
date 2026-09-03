@@ -1,11 +1,17 @@
-## 2026-08-31T19:42:00Z
-Investigate the frontend codebase (UI components, stores, views, styles, dialogs, modals, tables, theme system):
-1. Locate where facts and readiness are computed and consumed (Header, Sidebar, Facts Resolution Center, GeneralUnitTab, SkidViews, PreflightModal).
-2. Locate all modal dialogs (`ModalShell`, `OmniSearchModal`, `ManualUnitModal`, `SettingsModal`, `PreFlightModal`, `ProjectIdentityModal`, `ComNumberModal`, `DetailerNameModal`), how focus trapping, ARIA, and `Ctrl+K` are implemented.
-3. Locate file ingestion logic for `Config.xml` and `.upz` (HomePage, file picker handlers, error handling / loading state), and Settings external action handlers (Rule & Logic Editor launch).
-4. Identify user copy, LaTeX math formatting ($N \ge 1$), raw enum tokens, internal jargon, nested borders, and badge pill usage across views.
-5. Identify table layouts, column widths, rule description rendering, expandable rows, sidebar responsive behavior, and theme tokens (light/dark colors, contrast).
+## 2026-09-02T12:47:23Z
+You are Explorer 2 for the survey phase of the remediation project.
+Your working directory for metadata is:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2
 
-Deliverable:
-`c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\survey_frontend.md`
-and `handoff.md`.
+Read the authoritative requirements in:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\ORIGINAL_REQUEST.md
+
+Investigate the business logic and dual-engine architecture:
+1. Map the C# core calculation, parsing, fact extraction, AST evaluation, and Excel export engine (`AHUVerification` / `src/` / `tests/AHUVerification.Tests`).
+2. Map TypeScript business logic, AST converters, calculators, and browser preview mode implementations.
+3. Identify all points of dual-engine divergence where TypeScript and C# duplicate or compete in calculation/parsing/AST evaluation.
+4. Detail the exact decoupling required for browser preview mode vs production native host execution.
+
+Write your detailed findings to:
+c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_2\handoff.md
+Send a completion message when done.

@@ -1,46 +1,46 @@
-# BRIEFING — 2026-08-31T19:56:24-05:00
+# BRIEFING — 2026-09-02T12:56:00Z
 
 ## Mission
-Empirically stress-test the readiness predicate implementation (`src/utils/readiness.ts`) and UI synchronization for Milestone 1 (R1), formulate adversarial stress scenarios, execute tests, verify potential false-positives or divergence, and provide verdict.
+Empirically challenge Milestone 1 changes (rulepack build idempotency/reactivity and worktree cleanliness).
 
 ## 🔒 My Identity
 - Archetype: EMPIRICAL CHALLENGER
 - Roles: critic, specialist
 - Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\challenger_m1_1
-- Original parent: 52919dba-58f2-4525-8ff2-81599136d595
-- Milestone: Milestone 1 (R1: Single Readiness Predicate & Fact Synchronization)
+- Original parent: db58321e-5951-480e-859b-164602eb9f30
+- Milestone: Milestone 1 (Phase 1: Unblock & Harden Codex Verification Loop)
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
-- Review-only / challenger — do NOT modify implementation code (tests can be run in project test suite `tests/` or vitest, but `.agents/` holds only metadata)
-- Empirical verification required: all bugs must be reproduced via test execution
-- Provide explicit verdict: APPROVE or REQUEST_CHANGES
+- Review-only — do NOT modify implementation code
+- Run all verification tests independently and empirically
 
 ## Current Parent
-- Conversation ID: 52919dba-58f2-4525-8ff2-81599136d595
-- Updated: 2026-08-31T19:56:24-05:00
+- Conversation ID: db58321e-5951-480e-859b-164602eb9f30
+- Updated: 2026-09-02T12:56:00Z
 
 ## Review Scope
-- **Files to review**: `src/utils/readiness.ts`, `src/types/index.ts`, `src/components/Header.tsx`, `src/components/Sidebar.tsx`, `src/components/ResolutionCenterModal.tsx`, `src/components/PreFlightModal.tsx`, `src/components/SkidViewTab.tsx`, `src/App.tsx`
-- **Interface contracts**: `PROJECT.md`, `.agents/ORIGINAL_REQUEST.md`
-- **Review criteria**: correctness, empirical robustness, edge cases, circular dependencies, performance under 100+ skids, strange fact keys, boundary status combinations.
+- **Files to review**: `scripts/build_rulepack.mjs`, `resources/rulepack/**`, `.gitignore`, `package.json`, `.agents/ORIGINAL_REQUEST.md`, `.agents/worker_m1/handoff.md`
+- **Interface contracts**: `.agents/ORIGINAL_REQUEST.md`, `.agents/worker_m1/handoff.md`
+- **Review criteria**: Idempotency across consecutive runs, rulepack change reactivity, worktree cleanliness with TestResults/Playwright reports, test pass rate.
 
 ## Attack Surface
-- **Hypotheses tested**: Massive scale (150 skids/15k checks), prototype keys, anomalous statuses, safe zero invariant, circular fact dependency chains, overloaded signatures, cross-surface parity.
-- **Vulnerabilities found**: Zero blocking vulnerabilities in `readiness.ts`. Minor visual nuance in `SkidViewTab.tsx` header text counter for NA items.
-- **Untested angles**: Focus trapping & accessible modals (deferred to M2).
+- **Hypotheses tested**:
+  1. Does `scripts/build_rulepack.mjs` remain strictly idempotent across 5 consecutive runs? -> CONFIRMED (0 diff).
+  2. Does `scripts/build_rulepack.mjs` detect changes in `resources/rulepack/` files and update `bundleSha256` + `generatedAt`? -> CONFIRMED (new hash & timestamp stamped).
+  3. Does `scripts/build_rulepack.mjs` handle missing or malformed `manifest.json`? -> CONFIRMED (graceful regeneration).
+  4. Does `dotnet test ... --results-directory TestResults` leave untracked files in git status? -> CONFIRMED IGNORED (.gitignore line 24).
+  5. Are `playwright-report/`, `test-results/`, and `.playwright/` ignored? -> CONFIRMED IGNORED (.gitignore lines 16-18).
+- **Vulnerabilities found**: None. All tests passed with zero regressions.
+- **Untested angles**: Network disconnection during playwright binary install (handled via pinned dependencies).
 
 ## Loaded Skills
-- None specifically requested
+None loaded for this mission.
 
 ## Key Decisions Made
-- Executed adversarial stress harness `scripts/stress_test_readiness_adversarial.mjs` (15/15 passed).
-- Confirmed zero false-positive readiness.
-- Delivered final verdict: **APPROVE**.
+- Executed empirical stress tests covering consecutive invocations, file modifications, corrupted manifests, and untracked artifact directories.
+- Issued verdict: APPROVE.
 
 ## Artifact Index
-- `.agents/challenger_m1_1/DISPATCH.md` — Dispatch log
-- `.agents/challenger_m1_1/BRIEFING.md` — Situational awareness
-- `.agents/challenger_m1_1/progress.md` — Progress heartbeat
-- `.agents/challenger_m1_1/challenge.md` — Challenge report
-- `.agents/challenger_m1_1/handoff.md` — Final handoff report
+- `.agents/challenger_m1_1/progress.md` — Progress tracker
+- `.agents/challenger_m1_1/handoff.md` — Final challenger report

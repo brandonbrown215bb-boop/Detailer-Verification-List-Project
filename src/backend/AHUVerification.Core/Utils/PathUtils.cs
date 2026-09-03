@@ -16,7 +16,8 @@ namespace AHUVerification.Core.Utils
             {
                 if (File.Exists(Path.Combine(current, "Detailing Verification List.xlsx")) ||
                     File.Exists(Path.Combine(current, "package.json")) ||
-                    File.Exists(Path.Combine(current, "Config.xml")))
+                    File.Exists(Path.Combine(current, "Config.xml")) ||
+                    File.Exists(Path.Combine(current, "tests", "fixtures", "Config.xml")))
                 {
                     _cachedRepoRoot = current;
                     return current;

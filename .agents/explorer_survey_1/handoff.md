@@ -1,167 +1,251 @@
-# Codebase Survey & Duplication Hotspots Audit Report
-
-**Explorer**: Explorer 1  
-**Working Directory**: `.agents/explorer_survey_1`  
-**Date**: 2026-08-28  
-**Milestone**: M0 — Codebase Survey & Scope Mapping  
-
----
+# Explorer Survey Report: CI Workflow, Test Toolchains, and Dirty Worktree Causes
 
 ## 1. Observation
 
-A comprehensive inspection of the entire repository structure, file tree, source code, scripts, tests, assets, and configuration files was conducted. The repository is a dual-stack (.NET 10 Windows Desktop + React / Vite / TypeScript) engineering verification application for Air Handling Units (AHUs).
+### 1.1 Git Branch & Workflow Architecture
+* Branch `origin/ci/codex-verification-loop` (commit `f03a23f`) introduces `.github/workflows/codex-verification.yml`, `playwright.config.mjs`, and `tests/e2e/smoke.spec.mjs`.
+* `.github/workflows/codex-verification.yml` defines 3 jobs:
+  1. `verify` (lines 35-128, `runs-on: windows-2022`):
+     - Executes `npm ci`, `npm run build`
+     - Validates rule-pack integrity (lines 66-83)
+     - Restores & builds 3 .NET targets: `AHUVerification.Core.csproj`, `AHUVerification.App.csproj`, `AHUVerification.RuleEditor.csproj`
+     - Runs `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults` (lines 92-93)
+     - Executes 7 Node test scripts: `test_ast_converter.mjs`, `test_readiness.mjs`, `stress_test_readiness_adversarial.mjs`, `test_modal_accessibility.mjs`, `test_ingestion_feedback.mjs`, `test_copy_linter.mjs`, `test_responsive_contrast.mjs` (lines 95-108)
+     - Validates worktree cleanliness (lines 104-112):
+       ```powershell
+       $dirty = git status --porcelain
+       if ($dirty) {
+         Write-Host $dirty
+         Write-Error 'Verification modified tracked repository files.'
+         exit 1
+       }
+       ```
+     - Uploads `TestResults/` (lines 114-121) and `dist/` (lines 123-128).
+  2. `browser` (lines 130-170, `runs-on: ubuntu-latest`):
+     - `npm ci --no-audit --no-fund` (line 141)
+     - `npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2` (lines 143-144)
+     - `npx playwright install --with-deps chromium` (line 146)
+     - `npm run build` (line 148)
+     - `npx playwright test` (line 151)
+     - Uploads `playwright-report/` (lines 153-160) and `test-results/` (lines 162-169).
+  3. `publish` (lines 172-228, `runs-on: windows-2022`):
+     - Triggered on `workflow_dispatch` when `inputs.publish_artifacts` is true.
+     - Runs `dotnet publish` for `AHUVerification.App` and `AHUVerification.RuleEditor` into `publish/AHUVerification` and `publish/RuleEditor`.
+     - Validates presence of 6 critical binaries and assets (lines 208-221).
 
-### 1.1 Repository Architecture & Tech Stack Inventory
+### 1.2 `.gitignore` Status & Missing Exclusions
+* Path: `.gitignore` (lines 1-45):
+  ```gitignore
+  # Node / Web
+  node_modules/
+  dist/
+  dist-ssr/
+  *.local
+  .npm
+  *.tsbuildinfo
 
-| Component / Subsystem | Primary Tech Stack | Entry Points / Core Files | Location / Path | Purpose & Responsibilities |
-|-----------------------|--------------------|---------------------------|-----------------|-----------------------------|
-| **Core Verification Engine (Backend)** | C# / .NET 10 Library | `NormalizedXmlParser.cs`<br/>`FactExtractor.cs`<br/>`AstRuleEvaluator.cs`<br/>`RulePackManager.cs`<br/>`OpenXmlTemplatePatcher.cs`<br/>`DvlProjectManager.cs` | `src/backend/AHUVerification.Core/` | Domain models, XML parsing, provenance-aware fact extraction, JSON-AST rule evaluation, OpenXML workbook synthesis, `.dvl` project lifecycle. |
-| **Main Desktop App Host** | C# WinForms + WebView2 | `Program.cs`<br/>`MainForm.cs`<br/>`BridgeHandler.cs` | `src/backend/AHUVerification.App/` | Native Windows desktop wrapper hosting the primary React UI via Edge WebView2, typed IPC bridge. |
-| **Rule & Logic Editor Studio Host** | C# WinForms + WebView2 | `Program.cs`<br/>`MainForm.cs`<br/>`RuleEditorBridgeHandler.cs` | `src/backend/AHUVerification.RuleEditor/` | Standalone desktop studio host for engineering leads to manage rules, test predicates, and publish release rule packs. |
-| **Verification SPA UI (Frontend)** | TypeScript, React 18, Vite, Tailwind CSS, Lucide | `index.html`<br/>`src/main.tsx`<br/>`src/App.tsx`<br/>`src/components/` | `src/`, `src/components/` | Detailer-facing desktop UI: General Unit specs, Skid breakdown, Special Quotes (SQ), Fact Resolution Center, Pre-flight audit. |
-| **Rule Editor SPA UI (Studio Frontend)** | TypeScript, React 18, Vite, Tailwind CSS | `rule-editor.html`<br/>`src/ruleEditor/main.tsx`<br/>`src/ruleEditor/RuleEditorApp.tsx`<br/>`src/ruleEditor/components/` | `src/ruleEditor/` | Rule authoring studio: visual AST tree builder, fact dictionary, live simulation sandbox, semantic version publisher. |
-| **Frontend Web Services & Fallbacks** | TypeScript | `xmlParser.ts`<br/>`factRegistry.ts`<br/>`ruleEvaluator.ts`<br/>`manualUnitFactory.ts`<br/>`projectStorage.ts`<br/>`desktopBridge.ts`<br/>`excelExporter.ts` | `src/services/` | Browser-compatible client implementations of XML ingestion, fact registry, AST evaluation, manual unit synthesis, and export. |
-| **Rule Pack Assets & Schemas** | JSON, OpenXML Excel Template | `manifest.json`<br/>`rules.json`<br/>`template_map.json`<br/>`approved_mappings.json`<br/>`template.xlsx` | `resources/rulepack/` | Immutable declarative rule bundle with canonical LF-normalized SHA-256 integrity verification. |
-| **Automated Test Suite** | C# xUnit, Coverlet | `AstEvaluatorTests.cs`<br/>`DvlProjectTests.cs`<br/>`FactRegistryTests.cs`<br/>`OpenXmlPatcherTests.cs`<br/>`RulePackManagerTests.cs`<br/>`TestPathHelper.cs`<br/>`UpzExtractorTests.cs`<br/>`XmlParserTests.cs` | `tests/AHUVerification.Tests/` | 100% automated test coverage of XML parsing, fact extraction, AST evaluation, OpenXML patching, and `.dvl` persistence. |
-| **Build & Automation Scripts** | Node.js (ESM), Windows Batch (`.bat`) | `build_rulepack.mjs`<br/>`test_ast_converter.mjs`<br/>`build-all.bat`<br/>`launch-app.bat`<br/>`publish-release.bat`<br/>`run-tests.bat`<br/>`setup.bat` | Root & `scripts/` | End-to-end multi-target builds, release packaging, rulepack verification, and dev server orchestration. |
+  # .NET / C#
+  bin/
+  obj/
+  publish/
+  [Dd]ebug/
+  [Rr]elease/
+  *.user
+  *.userosscache
+  *.sln.docstates
+  *.suo
+  .vs/
+  ```
+* Observations:
+  - `TestResults/` is **NOT** present in `.gitignore`.
+  - `playwright-report/` is **NOT** present in `.gitignore`.
+  - `test-results/` is **NOT** present in `.gitignore`.
+  - `.playwright/` is **NOT** present in `.gitignore`.
+  - Running `dotnet test ... --results-directory TestResults` creates untracked files: `TestResults/ahu-verification.trx`.
+  - `git status --porcelain` immediately outputs: `?? TestResults/`.
 
----
+### 1.3 Rule Pack Manifest Generation & Timestamp Churn
+* Path: `scripts/build_rulepack.mjs` (lines 108-135):
+  ```javascript
+  const bundleIdentity = REQUIRED_FILES.map(name => `${name}:${files[name].sha256}`).join('\n');
+  const bundleSha256 = sha256(Buffer.from(bundleIdentity, 'utf8'));
+  ...
+  const manifest = {
+    name,
+    version,
+    generatedAt: new Date().toISOString(),
+    bundleSha256,
+    files
+  };
+  const formattedManifest = normalizeLf(JSON.stringify(manifest, null, 2) + '\n');
+  fs.writeFileSync(manifestPath, formattedManifest, 'utf8');
+  ```
+* Observations:
+  - `scripts/build_rulepack.mjs` writes a new `generatedAt` timestamp to `resources/rulepack/manifest.json` on **every single invocation**, even if rule definitions and template hashes (`bundleSha256`) are identical.
+  - Direct diff after running `node scripts/build_rulepack.mjs`:
+    ```diff
+    --- a/resources/rulepack/manifest.json
+    +++ b/resources/rulepack/manifest.json
+    @@ -3,3 +3,3 @@
+       "version": "14.0.0",
+    -  "generatedAt": "2026-09-01T01:52:30.584Z",
+    +  "generatedAt": "2026-09-02T12:25:50.644Z",
+       "bundleSha256": "cdecf315b8dc55ed3eaed96c043dff8c8a03cdc73ef905764a25c39822ccaf0e"
+    ```
+  - In `codex-verification.yml` (line 83), CI explicitly performs `git restore -- resources/rulepack` to suppress this modification.
+  - In `build-all.bat` (line 37), running `node scripts/build_rulepack.mjs` leaves `resources/rulepack/manifest.json` modified in the local developer's working tree.
 
-### 1.2 Direct Duplication Hotspot Observations
+### 1.4 `package.json` Dependencies & Test Scripts
+* Path: `package.json` (lines 6-36):
+  ```json
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node scripts/test_readiness.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs",
+    "test:readiness": "node scripts/test_readiness.mjs",
+    "test:accessibility": "node scripts/test_modal_accessibility.mjs",
+    "test:ingestion": "node scripts/test_ingestion_feedback.mjs",
+    "test:copy": "node scripts/test_copy_linter.mjs",
+    "test:contrast": "node scripts/test_responsive_contrast.mjs"
+  }
+  ```
+* Observations:
+  - `@playwright/test` and `@axe-core/playwright` are **omitted** from `devDependencies`.
+  - `npm test` script omits `scripts/test_ast_converter.mjs` and `scripts/stress_test_readiness_adversarial.mjs`.
+  - Local developers running `npm test` cannot run the E2E browser tests without manually installing Playwright.
 
-#### Hotspot A: Exact Copy-Pasted Code Blocks
-1. **AST Converter Duplicate**:
-   - `scripts/test_ast_converter.mjs` (lines 3–150) contains a direct copy-paste of `src/ruleEditor/services/astConverter.ts` (lines 12–160), reproducing `leafToAst`, `subGroupToAst`, `visualTreeToAst`, `astToVisualTree`, `parseLeaf`, and `findSubGroups` verbatim.
-2. **Bridge Request/Response DTOs**:
-   - `src/backend/AHUVerification.App/Bridge/BridgeHandler.cs` (lines 15–40) and `src/backend/AHUVerification.RuleEditor/Bridge/RuleEditorBridgeHandler.cs` (lines 14–39) contain identical class definitions for `BridgeRequest` and `BridgeResponse` with identical `[JsonPropertyName]` attributes.
-3. **MainForm IPC Handling & Repo Root Finder**:
-   - `src/backend/AHUVerification.App/MainForm.cs` (lines 121–178) and `src/backend/AHUVerification.RuleEditor/MainForm.cs` (lines 104–161) share 58 lines of identical code implementing `CoreWebView2_WebMessageReceived`, `IsDevServerRunningAsync`, and `FindRepoRoot`.
-4. **Repository Root Traversal Logic**:
-   - `FindRepoRoot()` in `AHUVerification.App/MainForm.cs` (lines 163–176), `AHUVerification.RuleEditor/MainForm.cs` (lines 146–159), and `TestPathHelper.cs` (lines 16–33) duplicate the identical 10-level upward folder search algorithm.
-5. **.NET SDK Discovery & Environment Check Boilerplate**:
-   - The identical 22-line block locating 64-bit `dotnet.exe` via `%ProgramW6432%` / `%ProgramFiles%` and checking `dotnet --version` is copy-pasted across 7 root batch scripts (`build-all.bat` lines 10–32, `build-backend.bat` lines 10–32, `launch-app.bat` lines 10–32, `launch-rule-editor.bat` lines 10–32, `run-tests.bat` lines 10–32, `publish-release.bat` lines 10–32, `setup.bat` lines 10–32).
-6. **Frontend Build Check in Launch Scripts**:
-   - `launch-app.bat` (lines 34–54) and `launch-rule-editor.bat` (lines 34–54) copy-paste identical logic checking for built UI assets in `dist\`, checking `npm`, running `npm install`, and invoking `npm run build`.
+### 1.5 Local Script Parity (`build-all.bat` & `run-tests.bat`)
+* `build-all.bat`:
+  - Builds Vite frontend, rule pack, `AHUVerification.Core`, `AHUVerification.App`, and `AHUVerification.RuleEditor`.
+  - Leaves `manifest.json` dirty.
+* `run-tests.bat`:
+  - Runs `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj` (console output).
+  - Runs 7 Node scripts (`test_ast_converter`, `test_readiness`, `stress_test_readiness_adversarial`, `test_modal_accessibility`, `test_ingestion_feedback`, `test_copy_linter`, `test_responsive_contrast`).
+  - Does **NOT** execute Playwright or axe-core tests.
+  - Does **NOT** verify clean worktree post-execution.
 
-#### Hotspot B: Dual-Stack Cross-Language Duplication (TypeScript <-> C#)
-1. **XML Parsing Pipeline**:
-   - `src/services/xmlParser.ts` (748 lines) vs `src/backend/AHUVerification.Core/Parsers/NormalizedXmlParser.cs` (740 lines).
-   - *Details*: Both parse the exact same 30+ XML sub-elements (`unitOptions`, `dimensions`, `segments`, `doors`, `dampers`, `floorDrains`, `ductOpenings`, `fans`, `coils`, `filters`, `heatWheels`, `surfaces`), using identical tag extraction semantics and default values.
-2. **Fact Registry & Extraction Logic**:
-   - `src/services/factRegistry.ts` (695 lines) vs `src/backend/AHUVerification.Core/Services/FactExtractor.cs` (806 lines).
-   - *Details*: Both extract 50+ domain facts across Order & Identity, Baserail & Skid, Housing & Materials, Opening Schedule, Components, and Ratings. Both maintain identical derivation formulas (`unit.isTiered`, `unit.isStacked`, `unit.thermalBreak`, `unit.shellType`), status transitions (`Known`, `Derived`, `Unknown`, `ManuallyOverridden`), confidence levels (`Authoritative`, `RequiresConfirmation`), and override history data structures.
-3. **AST Rule Evaluator**:
-   - `src/services/ruleEvaluator.ts` (296 lines) vs `src/backend/AHUVerification.Core/Services/AstRuleEvaluator.cs` (414 lines).
-   - *Details*: Identical AST evaluation logic for comparison operators (`>=`, `<=`, `>`, `<`, `===`, `!==`, `includes`, `in`), logical combinators (`and`, `or`), variable resolution (`{ var: string }`), and `NeedsInput` short-circuiting on unconfirmed required facts.
-4. **Project File Model & Integrity Verification**:
-   - `src/services/projectStorage.ts` (118 lines) vs `src/backend/AHUVerification.Core/Services/DvlProjectManager.cs` (143 lines).
-   - *Details*: Identical `.dvl` project envelope schema (`formatVersion`, `appVersion`, `createdAt`, `lastSavedAt`, `author`, `jobName`, `comNumber`, `rulePack`, `sourceXml`, `normalizedGraph`, `factRegistry`, `sqItems`, `checklistInstances`, `generalComments`), SHA-256 validation regex (`^[a-f0-9]{64}$`), and payload integrity checks.
-5. **Rule Pack Hashing & Manifest Serialization**:
-   - `scripts/build_rulepack.mjs` (143 lines), `src/backend/AHUVerification.Core/Services/RulePackManager.cs` (367 lines), and `src/ruleEditor/components/PublishModal.tsx` (324 lines).
-   - *Details*: Parallel implementations of LF-normalized canonical JSON hashing and ordered bundle SHA-256 calculation over `rules.json`, `template_map.json`, `approved_mappings.json`, and `template.xlsx`.
+### 1.6 .NET Target Frameworks & Cross-Platform Behavior
+* `src/backend/AHUVerification.Core/AHUVerification.Core.csproj`: `TargetFramework net8.0` (Cross-platform).
+* `tests/AHUVerification.Tests/AHUVerification.Tests.csproj`: `TargetFramework net8.0` (Cross-platform).
+* `src/backend/AHUVerification.App/AHUVerification.App.csproj`: `TargetFramework net8.0-windows`, `UseWindowsForms=true` (Windows-only).
+* `src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj`: `TargetFramework net8.0-windows`, `UseWindowsForms=true` (Windows-only).
+* Result: Running full solution builds on `ubuntu-latest` fails with `NETSDK1100: Windows Desktop is not supported on this platform`. CI correctly splits `verify` to `windows-2022` and `browser` to `ubuntu-latest`.
 
-#### Hotspot C: Structural & Boilerplate Duplication in Frontend Components
-1. **Modal Container & Header Boilerplate**:
-   - `ComNumberModal.tsx` (107 lines), `DetailerNameModal.tsx` (129 lines), `ProjectIdentityModal.tsx` (211 lines), `ResolutionCenterModal.tsx` (239 lines), `PreFlightModal.tsx` (229 lines), `SettingsModal.tsx` (489 lines).
-   - *Details*: Every modal implements identical overlay styling (`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm`), card wrapper (`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl`), header layout (icon badge, title, subtitle, X close button), and escape key listeners.
-2. **Project Identity Sub-Modals**:
-   - `ComNumberModal.tsx` and `DetailerNameModal.tsx` are strict functional subsets of `ProjectIdentityModal.tsx`. All three independently manage and mutate `unit.jobName`, `unit.comNumber`, `unit.detailer`, and local storage key `'dvl_detailer_name'`.
-3. **Metric Summary Grid Cards**:
-   - `PublishModal.tsx` (lines 91–108) and `PreFlightModal.tsx` (lines 95–118) duplicate the 4-column metric grid card UI pattern with colored numeric totals and sub-labels.
-4. **C# Unit Test Setup Scaffolding**:
-   - `AstEvaluatorTests.cs` (lines 15–27), `DvlProjectTests.cs` (lines 15–27), `FactRegistryTests.cs` (lines 14–19 & 51–56), `OpenXmlPatcherTests.cs` (lines 22–35) duplicate the identical 13-line test fixture setup loading `Config.xml`, instantiating `NormalizedXmlParser`, `FactExtractor`, `RulePackManager`, and `AstRuleEvaluator`.
-
-#### Hotspot D: Redundant Data, Catalogs & Constant Tables
-1. **Segment Names & Type Codes Catalog**:
-   - `SEGMENT_NAMES` in `src/services/xmlParser.ts` (lines 22–61)
-   - `SegmentNames` in `src/backend/AHUVerification.Core/Parsers/NormalizedXmlParser.cs` (lines 12–50)
-   - `AVAILABLE_SEGMENT_TEMPLATES` in `src/services/manualUnitFactory.ts` (lines 86–350)
-   - `SEGMENT_COLORS` in `src/components/SkidViewTab.tsx` (lines 39–77)
-   - `resources/rulepack/approved_mappings.json`
-2. **Fact Field Definitions & Metadata**:
-   - `FACT_DICTIONARY` in `src/ruleEditor/components/FactDictionaryCatalog.ts` (517 lines)
-   - `extractFactsFromGraph` in `src/services/factRegistry.ts` (695 lines)
-   - `ExtractFacts` in `src/backend/AHUVerification.Core/Services/FactExtractor.cs` (806 lines)
-3. **Category Sheets Coordinate List**:
-   - `AllCategorySheets` in `OpenXmlTemplatePatcher.cs` (lines 14–16)
-   - Category sheet names in `excelExporter.ts`
-   - `template_map.json` (`sheetNames`)
-4. **Scattered Magic LocalStorage String Keys**:
-   - `'dvl_detailer_name'`, `'dvl_shared_export_path'`, `'dvl_central_rulepack_path'`, `'dvl_auto_sync_rulepack'`, `'ahu_dvl_autosave'` referenced across 6 different component and service files without a single shared constants file.
+### 1.7 Playwright Config & Test Suite Analysis
+* `playwright.config.mjs`:
+  - Starts web server via `npm run dev -- --host 127.0.0.1 --port 4173`.
+  - Configures HTML reporter to `playwright-report`.
+  - Configures traces/screenshots/videos to `test-results/`.
+* `tests/e2e/smoke.spec.mjs`:
+  - Seeds localStorage (`dvl_detailer_name: 'CI Detailer'`, `dvl_theme_mode: 'light'`, removes `ahu_dvl_autosave`).
+  - Test 1 (`home screen renders core launch options without console errors`): Verifies home heading, 4 buttons, rulepack version, and runs full axe-core scan on `/`.
+  - Test 2 (`manual unit modal behaves as a real accessible dialog`): Opens `ManualUnitModal`, checks `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, verifies active element is trapped, scans dialog with axe-core, closes with `Escape`.
+  - Test 3 (`Ctrl+K opens search and places focus inside the search dialog`): Clicks 'Load Demo Dataset', presses Ctrl+K, verifies focus on input in `OmniSearchModal`, scans dialog with axe-core.
+  - Test 4 (`invalid XML import produces a durable visible error state`): Uploads invalid XML string `<not-an-ahu></not-an-ahu>`, verifies `role="alert"` and error messaging.
+  - Test 5 (`narrow viewport remains horizontally contained on the home screen`): Verifies `scrollWidth <= clientWidth + 1`.
 
 ---
 
 ## 2. Logic Chain
 
-```mermaid
-flowchart TD
-    OBS[1. Repository Survey & Codebase Inspection] --> G1[Group A: Exact Duplicates]
-    OBS --> G2[Group B: Dual-Stack TS/C# Duplication]
-    OBS --> G3[Group C: Structural Boilerplate]
-    OBS --> G4[Group D: Redundant Constants & Data]
-
-    G1 --> J1[Risk: Silent divergence between test script and editor service, maintenance overhead in batch scripts and desktop hosts]
-    G2 --> J2[Risk: High synchronization cost; changes to fact extraction, XML parsing, or AST logic must be written twice in TS & C#]
-    G3 --> J3[Risk: Bloated UI components, repeated modal bugs, duplicated test fixture code]
-    G4 --> J4[Risk: Typos in segment names or localStorage keys cause runtime regressions]
-
-    J1 & J2 & J3 & J4 --> REC[Recommended Refactoring Strategy]
-    REC --> M1_PLAN[M1: Catalog & Quantify Duplication Metrics]
-    REC --> M2_PLAN[M2: Extract Shared Utilities & Write Audit Deliverable]
 ```
+[Observation 1.2: .gitignore lacks TestResults/, playwright-report/, test-results/, .playwright/]
+   │
+   ├──> [dotnet test generates TestResults/ahu-verification.trx]
+   │       │
+   │       └──> git status --porcelain reports "?? TestResults/"
+   │               │
+   │               └──> [CI check `$dirty = git status --porcelain; if ($dirty) exit 1`] FAILS on windows-2022
+   │
+   └──> [Playwright test generates playwright-report/ and test-results/]
+           │
+           └──> Post-test runs create dirty untracked directories, breaking clean worktree contracts
 
-### Reasoning Steps:
-1. **Observation to Group A**: `test_ast_converter.mjs` directly copies `astConverter.ts`. In batch files, 22 lines of SDK checking are duplicated 7 times. In C#, `BridgeRequest`/`BridgeResponse` are declared twice in different namespaces rather than in `AHUVerification.Core`.
-2. **Observation to Group B**: Because the application supports both a pure-browser preview/fallback and a full .NET 10 desktop runtime with WebView2, the core domain pipeline (XML parsing, Fact extraction, Rule evaluation, DVL serialization) was implemented twice in two languages (TypeScript and C#). While intentional for the dual architecture, establishing a unified JSON-driven rule and fact schema prevents divergence.
-3. **Observation to Group C**: The React frontend contains 6 modal dialogs with identical CSS and DOM structures. A reusable `ModalWrapper` component would eliminate ~200 lines of boilerplate. Similarly, test files lack a shared `TestFixture` helper.
-4. **Observation to Group D**: Domain definitions (Segment types, Fact keys, LocalStorage keys, Excel sheets) are hardcoded in multiple files rather than imported from authoritative single sources of truth.
+[Observation 1.3: build_rulepack.mjs stamps new timestamp generatedAt on every run]
+   │
+   └──> Running build_rulepack.mjs in local scripts (build-all.bat) or CI mutates manifest.json
+           │
+           └──> Leaves uncommitted changes in git status unless manually reverted or made idempotent
+
+[Observation 1.4: devDependencies in package.json omit @playwright/test & @axe-core/playwright]
+   │
+   └──> CI uses ephemeral `npm install --no-save` on ubuntu-latest
+           │
+           ├──> Local test suites (npm test, run-tests.bat) have zero Playwright/axe coverage
+           └──> Discrepancy exists between developer machine testing and CI validation gates
+
+[Observation 1.6: AHUVerification.App & RuleEditor require net8.0-windows]
+   │
+   └──> Linux runners cannot build desktop host applications
+           │
+           └──> CI split (windows-2022 for .NET build/verify + ubuntu-latest for browser) is architecturally necessary
+```
 
 ---
 
 ## 3. Caveats
-
-1. **Dual-Stack Intentionality**: The C# backend is the authoritative production engine for Windows desktop users (OpenXML deliverable generation, native UPZ decompression with `unpack32.exe`), while the TypeScript services provide standalone web browser preview capability. The audit should acknowledge this architectural need while proposing shared data models and DRY shared utilities for each runtime stack.
-2. **No Third-Party AST Library**: The JSON-AST engine is custom-built (not using JsonLogic or similar NPM packages). Any refactoring of AST evaluation must preserve exact operator compatibility (`>=`, `<=`, `>`, `<`, `===`, `!==`, `includes`, `in`).
-3. **Unexecuted Code Paths**: Decompression via `unpack32.exe` / `ywunpack.dll` requires Windows runtime binaries and was verified via file inspection and existing unit test suites.
+- Browser execution in headless Linux environments requires Chromium OS dependencies installed via `npx playwright install --with-deps chromium`.
+- In `playwright.config.mjs`, `webServer` executes `npm run dev` rather than `npm run preview`. Because `HomePage.tsx` conditionally hides "Load Demo Dataset" in production (`import.meta.env.PROD`), running against `vite preview` would hide the button and cause Test 3 to fail. The dev server behavior is intentional for demo/smoke access.
+- `.agents/` contains both tracked documentation files and transient agent runtimes. Cleanliness checks in CI specifically target tracked repository files, but adding ignore rules for transient agent scratchpads prevents accidental dirty status.
 
 ---
 
 ## 4. Conclusion
 
-The codebase is well-structured, modular, and possesses strong test coverage in `tests/AHUVerification.Tests/`. However, significant code duplication exists across four primary categories:
-1. **Exact duplicates** in scripts, IPC DTOs, and host lifecycle methods (~350 lines).
-2. **Dual-stack cross-language near duplicates** between C# and TypeScript (~2,600 lines across parsers, fact extractors, AST evaluators, and project managers).
-3. **Structural UI and test boilerplate** across modal components and test suites (~600 lines).
-4. **Repeated constants and catalogs** (Segment types, fact definitions, localStorage keys).
-
-This survey provides the complete baseline and file inventory necessary for Milestone M1 (Duplication Cataloging) and Milestone M2 (Shared Utilities & Report Generation).
+The failures and risks in the CI verification loop and local test toolchains are caused by four specific issues:
+1. **Missing `.gitignore` Entries**: Lack of `TestResults/`, `playwright-report/`, `test-results/`, and `.playwright/` directly causes the CI `verify` job on `windows-2022` to fail the `git status --porcelain` cleanliness check after `dotnet test`.
+2. **Non-Idempotent Rule Pack Generator**: `scripts/build_rulepack.mjs` overwrites `generatedAt` unconditionally, creating synthetic git modifications upon every build.
+3. **Missing Toolchain Dependencies in `package.json`**: `@playwright/test` and `@axe-core/playwright` must be added to `devDependencies` and locked in `package-lock.json` so that both CI and local developers use reproducible, pinned toolchains.
+4. **Local Automation Gaps**: `run-tests.bat` and `package.json` test scripts must include all 7 Node scripts and provide optional Playwright execution, with an idempotent post-run clean state.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify the survey observations:
+### 5.1 Independent Verification Commands
 
-1. **Verify C# Solution Build & Test Suite**:
+1. **Verify `.NET` Test Suite & `TestResults/` Generation**:
    ```powershell
-   dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj --logger "console;verbosity=normal"
+   dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults
+   git status --porcelain
    ```
-   *Expected Result*: All 15 unit tests pass (XmlParserTests, FactRegistryTests, AstEvaluatorTests, OpenXmlPatcherTests, DvlProjectTests, RulePackManagerTests, UpzExtractorTests).
+   *Expected Current Failure*: `?? TestResults/` appears in `git status`.
+   *Remediation Check*: Adding `TestResults/` to `.gitignore` ensures `git status --porcelain` remains clean.
 
-2. **Verify Node.js AST Converter Tests**:
-   ```powershell
-   node scripts/test_ast_converter.mjs
-   ```
-   *Expected Result*: All AST round-trip and conversion tests pass with zero assertion errors.
-
-3. **Verify Rule Pack Integrity Build**:
+2. **Verify Rule-Pack Manifest Idempotence**:
    ```powershell
    node scripts/build_rulepack.mjs
+   git diff resources/rulepack/manifest.json
    ```
-   *Expected Result*: Canonical SHA-256 hashes generated for `rules.json`, `template_map.json`, `approved_mappings.json`, `template.xlsx`, and `manifest.json`.
+   *Expected Current Failure*: Diff shows updated `generatedAt` timestamp.
+   *Remediation Check*: Idempotent build logic preserves timestamp when `bundleSha256` is unchanged.
 
-4. **Verify Frontend Build**:
+3. **Verify Node Unit & Verification Scripts**:
+   ```powershell
+   node scripts/test_ast_converter.mjs
+   node scripts/test_readiness.mjs
+   node scripts/stress_test_readiness_adversarial.mjs
+   node scripts/test_modal_accessibility.mjs
+   node scripts/test_ingestion_feedback.mjs
+   node scripts/test_copy_linter.mjs
+   node scripts/test_responsive_contrast.mjs
+   ```
+   *Expected Result*: All 7 test scripts pass 100% cleanly.
+
+4. **Verify Playwright E2E and Axe Accessibility**:
+   ```powershell
+   npm install --no-save @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+   npx playwright install --with-deps chromium
+   npx playwright test
+   ```
+   *Expected Result*: 5 smoke specs execute with zero failures across `chromium-desktop` and `chromium-narrow`.
+
+5. **Verify Windows Build Matrix**:
    ```powershell
    npm run build
+   dotnet build src/backend/AHUVerification.Core/AHUVerification.Core.csproj -c Release
+   dotnet build src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release
+   dotnet build src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release
    ```
-   *Expected Result*: Vite builds `dist/index.html` and `dist/rule-editor.html` successfully.
+   *Expected Result*: 100% clean builds with zero warnings treated as errors.

@@ -12,7 +12,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void EvaluateChecklists_EnforcesStrictWeightAndFactCompleteness()
         {
-            string xmlContent = File.ReadAllText(TestPathHelper.GetRepoPath("Config.xml"));
+            string xmlContent = File.ReadAllText(TestPathHelper.GetFixturePath("Config.xml"));
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
 

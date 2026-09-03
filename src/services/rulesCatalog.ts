@@ -1,8 +1,8 @@
-import { RuleDefinition, TemplateMap } from '../types';
-import rulesData from '../../resources/rulepack/rules.json';
-import templateMapData from '../../resources/rulepack/template_map.json';
-import approvedMappingsData from '../../resources/rulepack/approved_mappings.json';
-import manifestData from '../../resources/rulepack/manifest.json';
+import type { RuleDefinition, TemplateMap } from '../types/index.ts';
+import rulesData from '../../resources/rulepack/rules.json' with { type: 'json' };
+import templateMapData from '../../resources/rulepack/template_map.json' with { type: 'json' };
+import approvedMappingsData from '../../resources/rulepack/approved_mappings.json' with { type: 'json' };
+import manifestData from '../../resources/rulepack/manifest.json' with { type: 'json' };
 
 interface RulePackManifestData {
   name: string;

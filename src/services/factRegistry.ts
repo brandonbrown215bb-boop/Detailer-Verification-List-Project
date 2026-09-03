@@ -1,4 +1,4 @@
-import { NormalizedXmlGraph, Fact, FactStatus, FactConfidence, OrderRevisionData } from '../types';
+import type { NormalizedXmlGraph, Fact, FactStatus, FactConfidence, OrderRevisionData } from '../types/index.ts';
 
 export function createFact<T>(
   key: string,

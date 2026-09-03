@@ -5,7 +5,7 @@
     { "path": "PROJECT.md", "scope": ["src/**", "resources/**", "tests/**", "scripts/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
     { "path": "AGENTS.md", "scope": [".agents/**", "docs/architecture/**", "docs/decisions/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
     { "path": "GEMINI.md", "scope": ["AGENTS.md"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
-    { "path": "docs/architecture/README.md", "scope": ["docs/decisions/**", "src/**", "tests/**", "scripts/**", "resources/**", "package.json"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
+    { "path": "docs/architecture/README.md", "scope": ["docs/decisions/**", "src/**", "tests/**", "scripts/**", "resources/**", "package.json"], "verified_at_commit": "3f6e01254f41db4e20eb4970cdb33df8e6ee3062" },
     { "path": "docs/decisions/README.md", "scope": ["docs/decisions/000*.md"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
     { "path": "docs/decisions/0001-ahu-verification-desktop-architecture.md", "scope": ["src/backend/**", "src/**", "resources/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },
     { "path": "docs/decisions/0002-ui-ux-design-specification.md", "scope": ["src/App.tsx", "src/components/**", "src/styles/**"], "verified_at_commit": "2f34eff3848822cdf599ebae9b3c5b3be1241e09" },

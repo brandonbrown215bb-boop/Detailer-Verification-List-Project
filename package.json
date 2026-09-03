@@ -7,12 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node scripts/test_readiness.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs",
+    "test": "node scripts/test_readiness.mjs && node scripts/stress_test_readiness_adversarial.mjs && node scripts/test_ast_converter.mjs && node scripts/test_reducers.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs && node scripts/test_m2_parity_and_bridge.mjs",
     "test:readiness": "node scripts/test_readiness.mjs",
+    "test:stress": "node scripts/stress_test_readiness_adversarial.mjs",
+    "test:ast": "node scripts/test_ast_converter.mjs",
+    "test:reducers": "node scripts/test_reducers.mjs",
     "test:accessibility": "node scripts/test_modal_accessibility.mjs",
     "test:ingestion": "node scripts/test_ingestion_feedback.mjs",
     "test:copy": "node scripts/test_copy_linter.mjs",
-    "test:contrast": "node scripts/test_responsive_contrast.mjs"
+    "test:contrast": "node scripts/test_responsive_contrast.mjs",
+    "test:m2": "node scripts/test_m2_parity_and_bridge.mjs"
   },
   "dependencies": {
     "file-saver": "^2.0.5",
@@ -22,6 +26,8 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.55.0",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",

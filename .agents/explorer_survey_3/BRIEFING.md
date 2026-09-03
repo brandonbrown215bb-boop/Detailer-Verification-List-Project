@@ -1,40 +1,40 @@
-# BRIEFING — 2026-08-31T19:45:15Z
+# BRIEFING — 2026-09-02T12:50:00Z
 
 ## Mission
-Investigate tests, build infrastructure, rulepack compilation/evaluation, and AST-to-frontend mapping to establish automated verification for R1-R5.
+Survey investigation of frontend test pyramid, typed bridge protocol, test fixtures, and architecture/ground docs.
 
 ## 🔒 My Identity
 - Archetype: explorer
-- Roles: investigator, synthesizer
+- Roles: investigation, synthesis
 - Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_3
-- Original parent: 52919dba-58f2-4525-8ff2-81599136d595
-- Milestone: UI/UX Remediation & Live Validation Suite Survey
+- Original parent: db58321e-5951-480e-859b-164602eb9f30
+- Milestone: survey
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement code changes in the source tree
-- Output reports to survey_tests.md and handoff.md in .agents/explorer_survey_3
-- Follow Handoff Protocol (5 components)
-- Communicate via send_message to caller
+- Read-only investigation — do NOT implement
+- Analyze problems, synthesize findings, produce structured reports
+- Follow 5-component handoff structure
 
 ## Current Parent
-- Conversation ID: 52919dba-58f2-4525-8ff2-81599136d595
-- Updated: 2026-08-31T19:45:15Z
+- Conversation ID: db58321e-5951-480e-859b-164602eb9f30
+- Updated: 2026-09-02T12:50:00Z
 
 ## Investigation State
-- **Explored paths**: `tests/AHUVerification.Tests/`, `src/components/`, `src/services/`, `resources/rulepack/`, `scripts/`, `docs/architecture/`, `docs/decisions/`, `ui-ux-review/`
+- **Explored paths**:
+  - `src/App.tsx`, `src/utils/readiness.ts`, `src/utils/formatters.ts`, `src/ruleEditor/services/astConverter.ts`
+  - `src/services/desktopBridge.ts`, `src/backend/AHUVerification.App/Bridge/BridgeHandler.cs`, `src/backend/AHUVerification.RuleEditor/Bridge/RuleEditorBridgeHandler.cs`, `src/backend/AHUVerification.Core/Bridge/BridgeModels.cs`
+  - `src/backend/AHUVerification.Core/Services/UpzBundleExtractor.cs`, `tests/AHUVerification.Tests/`
+  - `scripts/*.mjs`, `scripts/*.py`, `package.json`, `run-tests.bat`, `.github/workflows/codex-verification.yml`
+  - `docs/context-manifest.json`, `docs/architecture/README.md`, `docs/decisions/`
 - **Key findings**:
-  1. Backend tests (29/29) pass in 6.59s; Frontend build passes with 0 TS errors in 6.75s; Rulepack manifest compiles 104 rules with bundle SHA-256.
-  2. R1 Readiness discrepancy caused by inconsistent weight filtering between Header/ResolutionCenter and PreFlight/AST Evaluator.
-  3. R2 Keyboard & Modal issues caused by 50ms setTimeout race in OmniSearch, missing `role="dialog"`, `aria-modal="true"`, focus trap, and subtitle max-width truncate.
-  4. R3 Ingestion issues caused by silent error catching without durable UI state on Home, and `<a target="_blank">` failing in WebView2.
-  5. R4 Copy issues confirmed: `$N \ge 1$` in ManualUnitModal.tsx:732, leaked internals in line 1259, `"Download .dvl"` in PreFlightModal.tsx:179, raw PascalCase enums.
-  6. R5 Responsive issues confirmed: rigid table column widths in SkidViewTab causing horizontal overflow at $\le 1280\text{px}$.
-  7. Automated validation strategy: 5 lightweight test harnesses using Node `--test` and C# xUnit integrated into `run-tests.bat`.
-- **Unexplored areas**: None. All 5 requirement domains (R1–R5) investigated with exact line numbers and citations.
+  1. Frontend Test Pyramid: Standalone Node `.mjs` scripts exist for readiness and AST converter, but component tests are purely regex/string matching on source code; no rendered React component tests or in-browser accessibility testing exists on `master`; formatters test script re-implements logic locally rather than testing source.
+  2. Typed Bridge: 13 actions in `BridgeHandler.cs`, 5 in `RuleEditorBridgeHandler.cs`. No schema validation, no C# unit tests for BridgeHandler, deserialization failures drop request IDs leading to 30s timeouts, modal dialogs block the host UI thread.
+  3. Fixtures: `tests/fixtures/` does not exist; test data is in root (`Config.xml`, `UPZ_Unit_Examples/` with 18 real production order files); `UpzBundleExtractor.cs` has a hardcoded dev path; `unpack32.exe` is Windows 32-bit only.
+  4. Architecture & Ground Docs: `docs/context-manifest.json` is pinned to stale commit `2f34eff` (2 commits behind HEAD `3f6e012`); `docs/architecture/README.md` and ADR-0007 omit `launchRuleEditor` and document dual-engine divergence as accepted.
+- **Unexplored areas**: None (all survey tracks complete).
 
 ## Key Decisions Made
-- Deliver comprehensive technical report to `survey_tests.md` and complete handoff to `handoff.md`.
+- Structured findings according to the 5-component Handoff protocol across the 4 survey areas.
 
 ## Artifact Index
-- c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_3\survey_tests.md — Comprehensive technical report
-- c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_3\handoff.md — Handoff report
+- handoff.md — Complete 5-component survey report for Explorer 3

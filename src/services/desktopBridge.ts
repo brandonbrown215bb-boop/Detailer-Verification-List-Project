@@ -1,7 +1,7 @@
-import { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, UpzBundle } from '../types';
-import { exportToExcel } from './excelExporter';
-import { saveDvlToFile } from './projectStorage';
-import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog';
+import type { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, UpzBundle } from '../types/index.ts';
+import { exportToExcel } from './excelExporter.ts';
+import { saveDvlToFile } from './projectStorage.ts';
+import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog.ts';
 
 declare global {
   interface Window {
@@ -15,44 +15,126 @@ declare global {
   }
 }
 
-interface BridgeResponse<T = any> {
+export interface BridgeResponse<T = any> {
   id: string;
   success: boolean;
   data?: T;
   error?: string;
 }
 
-class DesktopBridge {
-  private isDesktop = false;
+export interface INativeBridge {
+  isDesktopHost(): boolean;
+  isRunningInDesktop(): boolean;
+  getAppInfo(): Promise<{ appName: string; appVersion: string; rulePackVersion: string; ruleCount: number; isDesktopHost: boolean }>;
+  openFileDialog(): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz?: boolean;
+    bundle?: UpzBundle;
+  } | null>;
+  extractUpz(filePath: string): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz: boolean;
+    bundle: UpzBundle;
+  }>;
+  saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }>;
+  saveFileDialog(defaultName: string): Promise<string | null>;
+  exportExcelDeliverable(
+    facts: Record<string, Fact>,
+    sqItems: SpecialQuote[],
+    checklists: ChecklistInstance[],
+    rules: RuleDefinition[],
+    graph?: NormalizedXmlGraph,
+    generalComments?: string,
+    defaultName?: string,
+    isDraft?: boolean
+  ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }>;
+  openFile(filePath: string): Promise<void>;
+  showInExplorer(filePath: string): Promise<void>;
+  checkRulePackUpdate(remotePath: string): Promise<{
+    hasUpdate: boolean;
+    currentVersion: string;
+    remoteVersion: string;
+    remoteBundleSha256: string;
+    remoteRuleCount: number;
+    error?: string;
+  }>;
+  syncRulePack(remotePath: string): Promise<{
+    success: boolean;
+    version: string;
+    bundleSha256?: string;
+    ruleCount: number;
+    rules?: RuleDefinition[];
+    templateMap?: any;
+    approvedMappings?: any;
+    manifest?: any;
+  }>;
+  getRulePack(): Promise<{
+    rules: RuleDefinition[];
+    templateMap: any;
+    approvedMappings: any;
+    manifest: any;
+  }>;
+  selectFolderDialog(): Promise<string | null>;
+  publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }>;
+  launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }>;
+}
+
+export function isDesktopHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    window.chrome &&
+    window.chrome.webview &&
+    typeof window.chrome.webview.postMessage === 'function' &&
+    typeof window.chrome.webview.addEventListener === 'function'
+  );
+}
+
+/**
+ * Production Native Desktop Bridge implementation for Microsoft Edge WebView2 host.
+ */
+export class WebView2DesktopBridge implements INativeBridge {
   private pendingRequests = new Map<string, { resolve: (data: any) => void; reject: (err: any) => void }>();
 
   constructor() {
-    if (typeof window !== 'undefined' && window.chrome?.webview) {
-      this.isDesktop = true;
-      window.chrome.webview.addEventListener('message', this.handleMessage.bind(this));
+    if (isDesktopHost()) {
+      window.chrome!.webview!.addEventListener('message', this.handleMessage.bind(this));
     }
+  }
+
+  public isDesktopHost(): boolean {
+    return true;
   }
 
   public isRunningInDesktop(): boolean {
-    return this.isDesktop;
+    return true;
   }
 
   private handleMessage(event: any) {
-    const response: BridgeResponse = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-    if (response.id && this.pendingRequests.has(response.id)) {
-      const { resolve, reject } = this.pendingRequests.get(response.id)!;
-      this.pendingRequests.delete(response.id);
+    try {
+      const response: BridgeResponse = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      if (response && response.id && this.pendingRequests.has(response.id)) {
+        const { resolve, reject } = this.pendingRequests.get(response.id)!;
+        this.pendingRequests.delete(response.id);
 
-      if (response.success) {
-        resolve(response.data);
-      } else {
-        reject(new Error(response.error || 'Desktop bridge request failed.'));
+        if (response.success) {
+          resolve(response.data);
+        } else {
+          reject(new Error(response.error || 'Desktop bridge request failed.'));
+        }
       }
+    } catch (err) {
+      console.error('Failed to handle bridge message:', err);
     }
   }
 
-  private sendRequest<T = any>(action: string, payload: any = {}): Promise<T> {
-    if (!this.isDesktop || !window.chrome?.webview) {
+  public sendRequest<T = any>(action: string, payload: any = {}): Promise<T> {
+    if (!isDesktopHost()) {
       return Promise.reject(new Error('Not running in WebView2 desktop host.'));
     }
 
@@ -71,12 +153,133 @@ class DesktopBridge {
     });
   }
 
-  // --- API Methods ---
+  public async getAppInfo(): Promise<{ appName: string; appVersion: string; rulePackVersion: string; ruleCount: number; isDesktopHost: boolean }> {
+    return this.sendRequest('getAppInfo');
+  }
+
+  public async openFileDialog(): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz?: boolean;
+    bundle?: UpzBundle;
+  } | null> {
+    return this.sendRequest('openFileDialog');
+  }
+
+  public async extractUpz(filePath: string): Promise<{
+    fileName: string;
+    filePath: string;
+    content: string;
+    isDvl: boolean;
+    isUpz: boolean;
+    bundle: UpzBundle;
+  }> {
+    return this.sendRequest('extractUpz', { filePath });
+  }
+
+  public async saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
+    return this.sendRequest('saveDvl', { filePath, projectJson: JSON.stringify(project, null, 2) });
+  }
+
+  public async saveFileDialog(defaultName: string): Promise<string | null> {
+    return this.sendRequest('saveFileDialog', {
+      defaultName,
+      filter: 'DVL Project (*.dvl)|*.dvl'
+    });
+  }
+
+  public async exportExcelDeliverable(
+    facts: Record<string, Fact>,
+    sqItems: SpecialQuote[],
+    checklists: ChecklistInstance[],
+    rules: RuleDefinition[],
+    graph?: NormalizedXmlGraph,
+    generalComments: string = '',
+    defaultName?: string,
+    isDraft: boolean = false
+  ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
+    return this.sendRequest('exportExcelDeliverable', {
+      facts,
+      sqItems,
+      checklists,
+      rules,
+      graph,
+      generalComments,
+      defaultName,
+      isDraft
+    });
+  }
+
+  public async openFile(filePath: string): Promise<void> {
+    await this.sendRequest('openFile', { filePath });
+  }
+
+  public async showInExplorer(filePath: string): Promise<void> {
+    await this.sendRequest('showInExplorer', { filePath });
+  }
+
+  public async checkRulePackUpdate(remotePath: string): Promise<{
+    hasUpdate: boolean;
+    currentVersion: string;
+    remoteVersion: string;
+    remoteBundleSha256: string;
+    remoteRuleCount: number;
+    error?: string;
+  }> {
+    return this.sendRequest('checkRulePackUpdate', { remotePath });
+  }
+
+  public async syncRulePack(remotePath: string): Promise<{
+    success: boolean;
+    version: string;
+    bundleSha256?: string;
+    ruleCount: number;
+    rules?: RuleDefinition[];
+    templateMap?: any;
+    approvedMappings?: any;
+    manifest?: any;
+  }> {
+    return this.sendRequest('syncRulePack', { remotePath });
+  }
+
+  public async getRulePack(): Promise<{
+    rules: RuleDefinition[];
+    templateMap: any;
+    approvedMappings: any;
+    manifest: any;
+  }> {
+    return this.sendRequest('getRulePack');
+  }
+
+  public async selectFolderDialog(): Promise<string | null> {
+    const res = await this.sendRequest<{ folderPath: string }>('selectFolderDialog');
+    return res?.folderPath || null;
+  }
+
+  public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
+    return this.sendRequest('publishRulePack', payload);
+  }
+
+  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
+    return this.sendRequest('launchRuleEditor');
+  }
+}
+
+/**
+ * Browser Preview Bridge implementation for standalone web preview / development mode.
+ */
+export class BrowserPreviewBridge implements INativeBridge {
+  public isDesktopHost(): boolean {
+    return false;
+  }
+
+  public isRunningInDesktop(): boolean {
+    return false;
+  }
 
   public async getAppInfo(): Promise<{ appName: string; appVersion: string; rulePackVersion: string; ruleCount: number; isDesktopHost: boolean }> {
-    if (this.isDesktop) {
-      return this.sendRequest('getAppInfo');
-    }
     return {
       appName: 'AHU Detailing Verification',
       appVersion: '1.0.0 (Browser Preview)',
@@ -94,13 +297,10 @@ class DesktopBridge {
     isUpz?: boolean;
     bundle?: UpzBundle;
   } | null> {
-    if (this.isDesktop) {
-      return this.sendRequest('openFileDialog');
-    }
     return null;
   }
 
-  public async extractUpz(filePath: string): Promise<{
+  public async extractUpz(_filePath: string): Promise<{
     fileName: string;
     filePath: string;
     content: string;
@@ -108,24 +308,15 @@ class DesktopBridge {
     isUpz: boolean;
     bundle: UpzBundle;
   }> {
-    return this.sendRequest('extractUpz', { filePath });
+    throw new Error('UPZ decompression requires Microsoft Windows desktop host with Apprentice COM binaries.');
   }
 
-  public async saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
-    if (this.isDesktop) {
-      return this.sendRequest('saveDvl', { filePath, projectJson: JSON.stringify(project, null, 2) });
-    }
+  public async saveDvl(_filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
     saveDvlToFile(project);
     return { saved: true, path: `${project.jobName}_${project.comNumber}.dvl` };
   }
 
-  public async saveFileDialog(defaultName: string): Promise<string | null> {
-    if (this.isDesktop) {
-      return this.sendRequest('saveFileDialog', {
-        defaultName,
-        filter: 'DVL Project (*.dvl)|*.dvl'
-      });
-    }
+  public async saveFileDialog(_defaultName: string): Promise<string | null> {
     return null;
   }
 
@@ -135,24 +326,10 @@ class DesktopBridge {
     checklists: ChecklistInstance[],
     rules: RuleDefinition[],
     graph?: NormalizedXmlGraph,
-    generalComments: string = '',
+    _generalComments: string = '',
     defaultName?: string,
     isDraft: boolean = false
   ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
-    if (this.isDesktop) {
-      return this.sendRequest('exportExcelDeliverable', {
-        facts,
-        sqItems,
-        checklists,
-        rules,
-        graph,
-        generalComments,
-        defaultName,
-        isDraft
-      });
-    }
-
-    // Browser fallback
     try {
       exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
       return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
@@ -162,19 +339,15 @@ class DesktopBridge {
     }
   }
 
-  public async openFile(filePath: string): Promise<void> {
-    if (this.isDesktop) {
-      await this.sendRequest('openFile', { filePath });
-    }
+  public async openFile(_filePath: string): Promise<void> {
+    console.warn('Native openFile is only available in desktop host.');
   }
 
-  public async showInExplorer(filePath: string): Promise<void> {
-    if (this.isDesktop) {
-      await this.sendRequest('showInExplorer', { filePath });
-    }
+  public async showInExplorer(_filePath: string): Promise<void> {
+    console.warn('Native showInExplorer is only available in desktop host.');
   }
 
-  public async checkRulePackUpdate(remotePath: string): Promise<{
+  public async checkRulePackUpdate(_remotePath: string): Promise<{
     hasUpdate: boolean;
     currentVersion: string;
     remoteVersion: string;
@@ -182,9 +355,6 @@ class DesktopBridge {
     remoteRuleCount: number;
     error?: string;
   }> {
-    if (this.isDesktop) {
-      return this.sendRequest('checkRulePackUpdate', { remotePath });
-    }
     return {
       hasUpdate: false,
       currentVersion: RULE_PACK_IDENTITY.version,
@@ -194,7 +364,7 @@ class DesktopBridge {
     };
   }
 
-  public async syncRulePack(remotePath: string): Promise<{
+  public async syncRulePack(_remotePath: string): Promise<{
     success: boolean;
     version: string;
     bundleSha256?: string;
@@ -204,9 +374,6 @@ class DesktopBridge {
     approvedMappings?: any;
     manifest?: any;
   }> {
-    if (this.isDesktop) {
-      return this.sendRequest('syncRulePack', { remotePath });
-    }
     return {
       success: true,
       version: RULE_PACK_IDENTITY.version,
@@ -222,9 +389,6 @@ class DesktopBridge {
     approvedMappings: any;
     manifest: any;
   }> {
-    if (this.isDesktop) {
-      return this.sendRequest('getRulePack');
-    }
     return {
       rules: RULES_CATALOG,
       templateMap: null,
@@ -234,22 +398,118 @@ class DesktopBridge {
   }
 
   public async selectFolderDialog(): Promise<string | null> {
-    if (this.isDesktop) {
-      const res = await this.sendRequest<{ folderPath: string }>('selectFolderDialog');
-      return res?.folderPath || null;
-    }
     return null;
   }
 
-  public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
-    if (this.isDesktop) {
-      return this.sendRequest('publishRulePack', payload);
-    }
+  public async publishRulePack(_payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
     return { success: true };
   }
 
   public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
-    if (this.isDesktop) {
+    try {
+      const win = window.open('/rule-editor.html', '_blank');
+      if (!win) {
+        throw new Error('Popup window was blocked by browser. Please allow popups for this site.');
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
+    }
+  }
+}
+
+/**
+ * Unified DesktopBridge coordinator delegating to either WebView2DesktopBridge or BrowserPreviewBridge.
+ */
+export class DesktopBridge implements INativeBridge {
+  private activeBridge: INativeBridge;
+
+  constructor() {
+    if (isDesktopHost()) {
+      this.activeBridge = new WebView2DesktopBridge();
+    } else {
+      this.activeBridge = new BrowserPreviewBridge();
+    }
+  }
+
+  public isDesktopHost(): boolean {
+    return this.activeBridge.isDesktopHost();
+  }
+
+  public isRunningInDesktop(): boolean {
+    return this.activeBridge.isRunningInDesktop();
+  }
+
+  public sendRequest<T = any>(action: string, payload: any = {}): Promise<T> {
+    if (this.activeBridge instanceof WebView2DesktopBridge) {
+      return this.activeBridge.sendRequest<T>(action, payload);
+    }
+    return Promise.reject(new Error(`Not running in WebView2 desktop host (action: '${action}').`));
+  }
+
+  public async getAppInfo() {
+    return this.activeBridge.getAppInfo();
+  }
+
+  public async openFileDialog() {
+    return this.activeBridge.openFileDialog();
+  }
+
+  public async extractUpz(filePath: string) {
+    return this.activeBridge.extractUpz(filePath);
+  }
+
+  public async saveDvl(filePath: string, project: DvlProjectFile) {
+    return this.activeBridge.saveDvl(filePath, project);
+  }
+
+  public async saveFileDialog(defaultName: string) {
+    return this.activeBridge.saveFileDialog(defaultName);
+  }
+
+  public async exportExcelDeliverable(
+    facts: Record<string, Fact>,
+    sqItems: SpecialQuote[],
+    checklists: ChecklistInstance[],
+    rules: RuleDefinition[],
+    graph?: NormalizedXmlGraph,
+    generalComments: string = '',
+    defaultName?: string,
+    isDraft: boolean = false
+  ) {
+    return this.activeBridge.exportExcelDeliverable(facts, sqItems, checklists, rules, graph, generalComments, defaultName, isDraft);
+  }
+
+  public async openFile(filePath: string) {
+    return this.activeBridge.openFile(filePath);
+  }
+
+  public async showInExplorer(filePath: string) {
+    return this.activeBridge.showInExplorer(filePath);
+  }
+
+  public async checkRulePackUpdate(remotePath: string) {
+    return this.activeBridge.checkRulePackUpdate(remotePath);
+  }
+
+  public async syncRulePack(remotePath: string) {
+    return this.activeBridge.syncRulePack(remotePath);
+  }
+
+  public async getRulePack() {
+    return this.activeBridge.getRulePack();
+  }
+
+  public async selectFolderDialog() {
+    return this.activeBridge.selectFolderDialog();
+  }
+
+  public async publishRulePack(payload: any) {
+    return this.activeBridge.publishRulePack(payload);
+  }
+
+  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
+    if (this.isRunningInDesktop()) {
       return this.sendRequest('launchRuleEditor');
     }
     try {
@@ -264,5 +524,4 @@ class DesktopBridge {
   }
 }
 
-export { DesktopBridge };
 export const desktopBridge = new DesktopBridge();

@@ -1,38 +1,47 @@
-# Final Handoff Report — UI/UX Remediation & Live Validation Suite
+# Orchestrator Soft Handoff: Generation 1 -> Generation 2
 
-## 1. Observation
-Across the AHU Detailing Verification codebase and test harness:
-- **Milestone 1 (R1: Facts & Readiness Reconciliation)**: Built single source of truth in `src/utils/readiness.ts` exporting `computeUnitReadiness` and `computeScopeReadiness`. All fact categories (including shipping skid weights) are strictly validated without false exemptions. Executed `scripts/test_readiness.mjs` (21 suites, 104 assertions passed), `scripts/stress_test_readiness_adversarial.mjs` (15/15 passed), and `scripts/test_challenger_m1_2.mjs` (35,225 Monte Carlo assertions passed).
-- **Milestone 2 (R2: Dialog Focus & Keyboard Speed)**: Created `src/hooks/useFocusTrap.ts` providing native WAI-ARIA 1.2 compliant cyclic focus trapping, Escape dismissal, and return focus restoration. Migrated all 9 modals (`ModalShell.tsx`, `OmniSearchModal.tsx`, `ManualUnitModal.tsx`, `PreFlightModal.tsx`, `SettingsModal.tsx`, `ResolutionCenterModal.tsx`, `ProjectIdentityModal.tsx`, `ComNumberModal.tsx`, `DetailerNameModal.tsx`). Executed `scripts/test_modal_accessibility.mjs` (49 suites, 70 assertions passed).
-- **Milestone 3 (R3: Ingestion & Action Feedback)**: In `HomePage.tsx`, added `ImportErrorState` tracking with a durable, prominent error banner displaying the filename pill, descriptive issue, and recovery actions ("Try Another File", "Create Manually", "Dismiss") along with animated loading spinner. In `desktopBridge.ts` and `BridgeHandler.cs`, implemented `launchRuleEditor` handling both desktop WebView2 process invocation and browser preview fallback. In `SettingsModal.tsx`, added toast feedback on launch status. Executed `scripts/test_ingestion_feedback.mjs` (24 assertions passed).
-- **Milestone 4 (R4: Copywriting & LaTeX Cleanup)**: Created `src/utils/formatters.ts` exporting `formatEnumLabel` (transforming PascalCase enums like `StructuralSteel`, `RequiresConfirmation` while preserving acronyms like `AHU`, `ECM`, `VFD`) and `sanitizeDomainText` (removing `$N \ge 1$`, `normalized XML`, `domain facts`, `OpenXML deliverables`). Executed `scripts/test_copy_linter.mjs` (33 assertions passed).
-- **Milestone 5 (R5: Responsive Layout & WCAG 2.2 AA Contrast)**: In `SkidViewTab.tsx`, implemented responsive column prioritization with primary flex description width (`min-w-[320px]`), compact action buttons, and expandable row detail drawers. In `App.tsx`, implemented responsive sidebar auto-collapse for viewports below 1200px and global keyboard shortcuts (`Ctrl+B` for sidebar toggle, `Ctrl+K` for OmniSearch). In `scripts/test_responsive_contrast.mjs`, verified WCAG 2.2 AA contrast ratios ($> 4.5:1$ for body and badges, $> 7.0:1$ for primary headings, and pure white backgrounds in light mode).
+## Milestone State
+- **Milestone 0 (Survey & Scope Mapping)**: **DONE**. Surveyed full codebase with 3 parallel Explorers. Generated `PROJECT.md` and `TEST_INFRA.md`.
+- **Milestone 1 (Phase 1: Unblock & Harden Codex Verification Loop)**: **DONE**. `.gitignore` excludes test artifacts (`TestResults/`, `playwright-report/`, `test-results/`, `.playwright/`), `scripts/build_rulepack.mjs` is strictly idempotent, `package.json` devDependencies added. Gate 1 PASSED (2 Reviewers, 2 Challengers, 1 Auditor CLEAN).
+- **Milestone 2 (Phase 2: Eliminate Dual-Engine Divergence & Align Business Logic)**: **DONE**. `src/services/xmlParser.ts` defaults missing numbers to 0 and aligns `thermalBreak` logic with C# `NormalizedXmlParser.cs`. `desktopBridge.ts` decoupled via `INativeBridge` (`WebView2DesktopBridge` vs `BrowserPreviewBridge`). `excelExporter.ts` draft watermarked. Gate 2 PASSED (2 Reviewers, 2 Challengers, 1 Auditor CLEAN).
+- **Milestone 3 (Phase 3: Establish Truthful Frontend Test Pyramid & Quality Gates)**: **WORKER COMPLETED** (Worker 3 handoff delivered). `scripts/test_copy_linter.mjs` directly tests `src/utils/formatters.ts`. `scripts/test_ast_converter.mjs` expanded (28 tests). `scripts/test_reducers.mjs` added (15 tests). `package.json` and `run-tests.bat` unified with clean worktree verification. **NEXT ACTION: Spawn Gate Verification Team (2 Reviewers, 2 Challengers, 1 Auditor) for M3**.
+- **Milestone 4 (Phase 4: Harden Typed Bridge Protocol & Host Integration)**: **PLANNED**. Tasks: IPC schema validation, request ID preservation on error, error propagation, catalog parity, xUnit tests in `tests/AHUVerification.Tests/` for `BridgeHandler`.
+- **Milestone 5 (Phase 5: Repository Fixture Sanitization, Boundaries & Ground Refresh)**: **PLANNED**. Tasks: Isolate UPZ/XML test fixtures under `tests/fixtures/`, sanitize proprietary order data, remove hardcoded paths in `UpzBundleExtractor.cs`, refresh `docs/context-manifest.json` and architecture docs.
+- **Milestone 6 (Phase 6: Final Acceptance Gate & Dual Track Verification)**: **PLANNED**. Full Gate 1 & 2 validation, clean worktree check, completion summary.
 
-## 2. Logic Chain
-1. **Mathematical Fact & Predicate Truthfulness**: Unifying fact resolution and check applicability into `computeUnitReadiness` ensures Header, Sidebar, Resolution Center, and Pre-Flight modals all compute identical progress percentages and blocking items with zero drift.
-2. **Keyboard Efficiency & Accessibility**: Synchronous focus management via `useFocusTrap` ensures users can operate modals smoothly via `Tab`, `Shift+Tab`, `ArrowUp/Down`, and `Escape` without focus hacks or screen reader trap vulnerabilities.
-3. **Actionable Resilience**: Replacing silent resets and native `alert()` popups with structured `ImportErrorState` banners on `HomePage` guarantees that detailers understand why a file failed and what steps to take next.
-4. **Desktop Native Cohesion**: Replacing browser-centric phrases ("Download", "normalized XML", LaTeX math formulas) and unformatted PascalCase enums with professional engineering labels provides a polished desktop experience.
-5. **Responsive Visual Balance**: Prioritizing the verification rule description column and moving secondary metadata into collapsible drawers ensures high density without horizontal clipping on compact laptop displays.
+## Active Subagents
+- None currently running. All 16 subagents spawned in Generation 1 have completed and delivered reports.
 
-## 3. Caveats
-- Production deployment in standalone WPF container requires .NET 8 runtime and WebView2 Evergreen Runtime installed on the host machine.
-- Direct Rule Editor file opening from within WebView2 uses local path resolution (`dist/rule-editor.html`); fallback to browser popup executes when running in Vite development server mode.
+## Pending Decisions
+- None. Strategy and architecture contracts are established in `PROJECT.md` and `TEST_INFRA.md`.
 
-## 4. Conclusion
-All five milestones (R1 through R5) have been fully implemented, verified, and audited with zero regressions. All test suites pass with 100% success across both TypeScript/Node and .NET 8 test runners.
+## Remaining Work for Successor (Orchestrator Gen 2)
+1. **Milestone 3 Gate Verification**:
+   - Spawn 2 Reviewers, 2 Challengers, and 1 Auditor for M3.
+   - Collect verdicts and record in `GATE_STATUS.md`.
+2. **Milestone 4 Execution (Phase 4)**:
+   - Dispatch Worker 4 to implement Typed Bridge Protocol hardening:
+     - In `src/backend/AHUVerification.App/Bridge/BridgeHandler.cs` and `BridgeModels.cs`: Preserve `request.Id` even when JSON deserialization or payload validation fails (avoiding empty ID response which hangs frontend promises).
+     - Implement schema/model validation for IPC message payloads.
+     - Ensure bidirectional error propagation and graceful timeout handling.
+     - Add comprehensive xUnit tests for `BridgeHandler` and bridge models in `tests/AHUVerification.Tests/`.
+   - Run M4 Gate verification (Reviewers, Challengers, Auditor).
+3. **Milestone 5 Execution (Phase 5)**:
+   - Dispatch Worker 5 to:
+     - Create `tests/fixtures/` directory.
+     - Move `Config.xml` and UPZ example archives into `tests/fixtures/`.
+     - Update `TestPathHelper.cs` and test classes to reference `tests/fixtures/`.
+     - Remove hardcoded developer paths in `UpzBundleExtractor.cs`.
+     - Update `docs/context-manifest.json`, `docs/architecture/README.md`, and ADRs with verified commit hash and updated bridge/engine architecture.
+   - Run M5 Gate verification (Reviewers, Challengers, Auditor).
+4. **Milestone 6 Acceptance & Final Reporting (Phase 6)**:
+   - Validate Gate 1: `npm ci && npm run build`, `node scripts/build_rulepack.mjs`, `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release`, Playwright & axe tests, `git status --porcelain` strictly empty.
+   - Validate Gate 2: Single-engine architecture, bridge contracts, verification scripts 100% pass, architecture docs match.
+   - Send completion message to parent (`5c8c3482-8a2f-48d8-989a-cbf1308d9252`).
 
-## 5. Verification Method
-Execute the complete test harness:
-```powershell
-# 1. Frontend Build & Full Automated Test Suite (7 suites, >35,000 assertions)
-npm run build
-npm test
-
-# 2. Backend C# Build & Test Suite (29 unit & integration tests)
-dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj
-dotnet build src/backend/AHUVerification.App/AHUVerification.App.csproj
-
-# 3. Complete Local Workflow
-.\run-tests.bat
-```
+## Key Artifacts
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\ORIGINAL_REQUEST.md`
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\PROJECT.md`
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\TEST_INFRA.md`
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\orchestrator_1\GATE_STATUS.md`
+- `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\worker_m3\handoff.md`

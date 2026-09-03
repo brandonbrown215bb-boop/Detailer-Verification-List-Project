@@ -17,7 +17,7 @@ namespace AHUVerification.Tests
 
         public static TestPipelineContext CreateStandardContext(string xmlFilename = "Config.xml")
         {
-            string xmlPath = PathUtils.ResolveRepoPath(xmlFilename);
+            string xmlPath = TestPathHelper.GetFixturePath(xmlFilename);
             string xmlContent = File.ReadAllText(xmlPath);
 
             var parser = new NormalizedXmlParser();

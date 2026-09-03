@@ -1,28 +1,30 @@
-# Implementation Plan — UI/UX Remediation & Live Validation
+# Remediation Plan: Detailer Verification List Project
 
 ## Overview
-Comprehensive plan to remediate UI/UX issues identified in `ui-ux-review/` and required by `ORIGINAL_REQUEST.md`, maintaining strict adherence to project architectural boundaries and test suites.
+A phase-gated execution plan across 5 core remediation phases and comprehensive acceptance validation.
 
 ## Phase 0: Survey & Scope Mapping
-- **Action**: Dispatch 3 parallel survey agents:
-  1. `teamwork_preview_spec_miner_survey_1`: Deeply analyze `ui-ux-review/` markdown files, notes, and screenshots/findings to catalogue every concrete issue, UI component, and target behavior for R1-R5.
-  2. `teamwork_preview_explorer_survey_2`: Investigate frontend source code (`src/` in web/desktop UI, components, state stores, modals, tables, theme tokens, styling) to locate files, data flows, and current implementation.
-  3. `teamwork_preview_explorer_survey_3`: Investigate backend, build scripts, tests (`tests/AHUVerification.Tests/`, `scripts/build_rulepack.mjs`, `package.json`, etc.) to map out verification pipelines and test harness capabilities.
-- **Output**: Synthesized `PROJECT.md` containing Feature Inventory, Milestones, Interface Contracts, and Code Layout.
+- Dispatch 3 parallel Explorers:
+  1. Explorer 1 (CI, Scripts & Toolchain): Investigate `.github/workflows/codex-verification.yml`, playwright tests, `build-all.bat`, `run-tests.bat`, `.gitignore`, test runners.
+  2. Explorer 2 (Business Logic & Dual Engine): Investigate C# parsing / AST / calculation / export vs TypeScript browser preview implementations.
+  3. Explorer 3 (Frontend Test Pyramid, Bridge & Fixtures): Investigate frontend unit/interaction tests, IPC bridge (`BridgeHandler` vs WebView2), and test fixtures.
+- Synthesize findings into `PROJECT.md` (Feature Inventory, Architecture, Milestones, Code Layout, Interface Contracts) and `TEST_INFRA.md`.
 
-## Phase 1: E2E & Validation Infrastructure Setup (Dual Track)
-- Create `TEST_INFRA.md`.
-- Establish automated and unit/integration testing checks for UI readiness logic, dialog accessibility, copy cleanup, and file import handlers.
+## Phase 1: Unblock & Harden Codex Verification Loop (R1)
+- Sub-orchestration / iteration for CI workflow, Playwright accessibility smoke test, .NET tests, `.gitignore` exclusions, and clean worktree guarantees.
 
-## Phase 2: Milestone Iterations (Explorer -> Worker -> Reviewer -> Challenger -> Auditor)
-- **Milestone 1 (R1)**: Single Readiness Predicate & Synchronized Fact Counts across Header, Sidebar, Facts Resolution Center, General Unit Tab, Skid Views, Preflight Modal.
-- **Milestone 2 (R2)**: Accessible Dialog Semantics, ModalShell ARIA, Focus Trap/Restore, Subtitle Wrapping, and Instant Ctrl+K OmniSearch Focus/Trap.
-- **Milestone 3 (R3)**: Config.xml / .upz Import Loading/Error State Banners, Action Feedback for Settings External Process Launches (Rule Editor).
-- **Milestone 4 (R4)**: Clean Typography & Copy, Elimination of LaTeX Artifacts ($N \ge 1$), PascalCase Enum Tokens, Browser Jargon, Nested Border/Pill De-cluttering.
-- **Milestone 5 (R5)**: Responsive Column Prioritization, Rule Description Expandable Row Drawers for Metadata, Light/Dark Theme Token Hardening & WCAG 2.2 AA Contrast Compliance.
+## Phase 2: Eliminate Dual-Engine Divergence & Align Authoritative Business Logic (R2)
+- Sub-orchestration / iteration for single authoritative C# calculation/parsing engine, decoupling browser preview fallback cleanly, and eliminating TS duplicate logic.
 
-## Phase 3: Final Verification & Audit Hardening
-- Full frontend build verification (`npm run build`).
-- Full backend tests (`dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj`).
-- Rule pack manifest verification (`node scripts/build_rulepack.mjs`).
-- Complete adversarial & forensic audit verification.
+## Phase 3: Establish Truthful Frontend Test Pyramid & Quality Gates (R3)
+- Sub-orchestration / iteration for reducer/formatter/validator unit tests, rendered component axe/focus tests, and build script validation parity.
+
+## Phase 4: Harden Typed Bridge Protocol & Host Integration (R4)
+- Sub-orchestration / iteration for IPC message schema validation, bidirectional error propagation, timeout handling, and catalog parity.
+
+## Phase 5: Repository Fixture Sanitization, Boundaries & Ground Refresh (R5)
+- Sub-orchestration / iteration for fixture isolation (`tests/fixtures/`), sanitization of proprietary data, pruning transient artifacts, and updating docs / `context-manifest.json`.
+
+## Phase 6: Acceptance Gate & Dual Track Verification
+- Run Gate 1 (CI & Workflow Integrity) & Gate 2 (Architecture & Contract Verification).
+- Comprehensive verification and report back to parent.

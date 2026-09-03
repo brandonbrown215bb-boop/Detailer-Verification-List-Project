@@ -1,4 +1,4 @@
-﻿# 7. Typed Asynchronous IPC Bridge Architecture between WebView2 and .NET 10
+# 7. Typed Asynchronous IPC Bridge Architecture between WebView2 and .NET 10
 
 Date: 2026-08-26
 Status: Accepted
@@ -35,18 +35,20 @@ A robust, typed, asynchronous Inter-Process Communication (IPC) protocol is requ
 | `checkRulePackUpdate` | FE $\to$ BE | Compare a remote pack with the active pack | `{ remotePath }` | `{ hasUpdate, currentVersion, remoteVersion, ... }` |
 | `syncRulePack` | FE $\to$ BE | Synchronize remote rule pack bundle | `{ remotePath }` | `{ synchronized: true, version, bundleSha256 }` |
 | `selectFolderDialog` | FE $\to$ BE | Open a native folder picker | `{}` | `{ folderPath }` or `null` |
+| `launchRuleEditor` | FE $\to$ BE | Launch standalone Rule & Logic Editor host | `{}` | `{ launched: true }` |
 
 3. **Browser Fallback Graceful Degradation**:
-   - When running outside WebView2 (e.g. standard browser preview via `vite dev`), `desktopBridge.ts` falls back to client-side DOM parsing (the only `parseXml` path), web-based file input (`<input type="file">`), Blob file downloads (`file-saver`), and in-memory rule catalogs.
+   - When running outside WebView2 (e.g. standard browser preview via `vite dev`), `desktopBridge.ts` falls back to client-side DOM parsing (the only `parseXml` path), web-based file input (`<input type="file">`), Blob file downloads (`file-saver`), in-memory rule catalogs, and distinct non-authoritative preview watermarking.
 
 ## Consequences
 
 - Full access to native Windows desktop capabilities with asynchronous non-blocking UI.
-- Strict request-response correlation via unique UUID message identifiers.
+- Strict request-response correlation via unique UUID message identifiers preserved across both successful and error responses.
+- Resilient schema validation rejects invalid/malformed JSON envelopes before action routing.
 - Graceful degradation allows seamless frontend browser testing and standalone desktop deployment.
 
-## Addendum (2026-08-28): current implementation
+## Addendum (2026-09-02): current implementation
 
-The shipped C# projects target .NET 8 (`net8.0` / `net8.0-windows`). The main `BridgeHandler` registers `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, and `selectFolderDialog`. It does **not** register `parseXml`; XML parsing is frontend TypeScript work.
+The shipped C# projects target .NET 8 (`net8.0` / `net8.0-windows`). The main `BridgeHandler` registers 13 actions: `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, `selectFolderDialog`, and `launchRuleEditor`.
 
-The frontend sends `exportExcelDeliverable` `{ facts, sqItems, checklists, rules, graph?, generalComments?, defaultName?, isDraft }`. The host resolves the template from the active rule pack and opens a native save dialog. `desktopBridge.ts` times requests out after 30 seconds. WinForms dialog actions must marshal to the UI thread with `Form.Invoke`. The Rule Editor owns a separate five-action bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
+All IPC requests require a non-empty `action` and structured JSON envelope `{ id, action, payload }`. Handlers preserve incoming `id` values even on deserialization failure and return structured failure responses `{ id, success: false, error: string }`. `desktopBridge.ts` enforces a 30-second timeout on requests. WinForms dialog actions marshal to the UI thread with `Form.Invoke`. The Rule Editor owns a separate five-action bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.

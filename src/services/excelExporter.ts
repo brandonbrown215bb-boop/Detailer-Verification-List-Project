@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { Fact, SpecialQuote, ChecklistInstance, RuleDefinition, NormalizedXmlGraph } from '../types';
+import fileSaver from 'file-saver';
+const saveAs = (fileSaver as any)?.saveAs || fileSaver;
+import type { Fact, SpecialQuote, ChecklistInstance, RuleDefinition, NormalizedXmlGraph } from '../types/index.ts';
 
 export function exportToExcel(
   facts: Record<string, Fact>,
@@ -13,19 +14,27 @@ export function exportToExcel(
 ): void {
   const wb = XLSX.utils.book_new();
 
+  // Workbook metadata watermark
+  wb.Props = {
+    Title: 'Detailing Verification List [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]',
+    Subject: 'Browser Preview Export - Official OpenXML synthesis handled by C# desktop host',
+    Author: 'AHU Verification Browser Preview',
+    Comments: '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] Generated in browser preview mode. Official OpenXML deliverable synthesis is handled by C# desktop host.'
+  };
+
   // 1. Revision List Sheet
   const revData = [
-    ['REVISION'],
+    ['REVISION [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]'],
     ['SUBMITTED BY:', 'REV. LEVEL:', 'REV. DATE:', 'DESCRIPTION', 'APPROVAL DATE:', 'APPROVED BY:'],
-    ['Tanner Dean', 14, new Date().toLocaleDateString(), isDraft ? 'Draft Incomplete Detailing Export' : 'Automated Ingestion & Verification Export (Skid Grouped)', new Date().toLocaleDateString(), 'BB']
+    ['Tanner Dean', 14, new Date().toLocaleDateString(), isDraft ? '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] Draft Incomplete Detailing Export' : '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] Automated Ingestion & Verification Export (Skid Grouped)', new Date().toLocaleDateString(), 'BB']
   ];
   const wsRev = XLSX.utils.aoa_to_sheet(revData);
   XLSX.utils.book_append_sheet(wb, wsRev, 'Revision List');
 
   // 2. Verification List Sheet (Dynamic Skid-Grouped Layout)
   const vlData: (string | number)[][] = [];
-  vlData.push([]);
-  vlData.push(['', isDraft ? 'UNIT DETAILING VERIFICATION LIST [DRAFT - INCOMPLETE]' : 'UNIT DETAILING VERIFICATION LIST', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+  vlData.push(['[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING - OFFICIAL DELIVERABLE SYNTHESIS REQUIRES C# DESKTOP HOST]']);
+  vlData.push(['', isDraft ? 'UNIT DETAILING VERIFICATION LIST [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] [DRAFT - INCOMPLETE]' : 'UNIT DETAILING VERIFICATION LIST [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
   vlData.push(['', 'DETAILER:', facts['unit.detailer']?.value || '', '', '', '', 'SQs & Deviation Items Related to Detailing']);
   vlData.push(['', 'DATE:', facts['unit.date']?.value || new Date().toISOString().split('T')[0]]);
   vlData.push(['', 'JOB NAME:', facts['unit.jobName']?.value || '']);
@@ -52,7 +61,7 @@ export function exportToExcel(
   vlData.push(['', 'LINER MATERIAL', facts['unit.linerMaterial']?.value || 'STL GALV', 'GA', facts['unit.linerGauge']?.value || 22]);
   vlData.push(['', 'SKIN MATERIAL', facts['unit.skinMaterial']?.value || 'STL GALV PPC', 'GA', facts['unit.skinGauge']?.value || 18]);
   vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);
-  vlData.push(['', 'Additional Comments:', isDraft ? '[DRAFT - INCOMPLETE AUDIT] Verified against Config.xml pipeline.' : 'Verified against Config.xml automated pipeline.']);
+  vlData.push(['', 'Additional Comments:', isDraft ? '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] [DRAFT - INCOMPLETE AUDIT] Verified against Config.xml pipeline.' : '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] Verified against Config.xml automated pipeline.']);
 
   // Fill Special Quotes in columns G & H dynamically
   const maxSqRows = Math.max(sqItems.length, 10);
@@ -191,7 +200,7 @@ export function exportToExcel(
       const scratchpadData = [
         ['Total Checks', 'Passed', 'Errors (DR)', 0, 'Errors (DVL)', 0, 'Notes', 0, 'Photos', 0],
         ['', ''],
-        [`${catName} Scratchpad & Verification Markups`, '', ''],
+        [`${catName} Scratchpad & Verification Markups [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]`, '', ''],
         ['Paste detailer markups, drawings, and component photos below for checking:']
       ];
       const wsCat = XLSX.utils.aoa_to_sheet(scratchpadData);
@@ -201,7 +210,8 @@ export function exportToExcel(
 
   // 4. Check Information Sheet
   const checkData: (string | number)[][] = [
-    ['Check Information'],
+    ['Check Information [BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]'],
+    ['Notice', 'Official OpenXML synthesis handled by C# desktop host'],
     ['Detailer', facts['unit.detailer']?.value || ''],
     ['COM', facts['unit.comNumber']?.value || ''],
     ['Checker', 'Pending'],

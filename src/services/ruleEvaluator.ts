@@ -1,4 +1,4 @@
-import { NormalizedXmlGraph, Fact, RuleDefinition, ChecklistInstance, RuleApplicability, ASTPredicate } from '../types';
+import type { NormalizedXmlGraph, Fact, RuleDefinition, ChecklistInstance, RuleApplicability, ASTPredicate } from '../types/index.ts';
 
 export function evaluateAstPredicate(
   predicate: ASTPredicate | undefined,

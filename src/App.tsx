@@ -246,21 +246,6 @@ export const AppContent: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Global Keyboard Shortcuts (Ctrl+K: OmniSearch, Ctrl+B: Toggle Sidebar)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsSearchOpen(prev => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        setIsSidebarCollapsed(prev => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Autosave when active data changes
   useEffect(() => {
@@ -589,7 +574,7 @@ export const AppContent: React.FC = () => {
   // Keyboard Shortcuts (Ctrl+K, Ctrl+S, Ctrl+E, Ctrl+B)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -597,12 +582,12 @@ export const AppContent: React.FC = () => {
           e.preventDefault();
           void handleSaveDvl(e.shiftKey);
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
         if (isProjectLoaded) {
           e.preventDefault();
           setIsPreFlightOpen(true);
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSidebarCollapsed(prev => !prev);
       }

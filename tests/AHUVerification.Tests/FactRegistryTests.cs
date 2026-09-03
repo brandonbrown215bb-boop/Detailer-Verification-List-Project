@@ -11,7 +11,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void ExtractFacts_PreservesProvenanceAndStrictWeightSemantics()
         {
-            string xmlContent = File.ReadAllText(TestPathHelper.GetRepoPath("Config.xml"));
+            string xmlContent = File.ReadAllText(TestPathHelper.GetFixturePath("Config.xml"));
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
 
@@ -48,7 +48,7 @@ namespace AHUVerification.Tests
         [Fact]
         public void OverrideAndRevertFact_MaintainsFullAuditTrail()
         {
-            string xmlContent = File.ReadAllText(TestPathHelper.GetRepoPath("Config.xml"));
+            string xmlContent = File.ReadAllText(TestPathHelper.GetFixturePath("Config.xml"));
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
 

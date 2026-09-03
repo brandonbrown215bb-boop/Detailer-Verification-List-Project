@@ -1,43 +1,43 @@
-# E2E & Live Validation Infra: AHU Detailing Verification UI/UX
+# E2E Test Infra: Detailer Verification List Project
 
 ## Test Philosophy
-- Multi-tier validation combining requirement-driven opaque-box testing, live Node.js automated test runners, TypeScript compile verification, rulepack hash/manifest integrity, and backend C# xUnit test execution.
-- Fast, reproducible, self-contained verification without heavy third-party CI dependencies.
+- Opaque-box and requirement-driven test verification derived directly from `ORIGINAL_REQUEST.md`.
+- Comprehensive multi-tier test pyramid:
+  - **Tier 1: Feature Coverage (Isolation)**: Direct verification of core functions (XML parsing, AST evaluation, rule pack hashing, bridge serialization, readiness computation).
+  - **Tier 2: Boundary & Corner Cases**: Empty inputs, malformed XML, missing properties, invalid schemas, zero/negative values, extreme file sizes, timeout conditions.
+  - **Tier 3: Cross-Feature Combinations**: Ingestion -> Fact Extraction -> Rule Evaluation -> Override -> Deliverable Generation -> Clean Worktree.
+  - **Tier 4: Real-World Application Workloads**: Full end-to-end user workflows (e2e smoke tests, manual unit creation, search dialog, modal accessibility, rule editor condition conversion).
+  - **Tier 5: Adversarial Hardening**: Stress testing fact resolution matrices, edge cases in formula zeroing, schema fuzzing.
 
----
+## Feature Inventory & Test Mapping
+| # | Feature | Source (requirement) | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
+|---|---------|---------------------|:------:|:------:|:------:|:------:|
+| 1 | .gitignore & Worktree Cleanliness | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
+| 2 | Rulepack Generator Idempotence | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
+| 3 | Package.json Toolchain | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
+| 4 | Single-Path XML Parser & Defaults | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
+| 5 | ThermalBreak Logic Alignment | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
+| 6 | Browser Preview Decoupling | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
+| 7 | Frontend Unit Test Pyramid | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
+| 8 | Rendered Component & Axe Tests | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
+| 9 | Local Automation Scripts Parity | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
+| 10 | Typed Bridge Schema Validation | ORIGINAL_REQUEST §R4 | 5 | 5 | ✓ | ✓ |
+| 11 | Bridge Error & ID Preservation | ORIGINAL_REQUEST §R4 | 5 | 5 | ✓ | ✓ |
+| 12 | Fixture Isolation & Sanitization | ORIGINAL_REQUEST §R5 | 5 | 5 | ✓ | ✓ |
+| 13 | Documentation & Manifest Parity | ORIGINAL_REQUEST §R5 | 5 | 5 | ✓ | ✓ |
 
-## Feature Inventory & Test Coverage Mapping
-| # | Feature | Requirement | Tier 1 (Unit/Logic) | Tier 2 (Boundary/Edge) | Tier 3 (Integration) | Tier 4 (Workload) |
-|---|---------|-------------|:-------------------:|:----------------------:|:--------------------:|:-----------------:|
-| 1 | Readiness & Facts Synchronization | R1 | `test_readiness.mjs` (5+ tests) | All facts confirmed vs 15 weights missing | Header/Sidebar/Preflight parity | Multi-skid UPZ project verification |
-| 2 | Dialog Accessibility & Focus Trap | R2 | Focus trap hook unit test | Empty dialogs, rapid Open/Escape | OmniSearch instant typing + restore | Modal navigation workflow |
-| 3 | File Ingestion & Action Feedback | R3 | Ingestion state machine tests | Corrupted XML, non-existent files | Loading spinner + Error banner | Native bridge fallback |
-| 4 | Copy, LaTeX & Enum Sanitization | R4 | `test_copy_linter.mjs` (5+ regexes) | Edge-case strings ($N \ge 1$, PascalCase) | Zero LaTeX across all source files | Production bundle scan |
-| 5 | Responsive Columns & Theme Contrast | R5 | Contrast ratio math validator | Subdued text in Light & Dark | Table header reflow at 1086px | Standard 1426x893 resolution test |
+## Test Architecture
+- **Backend Test Runner**: `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release`
+- **Frontend Test Runner**: `npm test` (running all node unit/property test suites in `scripts/`)
+- **E2E & Accessibility Runner**: `npx playwright test`
+- **Verification Scripts**: `node scripts/test_ast_converter.mjs`, `node scripts/test_readiness.mjs`, `node scripts/stress_test_readiness_adversarial.mjs`, `node scripts/test_modal_accessibility.mjs`, `node scripts/test_ingestion_feedback.mjs`, `node scripts/test_copy_linter.mjs`, `node scripts/test_responsive_contrast.mjs`
+- **Pass/Fail Semantics**: All test suites must exit with code `0`. Worktree must remain strictly clean (`git status --porcelain` is empty).
 
----
-
-## Automated Validation Test Suites
-1. **Frontend Type Safety & Bundle Compilation**:
-   - Command: `npm run build`
-   - Validates 0 TypeScript compile errors, valid CSS bundle generation, and bundle size sanity.
-2. **Readiness Predicate Live Test Runner**:
-   - Command: `node scripts/test_readiness.mjs`
-   - Validates that `computeUnitReadiness` yields identical counts across Header, Sidebar, Resolution Center, and Preflight Modal under diverse fact configurations (empty, missing weights, confirmed, unconfirmed, overrides).
-3. **Copy & Terminology Linter**:
-   - Command: `node scripts/test_copy_linter.mjs`
-   - Scans all `src/` files for forbidden strings (`$N \ge 1$`, `Download .dvl`, raw unformatted enums, leaked implementation jargon).
-4. **AST Converter & Rulepack Manifest Validator**:
-   - Command: `node scripts/build_rulepack.mjs && node scripts/test_ast_converter.mjs`
-   - Validates that all 104 rules compile, SHA-256 hashes match, and AST evaluator operators execute correctly.
-5. **Backend xUnit Test Suite**:
-   - Command: `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj`
-   - Validates 29/29 C# tests across XML parsing, UPZ extraction, DVL serialization, rule pack integrity, and OpenXML spreadsheet deliverables.
-
----
-
-## Unified Test Runner Command
-All automated test suites are integrated into `run-tests.bat` and can be executed via:
-```cmd
-npm run build && node scripts/build_rulepack.mjs && node scripts/test_ast_converter.mjs && node scripts/test_readiness.mjs && node scripts/test_copy_linter.mjs && dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj
-```
+## Real-World Application Scenarios (Tier 4)
+| # | Scenario | Features Exercised | Complexity |
+|---|----------|--------------------|------------|
+| 1 | Clean CI Verification Loop | F1, F2, F3, F9 | High |
+| 2 | XML Ingest to Fact Extraction to Deliverable Export | F4, F5, F6, F10, F11 | High |
+| 3 | Accessible Modal Dialog Navigation (Escape, Tab Trap, Axe) | F8, F7 | Medium |
+| 4 | OmniSearch & Keyboard Shortcut Activation | F8, F7 | Medium |
+| 5 | Manual Unit Synthesis & Custom Inspection | F4, F6, F7 | High |

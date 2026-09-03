@@ -1,17 +1,9 @@
-## 2026-08-28T17:08:50Z
-You are Explorer 1 for the codebase survey phase of the Code Duplication Audit project.
+# DISPATCH — explorer_survey_1
 
-Working directory: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_1
-Workspace root: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project
-Original Request: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\ORIGINAL_REQUEST.md
-Project Scope: c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\PROJECT.md
+## 2026-09-02T12:47:23Z
 
-Your task:
-1. Read ORIGINAL_REQUEST.md and PROJECT.md. Also review AGENTS.md / GEMINI.md for repo context.
-2. Conduct a broad survey of the entire repository structure:
-   - Identify all source directories, languages, entry points, and framework components.
-   - List key files across `src/`, `scripts/`, `tests/`, configuration files, and rules.
-   - Identify the architecture and primary functional modules.
-3. Identify initial prominent duplication hotspots across core application files (exact copy-pasted blocks, near duplicates, structural boilerplate, repeated data/constants).
-4. Record your detailed findings, verified file paths, line ranges, and module relationships into `c:\Users\jbrow263\OneDrive - Johnson Controls\Documents\Detailer-Verification-List-Project\.agents\explorer_survey_1\handoff.md`.
-5. Update your progress.md in your working directory and notify the parent orchestrator via send_message when complete.
+Investigate the CI workflow, test execution, toolchains, and dirty worktree causes:
+1. Check `.github/workflows/codex-verification.yml`, `.gitignore`, `package.json`, `build-all.bat`, `run-tests.bat`, `scripts/build_rulepack.mjs`, playwright config, Playwright test suite, axe-core setup.
+2. Investigate why Playwright UI/accessibility tests and .NET tests fail on CI or clean environments (`windows-2022` and `ubuntu-latest`).
+3. Identify all generated test artifacts (e.g. `TestResults/`, `playwright-report/`, `test-results/`, rule-pack manifest churn, build output) causing dirty worktree after test runs.
+4. Check local automation scripts (`build-all.bat`, `run-tests.bat`) for parity with CI validation gates.

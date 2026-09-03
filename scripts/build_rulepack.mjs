@@ -112,11 +112,15 @@ const bundleSha256 = sha256(Buffer.from(bundleIdentity, 'utf8'));
 // 6. Read existing manifest version or use default
 let version = '14.0.0';
 let name = 'AHU Detailing Verification Rule Pack';
+let generatedAt = new Date().toISOString();
 if (fs.existsSync(manifestPath)) {
   try {
     const existing = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     if (existing.version) version = existing.version;
     if (existing.name) name = existing.name;
+    if (existing.bundleSha256 === bundleSha256 && existing.generatedAt) {
+      generatedAt = existing.generatedAt;
+    }
   } catch (e) {
     // ignore parse error on old manifest
   }
@@ -125,7 +129,7 @@ if (fs.existsSync(manifestPath)) {
 const manifest = {
   name,
   version,
-  generatedAt: new Date().toISOString(),
+  generatedAt,
   bundleSha256,
   files
 };

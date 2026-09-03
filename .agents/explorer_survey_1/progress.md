@@ -1,13 +1,4 @@
-# Progress — Explorer 1 (Codebase Survey)
+# Progress — explorer_survey_1
 
-**Last visited**: 2026-08-28T17:12:00Z
-**Status**: COMPLETED
-
-## Tasks
-- [x] Initialize briefing, dispatch, and progress tracking
-- [x] Review `ORIGINAL_REQUEST.md`, `PROJECT.md`, `AGENTS.md`, `GEMINI.md`, `docs/architecture/`
-- [x] Survey repository file tree, language distributions, entry points, and module layout
-- [x] Analyze architectural components and runtime/data flows
-- [x] Identify prominent duplication hotspots across core files (structural, algorithmic, data/constants)
-- [x] Document verified findings with line numbers and rationale
-- [x] Compile comprehensive `handoff.md` and notify orchestrator
+- Last visited: 2026-09-02T12:50:00Z
+- Status: Investigation completed. Identified all CI failure roots, test execution mechanisms, dirty worktree sources, and script parity gaps. Writing handoff.md.
