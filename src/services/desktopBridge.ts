@@ -83,6 +83,20 @@ export interface INativeBridge {
   selectFolderDialog(): Promise<string | null>;
   publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }>;
   launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }>;
+  resolveRulePackLocation(configuredPath?: string): Promise<{
+    path: string | null;
+    isAutoDetected: boolean;
+    sourceType: string;
+  }>;
+  checkAppUpdate(): Promise<{
+    isInstalled: boolean;
+    hasUpdate: boolean;
+    currentVersion?: string;
+    remoteVersion?: string;
+    error?: string;
+  }>;
+  downloadAppUpdate(): Promise<{ success: boolean }>;
+  applyAppUpdate(): Promise<void>;
 }
 
 export function isDesktopHost(): boolean {
@@ -265,6 +279,32 @@ export class WebView2DesktopBridge implements INativeBridge {
   public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
     return this.sendRequest('launchRuleEditor');
   }
+
+  public async resolveRulePackLocation(configuredPath?: string): Promise<{
+    path: string | null;
+    isAutoDetected: boolean;
+    sourceType: string;
+  }> {
+    return this.sendRequest('resolveRulePackLocation', { configuredPath });
+  }
+
+  public async checkAppUpdate(): Promise<{
+    isInstalled: boolean;
+    hasUpdate: boolean;
+    currentVersion?: string;
+    remoteVersion?: string;
+    error?: string;
+  }> {
+    return this.sendRequest('checkAppUpdate');
+  }
+
+  public async downloadAppUpdate(): Promise<{ success: boolean }> {
+    return this.sendRequest('downloadAppUpdate');
+  }
+
+  public async applyAppUpdate(): Promise<void> {
+    await this.sendRequest('applyAppUpdate');
+  }
 }
 
 /**
@@ -416,6 +456,32 @@ export class BrowserPreviewBridge implements INativeBridge {
       return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
     }
   }
+
+  public async resolveRulePackLocation(_configuredPath?: string): Promise<{
+    path: string | null;
+    isAutoDetected: boolean;
+    sourceType: string;
+  }> {
+    return { path: null, isAutoDetected: false, sourceType: 'None' };
+  }
+
+  public async checkAppUpdate(): Promise<{
+    isInstalled: boolean;
+    hasUpdate: boolean;
+    currentVersion?: string;
+    remoteVersion?: string;
+    error?: string;
+  }> {
+    return { isInstalled: false, hasUpdate: false, currentVersion: 'web' };
+  }
+
+  public async downloadAppUpdate(): Promise<{ success: boolean }> {
+    return { success: false };
+  }
+
+  public async applyAppUpdate(): Promise<void> {
+    console.warn('App update restart is only available in desktop host.');
+  }
 }
 
 /**
@@ -521,6 +587,22 @@ export class DesktopBridge implements INativeBridge {
     } catch (err: any) {
       return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
     }
+  }
+
+  public async resolveRulePackLocation(configuredPath?: string) {
+    return this.activeBridge.resolveRulePackLocation(configuredPath);
+  }
+
+  public async checkAppUpdate() {
+    return this.activeBridge.checkAppUpdate();
+  }
+
+  public async downloadAppUpdate() {
+    return this.activeBridge.downloadAppUpdate();
+  }
+
+  public async applyAppUpdate() {
+    return this.activeBridge.applyAppUpdate();
   }
 }
 

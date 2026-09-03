@@ -5,7 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using AHUVerification.App.Services;
 using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
@@ -21,6 +23,7 @@ namespace AHUVerification.App.Bridge
         private readonly OpenXmlTemplatePatcher _patcher = new();
         private readonly RulePackManager _rulePackManager = new();
         private readonly UpzBundleExtractor _upzExtractor = new();
+        private readonly UpdateService _updateService = new();
 
         private RulePackBundle? _activeRulePack;
         private readonly string _rulePackPath;
@@ -45,6 +48,11 @@ namespace AHUVerification.App.Bridge
         }
 
         public BridgeResponse Handle(string jsonMessage)
+        {
+            return HandleAsync(jsonMessage).GetAwaiter().GetResult();
+        }
+
+        public async Task<BridgeResponse> HandleAsync(string jsonMessage)
         {
             string reqId = BridgeRequest.ExtractRequestId(jsonMessage);
 
@@ -89,10 +97,14 @@ namespace AHUVerification.App.Bridge
                     "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
                     "openFile" => OpenFile(req.Payload),
                     "showInExplorer" => ShowInExplorer(req.Payload),
+                    "resolveRulePackLocation" => ResolveRulePackLocation(req.Payload),
                     "checkRulePackUpdate" => CheckRulePackUpdate(req.Payload),
                     "syncRulePack" => SyncRulePack(req.Payload),
                     "selectFolderDialog" => ShowSelectFolderDialog(),
                     "launchRuleEditor" => LaunchRuleEditor(),
+                    "checkAppUpdate" => await CheckAppUpdateAsync(),
+                    "downloadAppUpdate" => await DownloadAppUpdateAsync(),
+                    "applyAppUpdate" => ApplyAppUpdate(),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
@@ -469,6 +481,48 @@ namespace AHUVerification.App.Bridge
             {
                 throw new InvalidOperationException($"Could not launch Rule & Logic Editor: {ex.Message}", ex);
             }
+        }
+
+        private object ResolveRulePackLocation(JsonElement payload)
+        {
+            string? configured = null;
+            if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("configuredPath", out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                configured = prop.GetString();
+            }
+
+            var resolved = RulePackLocationResolver.ResolveLocation(configured);
+            return new
+            {
+                path = resolved.Path,
+                isAutoDetected = resolved.IsAutoDetected,
+                sourceType = resolved.SourceType
+            };
+        }
+
+        private async Task<object> CheckAppUpdateAsync()
+        {
+            var res = await _updateService.CheckForUpdatesAsync();
+            return new
+            {
+                isInstalled = res.IsInstalled,
+                hasUpdate = res.HasUpdate,
+                currentVersion = res.CurrentVersion,
+                remoteVersion = res.RemoteVersion,
+                error = res.Error
+            };
+        }
+
+        private async Task<object> DownloadAppUpdateAsync()
+        {
+            bool success = await _updateService.DownloadUpdatesAsync();
+            return new { success };
+        }
+
+        private object ApplyAppUpdate()
+        {
+            _updateService.ApplyUpdatesAndRestart();
+            return new { success = true };
         }
     }
 }

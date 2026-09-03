@@ -73,9 +73,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isResetConfirming, setIsResetConfirming] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
+  const [autoDetectedPath, setAutoDetectedPath] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<string>('None');
+
   useEffect(() => {
     setExportPath(sharedExportPath || localStorage.getItem('dvl_shared_export_path') || '');
-    setRulePath(centralRulePackPath || localStorage.getItem('dvl_central_rulepack_path') || '');
+    const currentRulePath = centralRulePackPath || localStorage.getItem('dvl_central_rulepack_path') || '';
+    setRulePath(currentRulePath);
+
+    if (isOpen && desktopBridge.isRunningInDesktop()) {
+      desktopBridge.resolveRulePackLocation(currentRulePath || undefined).then(res => {
+        if (res.path) {
+          setAutoDetectedPath(res.path);
+          setSourceType(res.sourceType);
+        }
+      }).catch(err => console.warn('Path detection notice:', err));
+    }
   }, [sharedExportPath, centralRulePackPath, isOpen]);
 
   if (!isOpen) return null;
@@ -107,11 +120,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleCheckForUpdates = async () => {
-    const targetPath = rulePath.trim();
+    const targetPath = rulePath.trim() || autoDetectedPath;
     if (!targetPath) {
       setCheckStatus('error');
       setStatusMessage('Please specify a network share or folder path first.');
       return;
+    }
+
+    if (!rulePath.trim() && autoDetectedPath) {
+      handleRulePathChange(autoDetectedPath);
     }
 
     try {
@@ -301,6 +318,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   )}
                 </div>
+                {autoDetectedPath && (
+                  <div className="mt-2 flex items-center justify-between text-[11px] bg-slate-100 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="truncate mr-2">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-1.5">
+                        Auto-detected ({sourceType}):
+                      </span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{autoDetectedPath}</span>
+                    </div>
+                    {rulePath !== autoDetectedPath && (
+                      <button
+                        type="button"
+                        onClick={() => handleRulePathChange(autoDetectedPath)}
+                        className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 font-bold shrink-0 hover:underline"
+                      >
+                        Use This
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Auto sync checkbox */}

@@ -120,7 +120,7 @@ namespace AHUVerification.App
             }
         }
 
-        private void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+        private async void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             string? message = null;
             try
@@ -130,7 +130,7 @@ namespace AHUVerification.App
 
                 if (_bridgeHandler != null)
                 {
-                    var response = _bridgeHandler.Handle(message);
+                    var response = await _bridgeHandler.HandleAsync(message);
                     string jsonResponse = JsonSerializer.Serialize(response, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     _webView.CoreWebView2.PostWebMessageAsJson(jsonResponse);
                 }

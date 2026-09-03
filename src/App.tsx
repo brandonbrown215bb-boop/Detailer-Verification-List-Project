@@ -33,7 +33,7 @@ import { ResolutionCenterModal } from './components/ResolutionCenterModal';
 import { PreFlightModal } from './components/PreFlightModal';
 import { OmniSearchModal } from './components/OmniSearchModal';
 import { SettingsModal } from './components/SettingsModal';
-import { AlertCircle, RefreshCw, CheckCircle2, FileSpreadsheet, Folder } from 'lucide-react';
+import { AlertCircle, RefreshCw, CheckCircle2, FileSpreadsheet, Folder, DownloadCloud } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -138,8 +138,9 @@ export const AppContent: React.FC = () => {
     return localStorage.getItem('dvl_central_rulepack_path') || '';
   });
   const [rulePackNotice, setRulePackNotice] = useState<string | null>(null);
+  const [appUpdateNotice, setAppUpdateNotice] = useState<{ message: string; canRestart?: boolean } | null>(null);
 
-  // Initial rule pack fetch from desktop host & automatic startup sync
+  // Initial rule pack fetch from desktop host, autonomous SharePoint sync, and background app update check
   useEffect(() => {
     if (desktopBridge.isRunningInDesktop()) {
       desktopBridge.getRulePack().then(pack => {
@@ -154,23 +155,49 @@ export const AppContent: React.FC = () => {
         }
       }).catch(err => console.warn('Failed to load initial rule pack from bridge:', err));
 
-      const centralPath = localStorage.getItem('dvl_central_rulepack_path');
+      const configuredPath = localStorage.getItem('dvl_central_rulepack_path');
       const autoSync = localStorage.getItem('dvl_auto_sync_rulepack') !== 'false';
-      if (centralPath && autoSync) {
-        desktopBridge.checkRulePackUpdate(centralPath).then(async updateInfo => {
-          if (updateInfo.hasUpdate && !updateInfo.error) {
-            const syncResult = await desktopBridge.syncRulePack(centralPath);
-            if (syncResult.success && syncResult.rules) {
-              setActiveRules(syncResult.rules);
-              setRulePackIdentity({
-                version: syncResult.version,
-                sha256: syncResult.bundleSha256 || ''
-              });
-              setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules)`);
+
+      // Auto-discover location (e.g. synced SharePoint/OneDrive) if not configured
+      desktopBridge.resolveRulePackLocation(configuredPath || undefined).then(async resolved => {
+        const effectivePath = configuredPath || resolved.path;
+        if (effectivePath && autoSync) {
+          try {
+            const updateInfo = await desktopBridge.checkRulePackUpdate(effectivePath);
+            if (updateInfo.hasUpdate && !updateInfo.error) {
+              const syncResult = await desktopBridge.syncRulePack(effectivePath);
+              if (syncResult.success && syncResult.rules) {
+                setActiveRules(syncResult.rules);
+                setRulePackIdentity({
+                  version: syncResult.version,
+                  sha256: syncResult.bundleSha256 || ''
+                });
+                const origin = resolved.isAutoDetected ? 'SharePoint sync' : 'central path';
+                setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules) from ${origin}`);
+              }
             }
+          } catch (err) {
+            console.warn('Rule pack auto-sync check failed:', err);
           }
-        }).catch(err => console.warn('Rule pack auto-sync check failed:', err));
-      }
+        }
+      }).catch(err => console.warn('Rule pack location discovery failed:', err));
+
+      // Check for Velopack desktop app updates in background
+      desktopBridge.checkAppUpdate().then(async appUpdate => {
+        if (appUpdate.hasUpdate && appUpdate.remoteVersion) {
+          setAppUpdateNotice({
+            message: `New desktop app v${appUpdate.remoteVersion} detected. Downloading in background...`,
+            canRestart: false
+          });
+          const downloaded = await desktopBridge.downloadAppUpdate();
+          if (downloaded.success) {
+            setAppUpdateNotice({
+              message: `App update v${appUpdate.remoteVersion} is ready to apply.`,
+              canRestart: true
+            });
+          }
+        }
+      }).catch(err => console.warn('Desktop app update check failed:', err));
     }
   }, []);
 
@@ -723,6 +750,34 @@ export const AppContent: React.FC = () => {
             >
               Dismiss
             </button>
+          </div>
+        )}
+
+        {/* Desktop App Update Notice Toast */}
+        {appUpdateNotice && (
+          <div className="bg-sky-100 dark:bg-sky-950/90 border-b border-sky-300 dark:border-sky-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2.5 text-xs text-sky-900 dark:text-sky-200 font-medium">
+              <DownloadCloud className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+              <span>{appUpdateNotice.message}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {appUpdateNotice.canRestart && (
+                <button
+                  type="button"
+                  onClick={() => desktopBridge.applyAppUpdate()}
+                  className="px-2.5 py-1 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded shadow transition-colors"
+                >
+                  Restart App
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAppUpdateNotice(null)}
+                className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
