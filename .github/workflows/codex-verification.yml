@@ -1,0 +1,266 @@
+name: Codex Verification
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches:
+      - master
+      - 'ci/**'
+      - 'fix/**'
+      - 'feat/**'
+  workflow_dispatch:
+    inputs:
+      publish_artifacts:
+        description: 'Build Windows publish artifacts after verification'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_XMLDOC_MODE: skip
+
+jobs:
+  verify:
+    name: Windows build and verification
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Capture toolchain versions
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+          dotnet --info
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Compile TypeScript and build Vite frontend
+        run: npm run build
+
+      - name: Validate rule-pack integrity
+        shell: pwsh
+        run: |
+          $manifestPath = 'resources/rulepack/manifest.json'
+          $before = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $beforeBundle = $before.bundleSha256
+
+          node scripts/build_rulepack.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $after = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($beforeBundle -ne $after.bundleSha256) {
+            Write-Error "Rule-pack manifest is stale. Stored bundleSha256: $beforeBundle; generated: $($after.bundleSha256)"
+            git diff -- resources/rulepack
+            exit 1
+          }
+
+          git restore -- resources/rulepack
+
+      - name: Restore .NET projects
+        shell: pwsh
+        run: |
+          dotnet restore src/backend/AHUVerification.Core/AHUVerification.Core.csproj
+          dotnet restore src/backend/AHUVerification.App/AHUVerification.App.csproj
+          dotnet restore src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj
+          dotnet restore tests/AHUVerification.Tests/AHUVerification.Tests.csproj
+
+      - name: Build .NET core engine
+        run: dotnet build src/backend/AHUVerification.Core/AHUVerification.Core.csproj -c Release --no-restore
+
+      - name: Build Windows detailer host
+        run: dotnet build src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release --no-restore
+
+      - name: Build Windows rule editor
+        run: dotnet build src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release --no-restore
+
+      - name: Run .NET test suite
+        run: dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults
+
+      - name: Run AST converter tests
+        run: node scripts/test_ast_converter.mjs
+
+      - name: Run state reducers and domain logic tests
+        run: node scripts/test_reducers.mjs
+
+      - name: Run readiness tests
+        run: node scripts/test_readiness.mjs
+
+      - name: Run adversarial readiness tests
+        run: node scripts/stress_test_readiness_adversarial.mjs
+
+      - name: Run modal and keyboard accessibility tests
+        run: node scripts/test_modal_accessibility.mjs
+
+      - name: Run ingestion feedback tests
+        run: node scripts/test_ingestion_feedback.mjs
+
+      - name: Run copy and terminology linter
+        run: node scripts/test_copy_linter.mjs
+
+      - name: Run responsive layout and contrast tests
+        run: node scripts/test_responsive_contrast.mjs
+
+      - name: Run cross-engine parity and bridge tests
+        run: node scripts/test_m2_parity_and_bridge.mjs
+
+      - name: Verify checkout remains clean
+        shell: pwsh
+        run: |
+          $dirty = git status --porcelain
+          if ($dirty) {
+            Write-Host $dirty
+            Write-Error 'Verification modified tracked repository files.'
+            exit 1
+          }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: TestResults/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload frontend build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  browser:
+    name: Chromium UI and accessibility verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install browser-test tooling without modifying the lockfile
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Compile frontend before browser tests
+        run: npm run build
+
+      - name: Run Playwright UI and accessibility smoke tests
+        run: npx playwright test
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.sha }}
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright traces, screenshots, and videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    name: Windows publish smoke test
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_artifacts }}
+    needs: [verify, browser]
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install dependencies and build frontend
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Publish detailer application
+        run: dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained false -o publish/AHUVerification
+
+      - name: Publish rule editor
+        run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained false -o publish/RuleEditor
+
+      - name: Validate required publish assets
+        shell: pwsh
+        run: |
+          $required = @(
+            'publish/AHUVerification/AHUVerification.App.exe',
+            'publish/AHUVerification/dist/index.html',
+            'publish/AHUVerification/resources/rulepack/manifest.json',
+            'publish/AHUVerification/resources/bin/unpack32.exe',
+            'publish/AHUVerification/resources/bin/ywunpack.dll',
+            'publish/RuleEditor/AHUVerification.RuleEditor.exe'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              Write-Error "Required publish artifact is missing: $path"
+              exit 1
+            }
+          }
+
+      - name: Upload Windows publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-publish-${{ github.sha }}
+          path: publish/
+          if-no-files-found: error
+          retention-days: 7
