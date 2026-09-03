@@ -26,8 +26,11 @@ test-results/
 .playwright/
 
 # .NET / C#
-bin/
-obj/
+**/bin/Debug/
+**/bin/Release/
+**/obj/
+src/backend/*/bin/
+tests/*/bin/
 publish/
 TestResults/
 [Dd]ebug/
