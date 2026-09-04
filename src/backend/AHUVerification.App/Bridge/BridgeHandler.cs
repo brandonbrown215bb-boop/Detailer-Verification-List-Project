@@ -516,7 +516,7 @@ namespace AHUVerification.App.Bridge
         private async Task<object> DownloadAppUpdateAsync()
         {
             bool success = await _updateService.DownloadUpdatesAsync();
-            return new { success };
+            return new { success, error = _updateService.LastDownloadError };
         }
 
         private object ApplyAppUpdate()

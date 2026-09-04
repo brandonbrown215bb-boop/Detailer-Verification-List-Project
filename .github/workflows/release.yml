@@ -96,10 +96,16 @@ jobs:
         run: |
           dotnet tool install -g vpk
 
+      - name: Download Previous Release for Delta Generation
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "${{ secrets.GITHUB_TOKEN }}" -o Releases
+
       - name: Package Velopack 1-Click Installer
         shell: pwsh
         run: |
-          vpk pack --packId AHUVerification --packVersion ${{ steps.semver.outputs.version }} --packDir publish/AHUVerification --mainExename AHUVerification.App.exe -o Releases
+          vpk pack --packId AHUVerification --packVersion ${{ steps.semver.outputs.version }} --packDir publish/AHUVerification --mainExe AHUVerification.App.exe -o Releases
 
       - name: Publish Rule Editor Studio (Self-Contained win-x64)
         run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained true -o publish/RuleEditor /p:Version=${{ steps.semver.outputs.version }}
@@ -117,9 +123,9 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
-            Releases/AHUVerification-Setup.exe
-            Releases/*-full.nupkg
+            Releases/*-Setup.exe
             Releases/*-delta.nupkg
             Releases/releases.win.json
             RuleEditor-${{ steps.semver.outputs.version }}-win-x64.zip

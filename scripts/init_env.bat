@@ -12,6 +12,9 @@ if exist "%DOTNET_DIR%\dotnet.exe" (
     set "PATH=%DOTNET_DIR%;%PATH%"
     if not defined DOTNET_ROOT set "DOTNET_ROOT=%DOTNET_DIR%"
 )
+if exist "%USERPROFILE%\.dotnet\tools" (
+    set "PATH=%USERPROFILE%\.dotnet\tools;%PATH%"
+)
 
 set "DOTNET_VER="
 for /f "tokens=1" %%i in ('dotnet --version 2^>nul') do (

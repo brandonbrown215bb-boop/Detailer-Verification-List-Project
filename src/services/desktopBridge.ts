@@ -95,7 +95,7 @@ export interface INativeBridge {
     remoteVersion?: string;
     error?: string;
   }>;
-  downloadAppUpdate(): Promise<{ success: boolean }>;
+  downloadAppUpdate(): Promise<{ success: boolean; error?: string }>;
   applyAppUpdate(): Promise<void>;
 }
 
@@ -298,7 +298,7 @@ export class WebView2DesktopBridge implements INativeBridge {
     return this.sendRequest('checkAppUpdate');
   }
 
-  public async downloadAppUpdate(): Promise<{ success: boolean }> {
+  public async downloadAppUpdate(): Promise<{ success: boolean; error?: string }> {
     return this.sendRequest('downloadAppUpdate');
   }
 
@@ -475,7 +475,7 @@ export class BrowserPreviewBridge implements INativeBridge {
     return { isInstalled: false, hasUpdate: false, currentVersion: 'web' };
   }
 
-  public async downloadAppUpdate(): Promise<{ success: boolean }> {
+  public async downloadAppUpdate(): Promise<{ success: boolean; error?: string }> {
     return { success: false };
   }
 

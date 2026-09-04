@@ -32,6 +32,7 @@ test-results/
 src/backend/*/bin/
 tests/*/bin/
 publish/
+Releases/
 TestResults/
 [Dd]ebug/
 [Rr]elease/

@@ -84,9 +84,16 @@ namespace AHUVerification.App.Services
             }
         }
 
+        public string? LastDownloadError { get; private set; }
+
         public async Task<bool> DownloadUpdatesAsync(Action<int>? progress = null)
         {
-            if (_updateManager == null || _pendingUpdate == null) return false;
+            LastDownloadError = null;
+            if (_updateManager == null || _pendingUpdate == null)
+            {
+                LastDownloadError = "Update manager or pending update information not available.";
+                return false;
+            }
 
             try
             {
@@ -95,6 +102,7 @@ namespace AHUVerification.App.Services
             }
             catch (Exception ex)
             {
+                LastDownloadError = ex.Message;
                 Console.WriteLine($"[UpdateService] Failed to download update: {ex.Message}");
                 return false;
             }

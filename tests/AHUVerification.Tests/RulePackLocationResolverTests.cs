@@ -144,5 +144,34 @@ namespace AHUVerification.Tests
             Assert.False(result.IsAutoDetected);
             Assert.Equal("None", result.SourceType);
         }
+
+        [Fact]
+        public void ResolveLocation_StaleConfiguredPath_FallsBackToDiscoveredPath()
+        {
+            string staleConfigured = @"C:\Old\NonExistent\RulePack";
+            string odCommercial = @"C:\Users\testuser\OneDrive - Johnson Controls";
+            string targetFolder = Path.Combine(odCommercial, "UNIT DETAILING VERIFICATION LIST", "RulePack");
+
+            var existingDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                odCommercial,
+                targetFolder
+            };
+            var existingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.Combine(targetFolder, "manifest.json")
+            };
+
+            var result = RulePackLocationResolver.ResolveLocation(
+                configuredPath: staleConfigured,
+                envGetter: key => key == "OneDriveCommercial" ? odCommercial : null,
+                dirExists: path => existingDirs.Contains(path),
+                fileExists: path => existingFiles.Contains(path)
+            );
+
+            Assert.Equal(targetFolder, result.Path);
+            Assert.True(result.IsAutoDetected);
+            Assert.Equal("SharePointSync", result.SourceType);
+        }
     }
 }

@@ -160,7 +160,7 @@ export const AppContent: React.FC = () => {
 
       // Auto-discover location (e.g. synced SharePoint/OneDrive) if not configured
       desktopBridge.resolveRulePackLocation(configuredPath || undefined).then(async resolved => {
-        const effectivePath = configuredPath || resolved.path;
+        const effectivePath = resolved.path;
         if (effectivePath && autoSync) {
           try {
             const updateInfo = await desktopBridge.checkRulePackUpdate(effectivePath);
@@ -189,11 +189,24 @@ export const AppContent: React.FC = () => {
             message: `New desktop app v${appUpdate.remoteVersion} detected. Downloading in background...`,
             canRestart: false
           });
-          const downloaded = await desktopBridge.downloadAppUpdate();
-          if (downloaded.success) {
+          try {
+            const downloaded = await desktopBridge.downloadAppUpdate();
+            if (downloaded.success) {
+              setAppUpdateNotice({
+                message: `App update v${appUpdate.remoteVersion} is ready to apply.`,
+                canRestart: true
+              });
+            } else {
+              setAppUpdateNotice({
+                message: `Failed to download desktop app update v${appUpdate.remoteVersion}${downloaded.error ? `: ${downloaded.error}` : '.'}`,
+                canRestart: false
+              });
+            }
+          } catch (dlErr: any) {
+            console.warn('Desktop app update download failed:', dlErr);
             setAppUpdateNotice({
-              message: `App update v${appUpdate.remoteVersion} is ready to apply.`,
-              canRestart: true
+              message: `Failed to download desktop app update v${appUpdate.remoteVersion}: ${dlErr?.message || 'Network error'}`,
+              canRestart: false
             });
           }
         }
