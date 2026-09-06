@@ -130,13 +130,13 @@ Maintain this table in place. Link each accepted entry to the exact tested snaps
 | #4, #12, #15, #17 | 2; editor integration confirmed in 3 | Phase 2 Slices P2-A & P2-B completed & accepted |
 | #14, #18 | 3 | Slice P3-A & Slice P3-B completed & accepted |
 | #20, #21 | 4 | Phase 4 completed locally across Slices P4-A, P4-B, and P4-C; packaged desktop acceptance remains a separate release gate |
-| #13, #19, #22 | 5 | Local release gate accepted; clean-checkout and target-host lifecycle remain open |
+| #13, #19, #22 | 5 | Local release gate and clean-checkout accepted; target-host lifecycle remains open |
 | #16 | Core path in 2, rendered frontend harness in 3, coverage/CI in 5 | Automated suites green; packaged desktop acceptance remains a recorded release gate |
 | #2 | 5, after all dependent and umbrella-only criteria | Open |
 
 For each slice record only: scope/contract, exact snapshot, commands/results, unresolved limits, and independent acceptance decision. Do not copy the whole task history into every update.
 
-**Current execution target:** Phase 4 is complete locally, and the Phase 5 local release gate is complete across P5-A through P5-C plus release-package hardening. Clean-checkout verification and authorized target-host installer/native lifecycle evidence remain open. Do not reopen accepted Phase 1–4 slices unless one of these checks identifies a concrete regression.
+**Current execution target:** Phase 4 is complete locally, and the Phase 5 local release gate plus clean-checkout reproducibility are complete across P5-A through P5-D. Authorized target-host installer/native lifecycle evidence remains open. Do not reopen accepted Phase 1–4 slices unless one of these checks identifies a concrete regression.
 
 ### Slice P1-A — extraction provenance parity [COMPLETED & ACCEPTED]
 
@@ -320,18 +320,18 @@ Status: Completed and accepted locally on the preserved dirty working tree at `H
 
 ### Phase 5 Slice P5-C — formatter/analyzer and solution-entry hygiene [COMPLETED LOCALLY]
 
-Status: Completed and accepted locally on the preserved dirty working tree at `HEAD 1844dc7a18b2`.
+Status: Completed and accepted locally on the clean Git-backed remediation snapshot at `HEAD 29836826b5cc`.
 - **Scope:** Exercise the conventional SDK solution formatter/analyzer and confirm the checked-in solution entry without changing runtime behavior or adding frontend tooling.
 - **Implementation:** Applied the SDK formatter's mechanical C# cleanup to the existing remediation tree. No frontend formatter/linter dependency was added; the repository's existing Node source-pattern checks remain structural checks and are documented as such.
 - **Evidence:** `dotnet format AHUVerification.sln --no-restore --severity warn --verbosity minimal` completed the scoped mechanical pass, and the follow-up `--verify-no-changes` command exited `0`. `dotnet build AHUVerification.sln -c Release --no-restore` also passed with the known WindowsBase conflict warnings.
-- **Unresolved limits:** This acceptance is local to the preserved dirty tree. Clean-checkout validation and target-host installer/native lifecycle acceptance remain open.
+- **Unresolved limits:** This acceptance is local. Target-host installer/native lifecycle acceptance remains open.
 - **Independent acceptance:** P5-C accepted locally; no new frontend dependency or external state change was introduced.
 
 ### Phase 5 Slice P5-D — release-package hardening and local publish smoke [COMPLETED LOCALLY]
 
-Status: Completed and accepted locally on the preserved dirty working tree at `HEAD 1844dc7a18b2`. This slice does not claim installer UI acceptance, code signing, publication, or complete Phase 5 exit.
+Status: Completed and accepted locally on the clean Git-backed remediation snapshot at `HEAD 29836826b5cc`. This slice does not claim installer UI acceptance, code signing, publication, or complete Phase 5 exit.
 - **Scope:** Complete the deterministic local release path after all verification gates, including pinned Velopack packaging, artifact validation, SBOM generation, checksums, and fail-fast output checks.
 - **Implementation:** Pinned `vpk` `1.2.0` checks now use the tool manifest rather than an unsupported `vpk --version` command. Local and CI release paths reject a non-empty `Releases/` directory before packaging and verify the expected setup, archive, metadata, SBOM, and checksum outputs after packaging. Added `scripts/write_release_checksums.mjs` to generate a sorted uppercase SHA-256 manifest after SBOM creation.
-- **Evidence:** `publish-release.bat 1.0.0` passed all frontend, rule-pack, .NET 205/205, coverage-floor, publish-asset, and package checks. `Releases/` contains exactly one setup executable, the portable package, the Rule Editor archive, Velopack metadata, two JSON SBOMs, and nine checksum entries. Independent verification reported `CHECKSUM_LINES=9`, `CHECKSUM_FAILURES=0`, and both SBOM files parsed as JSON. Elevated process smoke kept both packaged executables alive and responsive with their intended main-window titles.
-- **Unresolved limits:** The session's computer-use surface has no native desktop apps, so installer execution and the full native journey were not performed. Clean-checkout validation, code signing, external CI/branch-protection changes, push/publication, and live release remain outside scope.
-- **Independent acceptance:** P5-D accepted as a local release-package gate; Phase 5 remains open only for the named clean-checkout and authorized target-host lifecycle gates.
+- **Evidence:** `publish-release.bat 1.0.0` passed all frontend, rule-pack, .NET 205/205, coverage-floor, publish-asset, and package checks from the clean Git-backed worktree. `Releases/` contains exactly one setup executable, the portable package, the Rule Editor archive, Velopack metadata, two JSON SBOMs, and nine checksum entries. Independent verification reported `CHECKSUM_LINES=9`, `CHECKSUM_FAILURES=0`, and both SBOM files parsed as JSON. Elevated process smoke kept both packaged executables alive and responsive with their intended main-window titles.
+- **Unresolved limits:** The session's computer-use surface has no native desktop apps, so installer execution and the full native journey were not performed. Code signing, external CI/branch-protection changes, push/publication, and live release remain outside scope.
+- **Independent acceptance:** P5-D accepted as a local release-package and clean-checkout gate; Phase 5 remains open only for the authorized target-host lifecycle gate.

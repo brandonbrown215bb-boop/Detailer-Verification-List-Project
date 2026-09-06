@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import fileSaver from 'file-saver';
 const saveAs = (fileSaver as any)?.saveAs || fileSaver;
 import type { Fact, SpecialQuote, ChecklistInstance, RuleDefinition, NormalizedXmlGraph } from '../types/index.ts';
+import { classifyApprovedMaterial } from './materialMapping.ts';
 
 export function exportToExcel(
   facts: Record<string, Fact>,
@@ -68,14 +69,31 @@ export function exportToExcel(
   vlData.push(['', 'LOCATION:', facts['unit.location']?.value || 'Outdoor']);
   vlData.push(['', 'KNOCKDOWN:', formatBool(facts['unit.knockdown']?.value, 'No')]);
   vlData.push(['', 'UTL:', formatBool(facts['unit.hasUTL']?.value || facts['unit.utl']?.value, 'No')]);
-  vlData.push(['', 'LINER MATERIAL', facts['unit.linerMaterial']?.value || 'STL GALV', 'GA', facts['unit.linerGauge']?.value || 22]);
-  vlData.push(['', 'SKIN MATERIAL', facts['unit.skinMaterial']?.value || 'STL GALV PPC', 'GA', facts['unit.skinGauge']?.value || 18]);
-  vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);
+  const linerMat = facts['casing.interiorMaterial']?.value || facts['unit.linerMaterial']?.value || 'STL GALV';
+  const rawLinerGa = facts['casing.interiorGauge']?.value ?? facts['unit.linerGauge']?.value ?? 22;
+  const linerGa = typeof rawLinerGa === 'number' ? rawLinerGa : (parseFloat(String(rawLinerGa)) || 22);
+  const linerUnit = typeof linerGa === 'number' && linerGa > 0 && linerGa < 1 ? 'IN' : 'GA';
+
+  const skinMat = facts['casing.exteriorMaterial']?.value || facts['unit.skinMaterial']?.value || 'STL GALV PPC';
+  const rawSkinGa = facts['casing.exteriorGauge']?.value ?? facts['unit.skinGauge']?.value ?? 18;
+  const skinGa = typeof rawSkinGa === 'number' ? rawSkinGa : (parseFloat(String(rawSkinGa)) || 18);
+  const skinUnit = typeof skinGa === 'number' && skinGa > 0 && skinGa < 1 ? 'IN' : 'GA';
+
+  const floorMat = facts['casing.floorMaterial']?.value || facts['unit.floorMaterial']?.value || 'STL GALV';
+  const defaultFloorGa = classifyApprovedMaterial(String(floorMat)) === 'aluminum' ? 0.125 : 16;
+  const rawFloorGa = facts['casing.floorGauge']?.value ?? facts['unit.floorGauge']?.value;
+  const floorGa = (typeof rawFloorGa === 'number' && rawFloorGa > 0)
+    ? rawFloorGa
+    : (parseFloat(String(rawFloorGa || '')) || defaultFloorGa);
+  const floorUnit = (typeof floorGa === 'number' && floorGa > 0 && floorGa < 1) ? 'IN' : 'GA';
+
+  vlData.push(['', 'LINER MATERIAL', linerMat, linerUnit, linerGa]);
+  vlData.push(['', 'SKIN MATERIAL', skinMat, skinUnit, skinGa]);
+  vlData.push(['', 'FLOOR MATERIAL', floorMat, floorUnit, floorGa]);
   const browserNotice = isDraft
     ? '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] [DRAFT - INCOMPLETE AUDIT]'
     : '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]';
   vlData.push(['', 'Additional Comments:', `${browserNotice} ${generalComments || 'Official OpenXML synthesis is required for production checking.'}`]);
-
   // Fill Special Quotes in columns G & H dynamically
   const maxSqRows = Math.max(sqItems.length, 10);
   for (let s = 1; s <= maxSqRows; s++) {

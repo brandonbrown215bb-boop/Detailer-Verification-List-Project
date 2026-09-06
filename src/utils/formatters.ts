@@ -178,3 +178,28 @@ export function formatDimensionSummary(
   return `${l}L × ${w}W × ${h}H`;
 }
 
+/**
+ * Formats a sheet metal gauge or plate thickness string/number into engineering display text.
+ * E.g.:
+ *   16 -> "16 GA"
+ *   0.125 -> '0.125"'
+ *   0.188 -> '0.188"'
+ *   "0.125" -> '0.125"'
+ */
+export function formatGauge(value: number | string | null | undefined, fallback?: number | string): string {
+  const val = (value !== null && value !== undefined && value !== '' && value !== 0 && value !== '0')
+    ? value
+    : fallback;
+  if (val === null || val === undefined || val === '') return '';
+  const num = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.]/g, ''));
+  if (isNaN(num) || num === 0) {
+    const raw = String(val).trim();
+    return raw ? (raw.endsWith('"') || raw.toUpperCase().endsWith('GA') ? raw : `${raw} GA`) : '';
+  }
+  if (num < 1) {
+    const str = String(val).trim();
+    return str.endsWith('"') ? str : `${num}"`;
+  }
+  return `${num} GA`;
+}
+

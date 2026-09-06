@@ -32,19 +32,19 @@ namespace AHUVerification.Core.Models
         public string ExteriorMaterialType { get; set; } = "";
 
         [JsonPropertyName("exteriorMaterialGauge")]
-        public int ExteriorMaterialGauge { get; set; } = 0;
+        public double ExteriorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("interiorMaterialType")]
         public string InteriorMaterialType { get; set; } = "";
 
         [JsonPropertyName("interiorMaterialGauge")]
-        public int InteriorMaterialGauge { get; set; } = 0;
+        public double InteriorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("floorMaterialType")]
         public string FloorMaterialType { get; set; } = "";
 
         [JsonPropertyName("floorMaterialGauge")]
-        public int FloorMaterialGauge { get; set; } = 0;
+        public double FloorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("floorMaterialGaugeString")]
         public string FloorMaterialGaugeString { get; set; } = "";
@@ -482,19 +482,19 @@ namespace AHUVerification.Core.Models
         public string ExteriorMaterial { get; set; } = "STL GALV PPC";
 
         [JsonPropertyName("exteriorGauge")]
-        public int ExteriorGauge { get; set; } = 18;
+        public double ExteriorGauge { get; set; } = 18;
 
         [JsonPropertyName("interiorMaterial")]
         public string InteriorMaterial { get; set; } = "STL GALV";
 
         [JsonPropertyName("interiorGauge")]
-        public int InteriorGauge { get; set; } = 22;
+        public double InteriorGauge { get; set; } = 22;
 
         [JsonPropertyName("floorMaterial")]
         public string FloorMaterial { get; set; } = "STL GALV";
 
         [JsonPropertyName("floorGauge")]
-        public int FloorGauge { get; set; } = 16;
+        public double FloorGauge { get; set; } = 16;
 
         [JsonPropertyName("floorGaugeString")]
         public string FloorGaugeString { get; set; } = "16";
@@ -530,7 +530,7 @@ namespace AHUVerification.Core.Models
         public string ExteriorMaterial { get; set; } = "STL GALV PPC";
 
         [JsonPropertyName("exteriorGauge")]
-        public int ExteriorGauge { get; set; } = 18;
+        public double ExteriorGauge { get; set; } = 18;
 
         [JsonPropertyName("exteriorPaint")]
         public string ExteriorPaint { get; set; } = "None";
@@ -539,7 +539,7 @@ namespace AHUVerification.Core.Models
         public string InteriorMaterial { get; set; } = "STL GALV";
 
         [JsonPropertyName("interiorGauge")]
-        public int InteriorGauge { get; set; } = 22;
+        public double InteriorGauge { get; set; } = 22;
 
         [JsonPropertyName("interiorPaint")]
         public string InteriorPaint { get; set; } = "None";

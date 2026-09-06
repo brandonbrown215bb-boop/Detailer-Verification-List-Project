@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using Xunit;
+using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
 using AHUVerification.Core.Services;
 
@@ -112,6 +113,59 @@ namespace AHUVerification.Tests
                 Assert.True(facts.ContainsKey("unit.isStacked"));
                 Assert.True(facts.ContainsKey("unit.hasFloorDrains"));
             }
+        }
+
+        [Fact]
+        public void Parse_6S07000701_ExtractsFloorMaterialAuthoritatively()
+        {
+            string upzPath = TestPathHelper.GetFixturePath("UPZ_Unit_Examples/6S-070007-01.upz");
+            if (!File.Exists(upzPath)) return;
+
+            var extractor = new UpzBundleExtractor();
+            var bundle = extractor.Extract(upzPath);
+            Assert.NotNull(bundle);
+
+            var parser = new NormalizedXmlParser();
+            var graph = parser.Parse(bundle.RawConfigXml);
+            Assert.NotNull(graph);
+
+            // Verify floor material on unit options
+            Assert.Equal("ALM DIA", graph.UnitOptions.Materials.FloorMaterialType);
+            Assert.Equal("0.125", graph.UnitOptions.Materials.FloorMaterialGaugeString);
+            Assert.Equal(0.125, graph.UnitOptions.Materials.FloorMaterialGauge);
+
+            // Verify floor material is NOT in missing facts
+            Assert.DoesNotContain("casing.floorMaterial", graph.MissingFacts);
+
+            // Verify floor drains have 3.125" hole diameter derived from ALM DIA
+            Assert.True(graph.FloorDrains.Count > 0);
+            foreach (var fd in graph.FloorDrains)
+            {
+                Assert.Equal(3.125, fd.HoleDiameter);
+            }
+
+            // Verify segment floor material and gauge from surfaceDetail_Bottom
+            var segment = graph.Segments.FirstOrDefault();
+            Assert.NotNull(segment);
+            Assert.Equal("ALM DIA", segment.Casing.FloorMaterial);
+            Assert.Equal("0.188", segment.Casing.FloorGaugeString);
+            Assert.Equal(0.188, segment.Casing.FloorGauge);
+            Assert.Equal("ALM DIA", segment.Surfaces.Bottom.InteriorMaterial);
+            Assert.Equal(0.188, segment.Surfaces.Bottom.InteriorGauge);
+
+            // Verify FactExtractor produces authoritative Known fact for casing.floorMaterial
+            var factExtractor = new FactExtractor();
+            var facts = factExtractor.ExtractFacts(graph, bundle.OrderRevision);
+            Assert.NotNull(facts);
+            Assert.True(facts.ContainsKey("casing.floorMaterial"));
+            var floorFact = facts["casing.floorMaterial"];
+            Assert.Equal("ALM DIA", floorFact.Value);
+            Assert.Equal(FactStatus.Known, floorFact.Status);
+            Assert.Equal(FactConfidence.Authoritative, floorFact.Confidence);
+
+            Assert.True(facts.ContainsKey("casing.floorGauge"));
+            var floorGaugeFact = facts["casing.floorGauge"];
+            Assert.Equal(0.125, floorGaugeFact.Value);
         }
     }
 }

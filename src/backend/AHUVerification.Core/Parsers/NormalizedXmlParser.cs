@@ -135,14 +135,14 @@ namespace AHUVerification.Core.Parsers
                 if (constOptNode != null)
                 {
                     graph.UnitOptions.Materials.ExteriorMaterialType = GetChildText(constOptNode, "exteriorMaterialType", "");
-                    graph.UnitOptions.Materials.ExteriorMaterialGauge = GetChildInt(constOptNode, "exteriorMaterialGauge", 0);
+                    graph.UnitOptions.Materials.ExteriorMaterialGauge = GetChildDouble(constOptNode, "exteriorMaterialGauge", 0);
                     graph.UnitOptions.Materials.InteriorMaterialType = GetChildText(constOptNode, "interiorMaterialType", "");
-                    graph.UnitOptions.Materials.InteriorMaterialGauge = GetChildInt(constOptNode, "interiorMaterialGauge", 0);
+                    graph.UnitOptions.Materials.InteriorMaterialGauge = GetChildDouble(constOptNode, "interiorMaterialGauge", 0);
                     graph.UnitOptions.Materials.FloorMaterialType = GetChildText(constOptNode, "floorMaterialType", "");
 
                     string floorGaugeRaw = GetChildText(constOptNode, "floorMaterialGauge", "");
                     graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
-                    graph.UnitOptions.Materials.FloorMaterialGauge = double.TryParse(floorGaugeRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out double fgVal) ? (int)Math.Round(fgVal) : 0;
+                    graph.UnitOptions.Materials.FloorMaterialGauge = double.TryParse(floorGaugeRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out double fgVal) ? fgVal : 0;
 
                     string rawStyle = GetChildText(constOptNode, "housingStyle", "");
                     graph.UnitOptions.Materials.HousingStyle = rawStyle;
@@ -346,7 +346,9 @@ namespace AHUVerification.Core.Parsers
                     var leftSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Left", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessLeft);
                     var rightSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Right", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessRight);
                     var topSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Top", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.ExteriorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.InteriorMaterialType, graph.UnitOptions.Materials.InteriorMaterialGauge, graph.UnitOptions.Materials.InteriorPaintType, graph.UnitOptions.Materials.HousingThicknessTop);
-                    var bottomSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Bottom", graph.UnitOptions.Materials.ExteriorMaterialType, graph.UnitOptions.Materials.FloorMaterialGauge, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.FloorMaterialType, graph.UnitOptions.Materials.FloorMaterialGauge, graph.UnitOptions.Materials.FloorPaintType, 0);
+                    double defaultFloorGa = ApprovedFloorDrainHoleDiameter(graph.UnitOptions.Materials.FloorMaterialType) == 3.125 ? 0.125 : 16;
+                    double unitFloorGa = graph.UnitOptions.Materials.FloorMaterialGauge > 0 ? graph.UnitOptions.Materials.FloorMaterialGauge : defaultFloorGa;
+                    var bottomSurfDetail = ParseSurfaceDetail(constOpt, "surfaceDetail_Bottom", graph.UnitOptions.Materials.ExteriorMaterialType, unitFloorGa, graph.UnitOptions.Materials.ExteriorPaintType, graph.UnitOptions.Materials.FloorMaterialType, unitFloorGa, graph.UnitOptions.Materials.FloorPaintType, 0);
 
                     var surfaces = new SegmentSurfaces
                     {
@@ -358,10 +360,15 @@ namespace AHUVerification.Core.Parsers
                         Bottom = bottomSurfDetail
                     };
 
-                    var frontSurf = constOpt != null ? FindElement(constOpt, "surfaceDetail_Front") : null;
-
-                    string segFloorGaugeRaw = frontSurf != null ? GetChildText(frontSurf, "floorMaterialGauge", graph.UnitOptions.Materials.FloorMaterialGaugeString) : graph.UnitOptions.Materials.FloorMaterialGaugeString;
-                    int segFloorGaugeInt = int.TryParse(segFloorGaugeRaw, out int sfg) ? sfg : graph.UnitOptions.Materials.FloorMaterialGauge;
+                    var botSurf = constOpt != null ? FindElement(constOpt, "surfaceDetail_Bottom") : null;
+                    string segFloorGaugeRaw = botSurf != null
+                        ? (GetChildText(botSurf, "interiorMaterialGauge", "") is { Length: > 0 } img ? img : GetChildText(botSurf, "floorMaterialGauge", graph.UnitOptions.Materials.FloorMaterialGaugeString))
+                        : graph.UnitOptions.Materials.FloorMaterialGaugeString;
+                    if (string.IsNullOrWhiteSpace(segFloorGaugeRaw))
+                        segFloorGaugeRaw = graph.UnitOptions.Materials.FloorMaterialGaugeString;
+                    double segFloorGauge = double.TryParse(segFloorGaugeRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out double sfgD) && sfgD > 0
+                        ? sfgD
+                        : (graph.UnitOptions.Materials.FloorMaterialGauge > 0 ? graph.UnitOptions.Materials.FloorMaterialGauge : defaultFloorGa);
 
                     var casing = new CasingDetail
                     {
@@ -369,8 +376,8 @@ namespace AHUVerification.Core.Parsers
                         ExteriorGauge = frontSurfDetail.ExteriorGauge,
                         InteriorMaterial = frontSurfDetail.InteriorMaterial,
                         InteriorGauge = frontSurfDetail.InteriorGauge,
-                        FloorMaterial = graph.UnitOptions.Materials.FloorMaterialType,
-                        FloorGauge = segFloorGaugeInt,
+                        FloorMaterial = !string.IsNullOrWhiteSpace(bottomSurfDetail.InteriorMaterial) ? bottomSurfDetail.InteriorMaterial : graph.UnitOptions.Materials.FloorMaterialType,
+                        FloorGauge = segFloorGauge,
                         FloorGaugeString = segFloorGaugeRaw,
                         HousingThickness = frontSurfDetail.HousingThickness,
                         HousingThicknessFront = graph.UnitOptions.Materials.HousingThicknessFront,
@@ -544,7 +551,8 @@ namespace AHUVerification.Core.Parsers
             {
                 int opIdx = 1;
                 double? defaultDrainHoleDia = ApprovedFloorDrainHoleDiameter(graph.UnitOptions.Materials.FloorMaterialType);
-                if (defaultDrainHoleDia == null) missingFacts.Add("casing.floorMaterial");
+                if (defaultDrainHoleDia == null && string.IsNullOrWhiteSpace(graph.UnitOptions.Materials.FloorMaterialType))
+                    missingFacts.Add("casing.floorMaterial");
 
                 foreach (var opEl in openingListNode.Elements())
                 {
@@ -782,16 +790,16 @@ namespace AHUVerification.Core.Parsers
             if (string.IsNullOrWhiteSpace(rawMaterial)) return null;
             var tokens = rawMaterial.Trim().ToUpperInvariant().Replace('_', ' ').Replace('-', ' ')
                 .Split(new[] { ' ', '\t', '\r', '\n', '/', ',' }, StringSplitOptions.RemoveEmptyEntries);
-            bool IsGauge(string token) => token.All(char.IsDigit) || (token.EndsWith("GA", StringComparison.Ordinal) && token[..^2].All(char.IsDigit));
+            bool IsGauge(string token) => double.TryParse(token.EndsWith("GA", StringComparison.OrdinalIgnoreCase) ? token[..^2] : token, NumberStyles.Any, CultureInfo.InvariantCulture, out _);
             bool Allowed(HashSet<string> allowed) => tokens.All(token => allowed.Contains(token) || IsGauge(token));
-            var aluminum = new HashSet<string>(new[] { "AL", "ALUM", "ALUMINUM", "TREAD", "DIAMOND", "PLATE", "PPC" }, StringComparer.Ordinal);
-            var stainless = new HashSet<string>(new[] { "SS", "SS304", "STAINLESS", "STEEL", "304", "316" }, StringComparer.Ordinal);
-            var galvanized = new HashSet<string>(new[] { "STL", "GALV", "PPC" }, StringComparer.Ordinal);
-            if (tokens.Any(t => t is "AL" or "ALUM" or "ALUMINUM") && Allowed(aluminum))
+            var aluminum = new HashSet<string>(new[] { "AL", "ALUM", "ALUMINUM", "ALM", "TREAD", "DIAMOND", "DIA", "PLATE", "PPC", "EMB", "SHT" }, StringComparer.Ordinal);
+            var stainless = new HashSet<string>(new[] { "SS", "SS304", "SST", "SST304", "STAINLESS", "STEEL", "304", "316" }, StringComparer.Ordinal);
+            var galvanized = new HashSet<string>(new[] { "STL", "GALV", "GALVANIZED", "STEEL", "PPC" }, StringComparer.Ordinal);
+            if (tokens.Any(t => t is "AL" or "ALUM" or "ALUMINUM" or "ALM") && Allowed(aluminum))
                 return 3.125;
-            if (tokens.Any(t => t is "SS" or "SS304" or "STAINLESS") && Allowed(stainless))
+            if (tokens.Any(t => t is "SS" or "SS304" or "SST" or "SST304" or "STAINLESS") && Allowed(stainless))
                 return 1.50;
-            if (tokens.Contains("STL") && tokens.Contains("GALV") && Allowed(galvanized)) return 1.50;
+            if (((tokens.Contains("STL") && (tokens.Contains("GALV") || tokens.Contains("GALVANIZED"))) || tokens.Contains("GALVANIZED")) && Allowed(galvanized)) return 1.50;
             return null;
         }
 
@@ -814,16 +822,16 @@ namespace AHUVerification.Core.Parsers
             };
         }
 
-        private static SurfaceDetail ParseSurfaceDetail(XElement? constOpt, string surfaceTagName, string defaultExtMat, int defaultExtGa, string defaultExtPaint, string defaultIntMat, int defaultIntGa, string defaultIntPaint, double defaultHousingThk)
+        private static SurfaceDetail ParseSurfaceDetail(XElement? constOpt, string surfaceTagName, string defaultExtMat, double defaultExtGa, string defaultExtPaint, string defaultIntMat, double defaultIntGa, string defaultIntPaint, double defaultHousingThk)
         {
             var node = constOpt != null ? FindElement(constOpt, surfaceTagName) : null;
             return new SurfaceDetail
             {
                 ExteriorMaterial = node != null ? GetChildText(node, "exteriorMaterialType", defaultExtMat) : defaultExtMat,
-                ExteriorGauge = node != null ? GetChildInt(node, "exteriorMaterialGauge", defaultExtGa) : defaultExtGa,
+                ExteriorGauge = node != null ? GetChildDouble(node, "exteriorMaterialGauge", defaultExtGa) : defaultExtGa,
                 ExteriorPaint = node != null ? GetChildText(node, "exteriorPaintType", defaultExtPaint) : defaultExtPaint,
                 InteriorMaterial = node != null ? GetChildText(node, "interiorMaterialType", defaultIntMat) : defaultIntMat,
-                InteriorGauge = node != null ? GetChildInt(node, "interiorMaterialGauge", defaultIntGa) : defaultIntGa,
+                InteriorGauge = node != null ? GetChildDouble(node, "interiorMaterialGauge", defaultIntGa) : defaultIntGa,
                 InteriorPaint = node != null ? GetChildText(node, "interiorPaintType", defaultIntPaint) : defaultIntPaint,
                 HousingThickness = node != null ? GetChildDouble(node, "housingThickness", defaultHousingThk) : defaultHousingThk
             };

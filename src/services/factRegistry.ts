@@ -359,11 +359,17 @@ export function extractFactsFromGraph(
     '/root:AHU/unitOptions/defaultConstructionOptions/interiorMaterialGauge'
   );
 
+  const floorMat = graph.unitOptions.materials.floorMaterialType || 'STL GALV';
+  const defaultFloorGauge = classifyApprovedMaterial(floorMat) === 'aluminum' ? 0.125 : 16;
+  const floorGaugeVal = (typeof graph.unitOptions.materials.floorMaterialGauge === 'number' && graph.unitOptions.materials.floorMaterialGauge > 0)
+    ? graph.unitOptions.materials.floorMaterialGauge
+    : (parseFloat(graph.unitOptions.materials.floorMaterialGaugeString || '') || defaultFloorGauge);
+
   facts['casing.floorMaterial'] = createFact(
     'casing.floorMaterial',
     'Floor Material',
     'Housing & Materials',
-    graph.unitOptions.materials.floorMaterialType || 'STL GALV',
+    floorMat,
     'Known',
     'Authoritative',
     '/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialType'
@@ -373,7 +379,7 @@ export function extractFactsFromGraph(
     'casing.floorGauge',
     'Floor Gauge',
     'Housing & Materials',
-    graph.unitOptions.materials.floorMaterialGauge || 16,
+    floorGaugeVal,
     'Known',
     'Authoritative',
     '/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialGauge'

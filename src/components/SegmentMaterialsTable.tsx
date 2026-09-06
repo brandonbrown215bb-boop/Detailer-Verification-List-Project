@@ -8,6 +8,8 @@ import {
   Maximize2,
   Minimize2
 } from 'lucide-react';
+import { formatGauge } from '../utils/formatters';
+import { classifyApprovedMaterial } from '../services/materialMapping';
 
 interface SegmentMaterialsTableProps {
   graph: NormalizedXmlGraph;
@@ -82,14 +84,14 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
             <span className="text-slate-500 dark:text-slate-400">Exterior:</span>
             <span className="text-slate-800 dark:text-slate-200 font-medium">
               {surface.exteriorMaterial}{' '}
-              <span className="font-bold text-blue-600 dark:text-blue-400">({surface.exteriorGauge} GA)</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">({formatGauge(surface.exteriorGauge)})</span>
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400">Interior:</span>
             <span className="text-slate-800 dark:text-slate-200 font-medium">
               {surface.interiorMaterial}{' '}
-              <span className="font-bold text-indigo-600 dark:text-indigo-400">({surface.interiorGauge} GA)</span>
+              <span className="font-bold text-indigo-600 dark:text-indigo-400">({formatGauge(surface.interiorGauge)})</span>
             </span>
           </div>
           {surface.exteriorPaint && surface.exteriorPaint !== 'None' && (
@@ -113,7 +115,7 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
             {unitMaterials.exteriorMaterialType || 'STL GALV PPC'}
           </div>
           <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300 mt-0.5">
-            Gauge: <span className="font-bold text-blue-600 dark:text-blue-400">{unitMaterials.exteriorMaterialGauge || 18} GA</span>
+            Gauge: <span className="font-bold text-blue-600 dark:text-blue-400">{formatGauge(unitMaterials.exteriorMaterialGauge, 18)}</span>
           </div>
         </div>
 
@@ -123,14 +125,14 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
             {unitMaterials.interiorMaterialType || 'STL GALV'}
           </div>
           <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300 mt-0.5">
-            Gauge: <span className="font-bold text-indigo-600 dark:text-indigo-400">{unitMaterials.interiorMaterialGauge || 22} GA</span>
+            Gauge: <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatGauge(unitMaterials.interiorMaterialGauge, 22)}</span>
           </div>
         </div>
 
         <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800">
           <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Floor & Insulation Baseline</div>
           <div className="text-xs font-bold text-slate-900 dark:text-white mt-1">
-            {unitMaterials.floorMaterialType || 'STL GALV'} ({unitMaterials.floorMaterialGauge || 16} GA)
+            {unitMaterials.floorMaterialType || 'STL GALV'} ({formatGauge(unitMaterials.floorMaterialGaugeString || unitMaterials.floorMaterialGauge, classifyApprovedMaterial(unitMaterials.floorMaterialType) === 'aluminum' ? 0.125 : 16)})
           </div>
           <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300 mt-0.5">
             {unitMaterials.housingStyle || 'ThermalBreak'} • {unitMaterials.insulationType || 'Foam'}
@@ -248,22 +250,22 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
                         {parentSkid ? parentSkid.name : '-'}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 dark:text-slate-300">
-                        <span>{extMat}</span> <span className="font-bold text-blue-600 dark:text-blue-400">({extGa} GA)</span>
+                        <span>{extMat}</span> <span className="font-bold text-blue-600 dark:text-blue-400">({formatGauge(extGa)})</span>
                       </td>
                       <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 dark:text-slate-300">
-                        <span>{intMat}</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">({intGa} GA)</span>
+                        <span>{intMat}</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">({formatGauge(intGa)})</span>
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono text-[11px]">
                         {wallThk}"
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono text-[11px]">
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                          5 Surfaces
+                          {seg.surfaces?.bottom ? '6 Surfaces' : '5 Surfaces'}
                         </span>
                       </td>
                     </tr>
 
-                    {/* Expandable 5-Surface Detail Drawer */}
+                    {/* Expandable Surface Detail Drawer */}
                     {isExpanded && (
                       <tr className="bg-slate-50/50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800">
                         <td colSpan={8} className="p-4 pl-10">
@@ -273,16 +275,17 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
                                 {seg.typeCode} ({seg.name}) • Surface Material Details
                               </span>
                               <span className="text-[10px] font-mono text-slate-400">
-                                Left • Front • Right • Rear • Top
+                                Left • Front • Right • Rear • Top{seg.surfaces?.bottom ? ' • Bottom (Floor)' : ''}
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                            <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${seg.surfaces?.bottom ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2.5`}>
                               {renderFaceCard('Left Surface', leftSurf)}
                               {renderFaceCard('Front Surface', frontSurf)}
                               {renderFaceCard('Right Surface', rightSurf)}
                               {renderFaceCard('Rear Surface', rearSurf)}
                               {renderFaceCard('Top Surface', topSurf)}
+                              {seg.surfaces?.bottom && renderFaceCard('Bottom (Floor)', getSurface(seg, 'bottom'))}
                             </div>
                           </div>
                         </td>
@@ -295,7 +298,7 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
           </table>
         </div>
       ) : (
-        /* VIEW 2: Comprehensive 5-Surface Side-by-Side Matrix Table */
+        /* VIEW 2: Comprehensive Surface Side-by-Side Matrix Table */
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -308,6 +311,7 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
                 <th className="py-2.5 px-3">Right Surface</th>
                 <th className="py-2.5 px-3">Rear Surface</th>
                 <th className="py-2.5 px-3">Top Surface</th>
+                {segments.some(s => !!s.surfaces?.bottom) && <th className="py-2.5 px-3">Bottom (Floor)</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
@@ -318,14 +322,16 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
                 const right = getSurface(seg, 'right');
                 const rear = getSurface(seg, 'rear');
                 const top = getSurface(seg, 'top');
+                const bottom = seg.surfaces?.bottom ? getSurface(seg, 'bottom') : null;
+                const hasAnyBottom = segments.some(s => !!s.surfaces?.bottom);
 
                 const renderMatrixCell = (surf: SurfaceDetail) => (
                   <div className="font-mono text-[11px] space-y-0.5">
                     <div className="text-slate-800 dark:text-slate-200">
-                      <span>{surf.exteriorMaterial}</span> <span className="font-bold text-blue-600 dark:text-blue-400">({surf.exteriorGauge}G)</span>
+                      <span>{surf.exteriorMaterial}</span> <span className="font-bold text-blue-600 dark:text-blue-400">({formatGauge(surf.exteriorGauge)})</span>
                     </div>
                     <div className="text-slate-600 dark:text-slate-400 text-[10px]">
-                      <span>{surf.interiorMaterial}</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">({surf.interiorGauge}G)</span> • {surf.housingThickness}"
+                      <span>{surf.interiorMaterial}</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">({formatGauge(surf.interiorGauge)})</span> • {surf.housingThickness}"
                     </div>
                   </div>
                 );
@@ -346,6 +352,11 @@ export const SegmentMaterialsTable: React.FC<SegmentMaterialsTableProps> = ({ gr
                     <td className="py-2.5 px-3">{renderMatrixCell(right)}</td>
                     <td className="py-2.5 px-3">{renderMatrixCell(rear)}</td>
                     <td className="py-2.5 px-3">{renderMatrixCell(top)}</td>
+                    {hasAnyBottom && (
+                      <td className="py-2.5 px-3">
+                        {bottom ? renderMatrixCell(bottom) : <span className="text-slate-400 font-mono text-[11px]">-</span>}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

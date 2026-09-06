@@ -9,14 +9,14 @@ export function classifyApprovedMaterial(value: string | null | undefined): Appr
   const normalized = normalizeMaterialTokens(value);
   if (!normalized) return 'unknown';
   const tokens = new Set(normalized.split(' '));
-  const isGauge = (token: string) => /^\d+(GA)?$/.test(token);
+  const isGauge = (token: string) => /^\d+(\.\d+)?(GA)?$/i.test(token);
   const isAllowed = (allowed: Set<string>) => [...tokens].every(token => allowed.has(token) || isGauge(token));
-  const aluminum = new Set(['AL', 'ALUM', 'ALUMINUM', 'TREAD', 'DIAMOND', 'PLATE', 'PPC']);
-  const stainless = new Set(['SS', 'SS304', 'STAINLESS', 'STEEL', '304', '316']);
-  const galvanized = new Set(['STL', 'GALV', 'PPC']);
-  if ([...tokens].some(token => ['AL', 'ALUM', 'ALUMINUM'].includes(token)) && isAllowed(aluminum)) return 'aluminum';
-  if ([...tokens].some(token => ['SS', 'SS304', 'STAINLESS'].includes(token)) && isAllowed(stainless)) return 'stainless';
-  if (tokens.has('STL') && tokens.has('GALV') && isAllowed(galvanized)) return 'galvanized';
+  const aluminum = new Set(['AL', 'ALUM', 'ALUMINUM', 'ALM', 'TREAD', 'DIAMOND', 'DIA', 'PLATE', 'PPC', 'EMB', 'SHT']);
+  const stainless = new Set(['SS', 'SS304', 'SST', 'SST304', 'STAINLESS', 'STEEL', '304', '316']);
+  const galvanized = new Set(['STL', 'GALV', 'GALVANIZED', 'STEEL', 'PPC']);
+  if ([...tokens].some(token => ['AL', 'ALUM', 'ALUMINUM', 'ALM'].includes(token)) && isAllowed(aluminum)) return 'aluminum';
+  if ([...tokens].some(token => ['SS', 'SS304', 'SST', 'SST304', 'STAINLESS'].includes(token)) && isAllowed(stainless)) return 'stainless';
+  if (((tokens.has('STL') && (tokens.has('GALV') || tokens.has('GALVANIZED'))) || tokens.has('GALVANIZED')) && isAllowed(galvanized)) return 'galvanized';
   return 'unknown';
 }
 

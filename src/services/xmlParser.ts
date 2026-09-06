@@ -19,7 +19,7 @@ import type {
   SegmentSurfaces
 } from '../types/index.ts';
 import { SEGMENT_NAMES } from '../utils/segmentCatalog.ts';
-import { approvedFloorDrainHoleDiameter } from './materialMapping.ts';
+import { approvedFloorDrainHoleDiameter, classifyApprovedMaterial } from './materialMapping.ts';
 import { DOCUMENT_SCHEMA_VERSION } from './version.ts';
 
 function getElements(parent: Element | Document, tagName: string): Element[] {
@@ -88,10 +88,10 @@ function parseSurfaceNode(
   const node = constOpt ? getElements(constOpt, surfaceTag)[0] : null;
   return {
     exteriorMaterial: node ? getChildText(node, 'exteriorMaterialType', defaults.extMat) : defaults.extMat,
-    exteriorGauge: node ? Math.round(getChildNumber(node, 'exteriorMaterialGauge', defaults.extGa)) : Math.round(defaults.extGa),
+    exteriorGauge: node ? getChildNumber(node, 'exteriorMaterialGauge', defaults.extGa) : defaults.extGa,
     exteriorPaint: node ? getChildText(node, 'exteriorPaintType', defaults.extPaint) : defaults.extPaint,
     interiorMaterial: node ? getChildText(node, 'interiorMaterialType', defaults.intMat) : defaults.intMat,
-    interiorGauge: node ? Math.round(getChildNumber(node, 'interiorMaterialGauge', defaults.intGa)) : Math.round(defaults.intGa),
+    interiorGauge: node ? getChildNumber(node, 'interiorMaterialGauge', defaults.intGa) : defaults.intGa,
     interiorPaint: node ? getChildText(node, 'interiorPaintType', defaults.intPaint) : defaults.intPaint,
     housingThickness: node ? getChildNumber(node, 'housingThickness', defaults.housingThk) : defaults.housingThk
   };
@@ -172,8 +172,8 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   if (!defaultConstNode || !housingStyle || (!normalizedHousingStyle.includes('thermalbreak') && normalizedHousingStyle !== 'standard')) missingFacts.add('unit.shellType');
 
   const floorMaterialGaugeRaw = defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialGauge', '') : '';
-  const parsedFloorGauge = parseInt(floorMaterialGaugeRaw, 10);
-  const floorMaterialGaugeInt = Number.isFinite(parsedFloorGauge) ? parsedFloorGauge : 0;
+  const parsedFloorGauge = parseFloat(floorMaterialGaugeRaw);
+  const floorMaterialGaugeNum = Number.isFinite(parsedFloorGauge) ? parsedFloorGauge : 0;
   if (!defaultConstNode || !floorMaterialGaugeRaw || !Number.isFinite(parsedFloorGauge)) missingFacts.add('casing.floorGauge');
 
   const unitOptions = {
@@ -187,7 +187,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     lipHeight: 0,
     isSeismic,
     noa,
-    noaRating: noa ? 'NOA' : 'N/A',
+    noaRating: (unitOptNode ? getChildText(unitOptNode, 'noaRating', '') : '') || (noa ? 'NOA' : 'N/A'),
     thermalBreak,
     primaryAccessSide: unitOptNode ? getChildText(unitOptNode, 'primaryAccessSide', 'Left') : 'Left',
     defaultUnitBaseHeight: unitOptNode ? getChildNumber(unitOptNode, 'defaultUnitBaseHeight', 0) : 0,
@@ -197,7 +197,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
       interiorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'interiorMaterialType', '') : '',
       interiorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'interiorMaterialGauge', 0)) : 0,
       floorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialType', '') : '',
-      floorMaterialGauge: floorMaterialGaugeInt,
+      floorMaterialGauge: floorMaterialGaugeNum,
       floorMaterialGaugeString: floorMaterialGaugeRaw,
       housingStyle,
       insulationType: defaultConstNode ? getChildText(defaultConstNode, 'insulationType', '') : '',
@@ -354,11 +354,12 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
         ...defaultMats,
         housingThk: unitOptions.materials.housingThicknessTop || defaultMats.housingThk
       });
+      const defaultFloorGa = classifyApprovedMaterial(unitOptions.materials.floorMaterialType) === 'aluminum' ? 0.125 : 16;
       const bottomSurfDetail = parseSurfaceNode(constOpt, 'surfaceDetail_Bottom', {
         ...defaultMats,
-        extGa: unitOptions.materials.floorMaterialGauge || 16,
+        extGa: unitOptions.materials.floorMaterialGauge || defaultFloorGa,
         intMat: unitOptions.materials.floorMaterialType || defaultMats.intMat,
-        intGa: unitOptions.materials.floorMaterialGauge || 16,
+        intGa: unitOptions.materials.floorMaterialGauge || defaultFloorGa,
         housingThk: 0
       });
 
@@ -371,18 +372,23 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
         bottom: bottomSurfDetail
       };
 
-      const frontSurf = constOpt ? getElements(constOpt, 'surfaceDetail_Front')[0] : null;
-      const segFloorGaugeRaw = frontSurf ? getChildText(frontSurf, 'floorMaterialGauge', unitOptions.materials.floorMaterialGaugeString) : unitOptions.materials.floorMaterialGaugeString;
-      const segFloorGaugeInt = parseInt(segFloorGaugeRaw, 10) || unitOptions.materials.floorMaterialGauge;
+      const bottomSurfNode = constOpt ? getElements(constOpt, 'surfaceDetail_Bottom')[0] : null;
+      const segFloorGaugeRaw = bottomSurfNode
+        ? (getChildText(bottomSurfNode, 'interiorMaterialGauge', '') || getChildText(bottomSurfNode, 'floorMaterialGauge', unitOptions.materials.floorMaterialGaugeString || ''))
+        : (unitOptions.materials.floorMaterialGaugeString || '');
+      const parsedSegFloorGa = parseFloat(segFloorGaugeRaw);
+      const segFloorGaugeNum = Number.isFinite(parsedSegFloorGa) && parsedSegFloorGa > 0
+        ? parsedSegFloorGa
+        : (unitOptions.materials.floorMaterialGauge || defaultFloorGa);
 
       const casing = {
         exteriorMaterial: frontSurfDetail.exteriorMaterial,
         exteriorGauge: frontSurfDetail.exteriorGauge,
         interiorMaterial: frontSurfDetail.interiorMaterial,
         interiorGauge: frontSurfDetail.interiorGauge,
-        floorMaterial: unitOptions.materials.floorMaterialType,
-        floorGauge: segFloorGaugeInt,
-        floorGaugeString: segFloorGaugeRaw,
+        floorMaterial: bottomSurfDetail.interiorMaterial || unitOptions.materials.floorMaterialType || 'STL GALV',
+        floorGauge: segFloorGaugeNum,
+        floorGaugeString: segFloorGaugeRaw || String(segFloorGaugeNum),
         housingThickness: frontSurfDetail.housingThickness,
         housingThicknessFront: unitOptions.materials.housingThicknessFront,
         housingThicknessTop: unitOptions.materials.housingThicknessTop,
