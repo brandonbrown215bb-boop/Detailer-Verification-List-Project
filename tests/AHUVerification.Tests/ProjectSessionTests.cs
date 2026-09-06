@@ -325,5 +325,130 @@ namespace AHUVerification.Tests
             Assert.True(result.IsConflict);
             Assert.Contains("Session mismatch", result.ErrorMessage);
         }
+
+        [Fact]
+        public void BatchOverrideFacts_ValidOverrides_AppliesAllAtomicallyIncrementsRevisionOnce()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true
+            };
+            var initial = service.OpenSource(openCmd, _activePack, 1);
+
+            var batchCmd = new BatchOverrideFactsCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                Overrides = new System.Collections.Generic.List<BatchFactOverrideItem>
+                {
+                    new BatchFactOverrideItem { FactId = "unit.jobName", Value = "Batch Job Name", Author = "Detailer" },
+                    new BatchFactOverrideItem { FactId = "unit.comNumber", Value = "COM-999999", Author = "Detailer" },
+                    new BatchFactOverrideItem { FactId = "unit.isSeismic", Value = false, Author = "Detailer" },
+                    new BatchFactOverrideItem { FactId = "unit.noa", Value = false, Author = "Detailer" }
+                }
+            };
+
+            var result = service.BatchOverrideFacts(batchCmd);
+
+            Assert.True(result.Success);
+            Assert.Equal(2, result.Revision);
+            Assert.Equal("Batch Job Name", result.Snapshot!.Facts["unit.jobName"].Value);
+            Assert.Equal("COM-999999", result.Snapshot.Facts["unit.comNumber"].Value);
+            Assert.Equal(false, result.Snapshot.Facts["unit.isSeismic"].Value);
+            Assert.Equal(false, result.Snapshot.Facts["unit.noa"].Value);
+            Assert.True(result.Snapshot.IsDirty);
+        }
+
+        [Fact]
+        public void ReorderSpecialQuotes_ValidAssignments_ReordersSlotsAtomically()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true
+            };
+            var initial = service.OpenSource(openCmd, _activePack, 1);
+
+            // Add two SQs
+            service.UpdateSpecialQuote(new UpdateSpecialQuoteCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                SpecialQuote = new SpecialQuote { Id = "sq-1", Slot = 1, Text = "First SQ" }
+            });
+            service.UpdateSpecialQuote(new UpdateSpecialQuoteCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 2,
+                SpecialQuote = new SpecialQuote { Id = "sq-2", Slot = 2, Text = "Second SQ" }
+            });
+
+            // Reorder
+            var reorderResult = service.ReorderSpecialQuotes(new ReorderSpecialQuotesCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 3,
+                Assignments = new System.Collections.Generic.List<SpecialQuoteSlotAssignment>
+                {
+                    new SpecialQuoteSlotAssignment { QuoteId = "sq-1", Slot = 2 },
+                    new SpecialQuoteSlotAssignment { QuoteId = "sq-2", Slot = 1 }
+                }
+            });
+
+            Assert.True(reorderResult.Success);
+            Assert.Equal(4, reorderResult.Revision);
+            Assert.Equal(2, reorderResult.Snapshot!.SpecialQuotes.Count);
+            Assert.Equal("sq-2", reorderResult.Snapshot.SpecialQuotes[0].Id);
+            Assert.Equal(1, reorderResult.Snapshot.SpecialQuotes[0].Slot);
+            Assert.Equal("sq-1", reorderResult.Snapshot.SpecialQuotes[1].Id);
+            Assert.Equal(2, reorderResult.Snapshot.SpecialQuotes[1].Slot);
+        }
+
+        [Fact]
+        public void OpenSource_WithInitialHydratedState_PreservesStateAndChecklistOverrides()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+
+            var initialOverrides = new System.Collections.Generic.Dictionary<string, Fact>
+            {
+                ["unit.jobName"] = new Fact { Key = "unit.jobName", Value = "Hydrated Job" }
+            };
+            var initialSqs = new System.Collections.Generic.List<SpecialQuote>
+            {
+                new SpecialQuote { Id = "sq-hydrated", Slot = 1, Text = "Hydrated SQ", IsCompleted = true }
+            };
+
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true,
+                InitialOverrides = initialOverrides,
+                InitialSpecialQuotes = initialSqs,
+                InitialGeneralComments = "Hydrated comments"
+            };
+
+            var snapshot = service.OpenSource(openCmd, _activePack, 1);
+
+            Assert.NotNull(snapshot);
+            Assert.Equal("Hydrated Job", snapshot.Facts["unit.jobName"].Value);
+            Assert.Single(snapshot.SpecialQuotes);
+            Assert.Equal("Hydrated SQ", snapshot.SpecialQuotes[0].Text);
+            Assert.Equal("Hydrated comments", snapshot.GeneralComments);
+            Assert.True(snapshot.IsDirty);
+        }
     }
 }

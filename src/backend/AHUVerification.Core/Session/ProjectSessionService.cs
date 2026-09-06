@@ -36,7 +36,11 @@ namespace AHUVerification.Core.Session
                     cmd.IsUpz,
                     cmd.IsTrusted,
                     activePack,
-                    packGeneration
+                    packGeneration,
+                    cmd.InitialOverrides,
+                    cmd.InitialChecklists,
+                    cmd.InitialSpecialQuotes,
+                    cmd.InitialGeneralComments
                 );
 
                 _activeSession = session;
@@ -57,6 +61,11 @@ namespace AHUVerification.Core.Session
             return ExecuteSessionCommand(cmd.SessionId, session => session.OverrideFact(cmd));
         }
 
+        public SessionCommandResult BatchOverrideFacts(BatchOverrideFactsCommand cmd)
+        {
+            return ExecuteSessionCommand(cmd.SessionId, session => session.BatchOverrideFacts(cmd));
+        }
+
         public SessionCommandResult RevertFact(RevertFactCommand cmd)
         {
             return ExecuteSessionCommand(cmd.SessionId, session => session.RevertFact(cmd));
@@ -75,6 +84,11 @@ namespace AHUVerification.Core.Session
         public SessionCommandResult DeleteSpecialQuote(DeleteSpecialQuoteCommand cmd)
         {
             return ExecuteSessionCommand(cmd.SessionId, session => session.DeleteSpecialQuote(cmd));
+        }
+
+        public SessionCommandResult ReorderSpecialQuotes(ReorderSpecialQuotesCommand cmd)
+        {
+            return ExecuteSessionCommand(cmd.SessionId, session => session.ReorderSpecialQuotes(cmd));
         }
 
         public SessionCommandResult UpdateGeneralComments(UpdateGeneralCommentsCommand cmd)

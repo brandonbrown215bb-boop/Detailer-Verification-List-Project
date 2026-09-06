@@ -23,6 +23,45 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("isTrusted")]
         public bool IsTrusted { get; set; } = true;
+
+        [JsonPropertyName("initialOverrides")]
+        public Dictionary<string, Fact>? InitialOverrides { get; set; }
+
+        [JsonPropertyName("initialChecklists")]
+        public List<ChecklistInstance>? InitialChecklists { get; set; }
+
+        [JsonPropertyName("initialSpecialQuotes")]
+        public List<SpecialQuote>? InitialSpecialQuotes { get; set; }
+
+        [JsonPropertyName("initialGeneralComments")]
+        public string? InitialGeneralComments { get; set; }
+    }
+
+    public class BatchFactOverrideItem
+    {
+        [JsonPropertyName("factId")]
+        public string FactId { get; set; } = "";
+
+        [JsonPropertyName("value")]
+        public object? Value { get; set; }
+
+        [JsonPropertyName("comment")]
+        public string? Comment { get; set; }
+
+        [JsonPropertyName("author")]
+        public string? Author { get; set; }
+    }
+
+    public class BatchOverrideFactsCommand
+    {
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = "";
+
+        [JsonPropertyName("expectedRevision")]
+        public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("overrides")]
+        public List<BatchFactOverrideItem> Overrides { get; set; } = new();
     }
 
     public class OverrideFactCommand
@@ -101,6 +140,27 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("quoteId")]
         public string QuoteId { get; set; } = "";
+    }
+
+    public class SpecialQuoteSlotAssignment
+    {
+        [JsonPropertyName("quoteId")]
+        public string QuoteId { get; set; } = "";
+
+        [JsonPropertyName("slot")]
+        public int Slot { get; set; }
+    }
+
+    public class ReorderSpecialQuotesCommand
+    {
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = "";
+
+        [JsonPropertyName("expectedRevision")]
+        public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("assignments")]
+        public List<SpecialQuoteSlotAssignment> Assignments { get; set; } = new();
     }
 
     public class UpdateGeneralCommentsCommand

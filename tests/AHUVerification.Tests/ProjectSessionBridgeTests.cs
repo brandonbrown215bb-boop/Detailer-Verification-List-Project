@@ -113,5 +113,79 @@ namespace AHUVerification.Tests
             Assert.NotNull(staleCmdResult.Snapshot);
             Assert.Contains("Revision mismatch", staleCmdResult.ErrorMessage);
         }
+
+        [Fact]
+        public void ProjectSession_BatchOverrideAndReorder_ViaBridge_Succeeds()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            // Open
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open",
+                action = "projectSession_open",
+                payload = new { filePath = configXmlPath, configXml, isUpz = false, isTrusted = true }
+            }));
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+
+            // Batch override
+            var batchRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-batch",
+                action = "projectSession_batchOverrideFacts",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 1,
+                    overrides = new[]
+                    {
+                        new { factId = "unit.jobName", value = "Bridge Batch Test", author = "Tester", comment = "Bridge test" }
+                    }
+                }
+            }));
+            Assert.True(batchRes.Success, batchRes.Error);
+            var batchResult = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(batchRes.Data), options)!;
+            Assert.True(batchResult.Success);
+            Assert.Equal(2, batchResult.Revision);
+            Assert.Equal("Bridge Batch Test", batchResult.Snapshot!.Facts["unit.jobName"].Value?.ToString());
+
+            // Add an SQ
+            var sqRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-sq",
+                action = "projectSession_updateSpecialQuote",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 2,
+                    specialQuote = new { id = "sq-bridge-1", slot = 1, text = "Bridge SQ 1" }
+                }
+            }));
+            Assert.True(sqRes.Success);
+
+            // Reorder
+            var reorderRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-reorder",
+                action = "projectSession_reorderSpecialQuotes",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 3,
+                    assignments = new[]
+                    {
+                        new { quoteId = "sq-bridge-1", slot = 5 }
+                    }
+                }
+            }));
+            Assert.True(reorderRes.Success);
+            var reorderResult = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(reorderRes.Data), options)!;
+            Assert.True(reorderResult.Success);
+            Assert.Equal(4, reorderResult.Revision);
+            Assert.Equal(5, reorderResult.Snapshot!.SpecialQuotes[0].Slot);
+        }
     }
 }

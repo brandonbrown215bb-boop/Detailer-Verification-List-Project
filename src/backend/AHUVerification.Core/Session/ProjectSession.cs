@@ -50,7 +50,11 @@ namespace AHUVerification.Core.Session
             bool isUpz,
             bool isTrusted,
             RulePackBundle activePack,
-            int packGeneration)
+            int packGeneration,
+            Dictionary<string, Fact>? initialOverrides = null,
+            List<ChecklistInstance>? initialChecklists = null,
+            List<SpecialQuote>? initialSpecialQuotes = null,
+            string? initialGeneralComments = null)
         {
             if (string.IsNullOrWhiteSpace(configXml))
                 throw new ArgumentException("Config.xml content cannot be empty", nameof(configXml));
@@ -88,10 +92,33 @@ namespace AHUVerification.Core.Session
             // Clone baseline facts for active dictionary
             Facts = CloneFacts(BaselineFacts);
             ManualOverrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
-            Checklists = new List<ChecklistInstance>();
-            SpecialQuotes = new List<SpecialQuote>();
-            GeneralComments = "";
-            IsDirty = false;
+
+            if (initialOverrides != null)
+            {
+                foreach (var kvp in initialOverrides)
+                {
+                    string key = FactContractValidator.CanonicalizeKey(kvp.Key, ActiveRulePack.FactContract);
+                    if (Facts.ContainsKey(key))
+                    {
+                        var lastAudit = kvp.Value.AuditHistory?.LastOrDefault();
+                        string author = lastAudit?.By ?? "Detailer";
+                        string reason = lastAudit?.Note ?? "Restored override";
+                        _factExtractor.OverrideFact(Facts, key, kvp.Value.Value, author, reason);
+                        ManualOverrides[key] = Facts[key];
+                    }
+                }
+            }
+
+            Checklists = initialChecklists != null
+                ? initialChecklists.Select(CloneChecklist).ToList()
+                : new List<ChecklistInstance>();
+
+            SpecialQuotes = initialSpecialQuotes != null
+                ? initialSpecialQuotes.Select(CloneSpecialQuote).ToList()
+                : new List<SpecialQuote>();
+
+            GeneralComments = initialGeneralComments ?? "";
+            IsDirty = initialOverrides != null || initialSpecialQuotes != null || !string.IsNullOrEmpty(initialGeneralComments);
 
             // Generate initial checklists
             ReevaluateInternal();
@@ -165,6 +192,62 @@ namespace AHUVerification.Core.Session
                 _factExtractor.OverrideFact(Facts, key, val, author, cmd.Comment);
 
                 ManualOverrides[key] = Facts[key];
+                IsDirty = true;
+                Revision++;
+                ReevaluateInternal();
+
+                return SessionCommandResult.Ok(CreateSnapshot());
+            }
+        }
+
+        public SessionCommandResult BatchOverrideFacts(BatchOverrideFactsCommand cmd)
+        {
+            lock (_syncLock)
+            {
+                if (cmd.ExpectedRevision != Revision)
+                {
+                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                }
+
+                if (cmd.Overrides == null || cmd.Overrides.Count == 0)
+                {
+                    return SessionCommandResult.Fail("Batch overrides list cannot be empty", CreateSnapshot());
+                }
+
+                // Validate all overrides first
+                var normalizedEntries = new List<(string key, object val, string author, string? comment)>();
+                foreach (var entry in cmd.Overrides)
+                {
+                    string key = FactContractValidator.CanonicalizeKey(entry.FactId, ActiveRulePack.FactContract);
+                    if (!Facts.ContainsKey(key))
+                    {
+                        return SessionCommandResult.Fail($"Fact '{entry.FactId}' does not exist in registry", CreateSnapshot());
+                    }
+
+                    object? val = NormalizeValue(entry.Value);
+                    if (val == null)
+                    {
+                        return SessionCommandResult.Fail($"Override for '{entry.FactId}' must provide a non-null value", CreateSnapshot());
+                    }
+
+                    if (ActiveRulePack.FactContract.ValueKind == JsonValueKind.Object
+                        && !FactContractValidator.IsFactValueCompatible(ActiveRulePack.FactContract, key, val))
+                    {
+                        return SessionCommandResult.Fail($"Value for '{entry.FactId}' is incompatible with fact contract", CreateSnapshot());
+                    }
+
+                    string author = !string.IsNullOrWhiteSpace(entry.Author) ? entry.Author : "Detailer";
+                    normalizedEntries.Add((key, val, author, entry.Comment));
+                }
+
+                // Apply all overrides
+                foreach (var (key, val, author, comment) in normalizedEntries)
+                {
+                    _factExtractor.OverrideFact(Facts, key, val, author, comment);
+                    ManualOverrides[key] = Facts[key];
+                }
+
                 IsDirty = true;
                 Revision++;
                 ReevaluateInternal();
@@ -258,14 +341,22 @@ namespace AHUVerification.Core.Session
                     incoming.Id = Guid.NewGuid().ToString("N");
                 }
 
-                int existingIndex = SpecialQuotes.FindIndex(sq => sq.Id == incoming.Id || sq.Slot == incoming.Slot);
+                int existingIndex = SpecialQuotes.FindIndex(sq => sq.Id == incoming.Id);
                 if (existingIndex >= 0)
                 {
                     SpecialQuotes[existingIndex] = incoming;
                 }
                 else
                 {
-                    SpecialQuotes.Add(incoming);
+                    int slotIndex = SpecialQuotes.FindIndex(sq => sq.Slot == incoming.Slot);
+                    if (slotIndex >= 0)
+                    {
+                        SpecialQuotes[slotIndex] = incoming;
+                    }
+                    else
+                    {
+                        SpecialQuotes.Add(incoming);
+                    }
                 }
 
                 IsDirty = true;
@@ -285,11 +376,44 @@ namespace AHUVerification.Core.Session
                         $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
                 }
 
-                int removed = SpecialQuotes.RemoveAll(sq => sq.Id == cmd.QuoteId);
+                int removed = SpecialQuotes.RemoveAll(sq => sq.Id == cmd.QuoteId || sq.Slot.ToString() == cmd.QuoteId);
                 if (removed == 0)
                 {
                     return SessionCommandResult.Fail($"Special quote '{cmd.QuoteId}' not found", CreateSnapshot());
                 }
+
+                IsDirty = true;
+                Revision++;
+
+                return SessionCommandResult.Ok(CreateSnapshot());
+            }
+        }
+
+        public SessionCommandResult ReorderSpecialQuotes(ReorderSpecialQuotesCommand cmd)
+        {
+            lock (_syncLock)
+            {
+                if (cmd.ExpectedRevision != Revision)
+                {
+                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                }
+
+                if (cmd.Assignments == null || cmd.Assignments.Count == 0)
+                {
+                    return SessionCommandResult.Fail("Reorder assignments cannot be empty", CreateSnapshot());
+                }
+
+                var map = cmd.Assignments.ToDictionary(a => a.QuoteId, a => a.Slot, StringComparer.Ordinal);
+                foreach (var sq in SpecialQuotes)
+                {
+                    if (map.TryGetValue(sq.Id, out int newSlot))
+                    {
+                        sq.Slot = newSlot;
+                    }
+                }
+
+                SpecialQuotes.Sort((a, b) => a.Slot.CompareTo(b.Slot));
 
                 IsDirty = true;
                 Revision++;

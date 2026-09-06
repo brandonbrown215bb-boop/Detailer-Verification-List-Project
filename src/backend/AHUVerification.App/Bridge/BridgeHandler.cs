@@ -116,10 +116,12 @@ namespace AHUVerification.App.Bridge
                     "projectSession_open" => OpenProjectSession(req.Payload),
                     "projectSession_getSnapshot" => GetProjectSessionSnapshot(),
                     "projectSession_overrideFact" => OverrideProjectSessionFact(req.Payload),
+                    "projectSession_batchOverrideFacts" => BatchOverrideProjectSessionFacts(req.Payload),
                     "projectSession_revertFact" => RevertProjectSessionFact(req.Payload),
                     "projectSession_updateChecklist" => UpdateProjectSessionChecklist(req.Payload),
                     "projectSession_updateSpecialQuote" => UpdateProjectSessionSpecialQuote(req.Payload),
                     "projectSession_deleteSpecialQuote" => DeleteProjectSessionSpecialQuote(req.Payload),
+                    "projectSession_reorderSpecialQuotes" => ReorderProjectSessionSpecialQuotes(req.Payload),
                     "projectSession_updateGeneralComments" => UpdateProjectSessionGeneralComments(req.Payload),
                     "projectSession_reset" => ResetProjectSession(req.Payload),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
@@ -573,46 +575,33 @@ namespace AHUVerification.App.Bridge
             if (_activeRulePack == null)
                 throw new InvalidOperationException("Active rule pack bundle not loaded.");
 
-            string filePath = BridgeValidation.GetStringPropertyOrDefault(payload, "filePath", "");
-            string configXml = BridgeValidation.GetStringPropertyOrDefault(payload, "configXml", "");
-            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
-            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
-            bool isUpz = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isUpz", false);
-            bool isTrusted = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isTrusted", true);
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<OpenSourceCommand>(payload.GetRawText(), options)
+                ?? new OpenSourceCommand();
 
-            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            if (!string.IsNullOrWhiteSpace(cmd.FilePath) && File.Exists(cmd.FilePath))
             {
-                if (filePath.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
+                if (cmd.FilePath.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
                 {
-                    var bundle = _upzExtractor.Extract(filePath);
-                    configXml = bundle.RawConfigXml;
-                    orderRevXml = bundle.RawOrderRevXml;
-                    manifestXml = bundle.RawManifestXml;
-                    isUpz = true;
-                    isTrusted = true;
+                    var bundle = _upzExtractor.Extract(cmd.FilePath);
+                    cmd.ConfigXml = bundle.RawConfigXml;
+                    cmd.OrderRevXml = bundle.RawOrderRevXml;
+                    cmd.ManifestXml = bundle.RawManifestXml;
+                    cmd.IsUpz = true;
+                    cmd.IsTrusted = true;
                 }
-                else if (filePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                else if (cmd.FilePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                 {
-                    configXml = File.ReadAllText(filePath);
-                    isUpz = false;
-                    isTrusted = true;
+                    cmd.ConfigXml = File.ReadAllText(cmd.FilePath);
+                    cmd.IsUpz = false;
+                    cmd.IsTrusted = true;
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(configXml))
+            if (string.IsNullOrWhiteSpace(cmd.ConfigXml))
             {
                 throw new ArgumentException("Opening a project session requires either a valid filePath on disk or configXml content in payload.");
             }
-
-            var cmd = new OpenSourceCommand
-            {
-                FilePath = filePath,
-                ConfigXml = configXml,
-                OrderRevXml = orderRevXml,
-                ManifestXml = manifestXml,
-                IsUpz = isUpz,
-                IsTrusted = isTrusted
-            };
 
             return _sessionService.OpenSource(cmd, _activeRulePack, _rulePackGeneration);
         }
@@ -633,6 +622,14 @@ namespace AHUVerification.App.Bridge
             var cmd = JsonSerializer.Deserialize<OverrideFactCommand>(payload.GetRawText(), options)
                 ?? throw new ArgumentException("Invalid OverrideFactCommand payload");
             return _sessionService.OverrideFact(cmd);
+        }
+
+        private object BatchOverrideProjectSessionFacts(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<BatchOverrideFactsCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid BatchOverrideFactsCommand payload");
+            return _sessionService.BatchOverrideFacts(cmd);
         }
 
         private object RevertProjectSessionFact(JsonElement payload)
@@ -665,6 +662,14 @@ namespace AHUVerification.App.Bridge
             var cmd = JsonSerializer.Deserialize<DeleteSpecialQuoteCommand>(payload.GetRawText(), options)
                 ?? throw new ArgumentException("Invalid DeleteSpecialQuoteCommand payload");
             return _sessionService.DeleteSpecialQuote(cmd);
+        }
+
+        private object ReorderProjectSessionSpecialQuotes(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<ReorderSpecialQuotesCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid ReorderSpecialQuotesCommand payload");
+            return _sessionService.ReorderSpecialQuotes(cmd);
         }
 
         private object UpdateProjectSessionGeneralComments(JsonElement payload)

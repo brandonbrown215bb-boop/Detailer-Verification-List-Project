@@ -2,7 +2,7 @@
 
 Date: 2026-09-06
 Status: Active
-Active Slice: CE0 / CE1
+Active Slice: CE2-B
 Architecture Decision: [ADR 0012](../decisions/0012-csharp-authoritative-engine-and-browser-engine-retirement.md)
 
 ---
@@ -69,9 +69,17 @@ The following modules will be retired and removed during the migration (CE2 thro
   - Typed bridge client wrappers implemented in `src/services/desktopBridge.ts` and `src/types/session.ts`.
   - Core and Bridge tests passing (215/215 .NET tests green across `ProjectSessionTests.cs` and `ProjectSessionBridgeTests.cs`).
   - Frontend test suites and build passing (22/22 suites green, `npm run build` exits 0).
-- [ ] **CE2: Move All Project Workflows onto the Engine**
-  - CE2-A: Imported projects and edits in UI.
-  - CE2-B: Manual projects and rule-pack changes.
+- [x] **CE2: Move All Project Workflows onto the Engine**
+  - [x] **CE2-A: Imported projects and edits in UI**
+    - Extended `SessionCommands.cs` and `ProjectSession.cs` with `BatchOverrideFactsCommand` and `ReorderSpecialQuotesCommand` for atomic mutations.
+    - Updated `UpdateSpecialQuote` in Core to match by immutable `Id` first to prevent slot collisions.
+    - Extended `OpenSourceCommand` with hydration fields (`InitialOverrides`, `InitialChecklists`, `InitialSpecialQuotes`, `InitialGeneralComments`) so opening `.dvl` files immediately launches an active C# `ProjectSession`.
+    - Added `projectSessionReadiness` projection in `src/utils/readiness.ts` to map C# snapshot readiness to UI models.
+    - Rewired `useProjectSession.ts` to dispatch session commands sequentially with revision conflict recovery and project authoritative readiness.
+    - Implemented local text input buffering for freeform text (General Comments, SQ descriptions, Checklist comments) committing on `onBlur` and `Enter`, with blur flushing on Save/Export.
+    - Updated `Header.tsx` Upload button to invoke native `desktopBridge.openFileDialog()` matching `HomePage.tsx`.
+    - Automated tests: 219/219 .NET tests passing (`ProjectSessionTests.cs`, `ProjectSessionBridgeTests.cs`), all frontend suites passing (`test_ce2a_session_bridge.mjs`), `npm run build` exits 0.
+  - [ ] CE2-B: Manual projects and rule-pack changes.
 - [ ] **CE3: Move DVL, Recovery, and All Excel Output into C#**
 - [ ] **CE4: Unify Rule Editor Processing with Core**
 - [ ] **CE5: Delete Duplicate Engine and Replace Test Burden**

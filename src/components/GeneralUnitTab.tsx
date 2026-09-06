@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Fact, SpecialQuote, NormalizedXmlGraph } from '../types';
 import {
   Layers,
@@ -32,6 +32,9 @@ interface GeneralUnitTabProps {
   onUpdateComments: (comments: string) => void;
   onOpenResolutionCenter: () => void;
   onOpenDetailerModal?: () => void;
+  onUpdateSpecialQuote?: (item: SpecialQuote) => void;
+  onDeleteSpecialQuote?: (slotOrId: number | string) => void;
+  onReorderSpecialQuotes?: (assignments: { quoteId: string; slot: number }[]) => void;
 }
 
 const ONLY_SHOW_WHEN_TRUE_FACTS = [
@@ -43,6 +46,39 @@ const ONLY_SHOW_WHEN_TRUE_FACTS = [
   { key: 'unit.isSeismic', label: 'Seismic Certified', icon: Zap, description: 'IBC / OSHPD seismic compliance' }
 ];
 
+interface BufferedSqInputProps {
+  initialValue: string;
+  onCommit: (text: string) => void;
+  ariaLabel: string;
+}
+
+const BufferedSqInput: React.FC<BufferedSqInputProps> = ({ initialValue, onCommit, ariaLabel }) => {
+  const [val, setVal] = useState(initialValue);
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  return (
+    <input
+      type="text"
+      aria-label={ariaLabel}
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => {
+        if (val !== initialValue) {
+          onCommit(val);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-blue-500 outline-none text-slate-900 dark:text-slate-100 py-0.5 transition-colors font-medium"
+    />
+  );
+};
+
 export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   facts,
   sqItems,
@@ -53,12 +89,27 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
   onUpdateSqItems,
   onUpdateComments,
   onOpenResolutionCenter,
-  onOpenDetailerModal
+  onOpenDetailerModal,
+  onUpdateSpecialQuote,
+  onDeleteSpecialQuote,
+  onReorderSpecialQuotes
 }) => {
   const [newSqText, setNewSqText] = useState('');
   const [newSqScope, setNewSqScope] = useState('all');
   const [draggedSlot, setDraggedSlot] = useState<number | null>(null);
   const [isAddOptionOpen, setIsAddOptionOpen] = useState(false);
+
+  // Local buffer for general comments
+  const [localComments, setLocalComments] = useState(generalComments);
+  useEffect(() => {
+    setLocalComments(generalComments);
+  }, [generalComments]);
+
+  const handleCommentsBlur = () => {
+    if (localComments !== generalComments) {
+      onUpdateComments(localComments);
+    }
+  };
 
   // Helper to render provenance badge
   const renderProvenanceBadge = (fact: Fact) => {
@@ -137,24 +188,43 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
       isCompleted: false
     };
 
-    onUpdateSqItems([...sqItems, newItem].sort((a, b) => a.slot - b.slot));
+    if (onUpdateSpecialQuote) {
+      onUpdateSpecialQuote(newItem);
+    } else {
+      onUpdateSqItems([...sqItems, newItem].sort((a, b) => a.slot - b.slot));
+    }
     setNewSqText('');
   };
 
   const handleDeleteSq = (slot: number) => {
-    onUpdateSqItems(sqItems.filter(s => s.slot !== slot));
+    const item = sqItems.find(s => s.slot === slot);
+    if (onDeleteSpecialQuote) {
+      onDeleteSpecialQuote(item?.id || slot);
+    } else {
+      onUpdateSqItems(sqItems.filter(s => s.slot !== slot));
+    }
   };
 
   const handleUpdateSqText = (slot: number, text: string) => {
-    onUpdateSqItems(
-      sqItems.map(s => (s.slot === slot ? { ...s, text } : s))
-    );
+    const item = sqItems.find(s => s.slot === slot);
+    if (!item) return;
+    const updated = { ...item, text };
+    if (onUpdateSpecialQuote) {
+      onUpdateSpecialQuote(updated);
+    } else {
+      onUpdateSqItems(sqItems.map(s => (s.slot === slot ? updated : s)));
+    }
   };
 
   const handleToggleSqDone = (slot: number) => {
-    onUpdateSqItems(
-      sqItems.map(s => (s.slot === slot ? { ...s, isCompleted: !s.isCompleted } : s))
-    );
+    const item = sqItems.find(s => s.slot === slot);
+    if (!item) return;
+    const updated = { ...item, isCompleted: !item.isCompleted };
+    if (onUpdateSpecialQuote) {
+      onUpdateSpecialQuote(updated);
+    } else {
+      onUpdateSqItems(sqItems.map(s => (s.slot === slot ? updated : s)));
+    }
   };
 
   // Drag and Drop reordering
@@ -174,18 +244,26 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
     if (!sourceItem) return;
 
-    let updated: SpecialQuote[];
-    if (targetItem) {
-      updated = sqItems.map(s => {
-        if (s.slot === draggedSlot) return { ...s, slot: targetSlot };
-        if (s.slot === targetSlot) return { ...s, slot: draggedSlot };
-        return s;
+    if (onReorderSpecialQuotes) {
+      const assignments = sqItems.map(s => {
+        if (s.slot === draggedSlot) return { quoteId: s.id, slot: targetSlot };
+        if (targetItem && s.slot === targetSlot) return { quoteId: s.id, slot: draggedSlot };
+        return { quoteId: s.id, slot: s.slot };
       });
+      onReorderSpecialQuotes(assignments);
     } else {
-      updated = sqItems.map(s => (s.slot === draggedSlot ? { ...s, slot: targetSlot } : s));
+      let updated: SpecialQuote[];
+      if (targetItem) {
+        updated = sqItems.map(s => {
+          if (s.slot === draggedSlot) return { ...s, slot: targetSlot };
+          if (s.slot === targetSlot) return { ...s, slot: draggedSlot };
+          return s;
+        });
+      } else {
+        updated = sqItems.map(s => (s.slot === draggedSlot ? { ...s, slot: targetSlot } : s));
+      }
+      onUpdateSqItems(updated.sort((a, b) => a.slot - b.slot));
     }
-
-    onUpdateSqItems(updated.sort((a, b) => a.slot - b.slot));
     setDraggedSlot(null);
   };
 
@@ -564,12 +642,10 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                         #{sq.slot}
                       </td>
                       <td className="py-2.5 px-4">
-                        <input
-                          type="text"
-                          aria-label={`Special Quote #${sq.slot} text`}
-                          value={sq.text}
-                          onChange={(e) => handleUpdateSqText(sq.slot, e.target.value)}
-                          className="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-blue-500 outline-none text-slate-900 dark:text-slate-100 py-0.5 transition-colors font-medium"
+                        <BufferedSqInput
+                          ariaLabel={`Special Quote #${sq.slot} text`}
+                          initialValue={sq.text}
+                          onCommit={(text) => handleUpdateSqText(sq.slot, text)}
                         />
                       </td>
                       <td className="py-2.5 px-4">
@@ -624,8 +700,9 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
         <textarea
           rows={3}
           aria-label="General Additional Comments"
-          value={generalComments}
-          onChange={(e) => onUpdateComments(e.target.value)}
+          value={localComments}
+          onChange={(e) => setLocalComments(e.target.value)}
+          onBlur={handleCommentsBlur}
           placeholder="Add general unit verification notes, checker remarks, or special manufacturing instructions..."
           className="w-full p-3.5 text-xs bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-200 placeholder-slate-400 focus:border-blue-500 outline-none transition-colors shadow-inner"
         />

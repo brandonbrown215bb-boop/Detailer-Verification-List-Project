@@ -62,3 +62,27 @@ export interface SessionCommandResult {
   isConflict: boolean;
   errorMessage?: string;
 }
+
+export interface BatchFactOverrideItem {
+  factId: string;
+  value: any;
+  comment?: string;
+  author?: string;
+}
+
+export interface BatchOverrideFactsPayload {
+  sessionId: string;
+  expectedRevision: number;
+  overrides: BatchFactOverrideItem[];
+}
+
+export interface SpecialQuoteSlotAssignment {
+  quoteId: string;
+  slot: number;
+}
+
+export interface ReorderSpecialQuotesPayload {
+  sessionId: string;
+  expectedRevision: number;
+  assignments: SpecialQuoteSlotAssignment[];
+}

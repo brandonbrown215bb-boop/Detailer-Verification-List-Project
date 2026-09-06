@@ -208,3 +208,62 @@ export function computeUnitReadiness(
     scopeReadinessMap
   };
 }
+
+/**
+ * Projects authoritative readiness directly from a C# ProjectSessionSnapshot.
+ * Business rules, counts, percentages, and certification eligibility are computed in Core;
+ * this function maps the snapshot onto the UnitReadiness presentation model for UI views.
+ */
+export function projectSessionReadiness(snapshot: import('../types/session.ts').ProjectSessionSnapshot): UnitReadiness {
+  const r = snapshot.readiness;
+  const factsList = Object.values(snapshot.facts || {});
+  const unconfirmedFacts = factsList.filter(isFactUnconfirmed);
+  const blockedRules = (snapshot.checklists || []).filter(isChecklistBlocked);
+  const applicableChecks = (snapshot.checklists || []).filter(c => c.applicability === 'Applicable');
+  const passedRules = applicableChecks.filter(c => c.status === 'Passed');
+  const naRules = applicableChecks.filter(c => c.status === 'NA');
+  const incompleteRules = applicableChecks.filter(c => c.status !== 'Passed' && c.status !== 'NA');
+
+  const scopeReadinessMap: Record<string, ScopeReadiness> = {};
+  for (const [scopeId, scopeSumm] of Object.entries(r.scopeReadinessMap || {})) {
+    const scopeChecks = (snapshot.checklists || []).filter(c => c.scopeTargetId === scopeId);
+    const scopeApplicable = scopeChecks.filter(c => c.applicability === 'Applicable');
+    scopeReadinessMap[scopeId] = {
+      scopeTargetId: scopeId,
+      totalChecks: scopeSumm.totalChecksCount,
+      totalChecksCount: scopeSumm.totalChecksCount,
+      applicableChecks: scopeSumm.applicableChecksCount,
+      totalApplicableChecksCount: scopeSumm.applicableChecksCount,
+      passedChecks: scopeSumm.completedChecksCount,
+      completedChecksCount: scopeSumm.completedChecksCount,
+      incompleteChecks: scopeSumm.incompleteChecksCount,
+      incompleteChecksCount: scopeSumm.incompleteChecksCount,
+      blockedChecks: scopeSumm.blockedChecksCount,
+      blockedChecksCount: scopeSumm.blockedChecksCount,
+      naChecksCount: 0,
+      percentComplete: scopeSumm.percentComplete,
+      isComplete: scopeSumm.isComplete,
+      isFullyVerified: scopeSumm.isComplete,
+      blockedRules: scopeChecks.filter(isChecklistBlocked),
+      incompleteRules: scopeApplicable.filter(c => c.status !== 'Passed' && c.status !== 'NA'),
+      passedRules: scopeApplicable.filter(c => c.status === 'Passed' || c.status === 'NA')
+    };
+  }
+
+  return {
+    unconfirmedFactsCount: r.unconfirmedFactsCount,
+    blockedChecksCount: r.blockedChecksCount,
+    incompleteChecksCount: r.incompleteChecksCount,
+    completedChecksCount: r.completedChecksCount,
+    naChecksCount: naRules.length,
+    totalApplicableChecksCount: r.totalApplicableChecksCount,
+    totalChecksCount: r.totalChecksCount,
+    percentComplete: r.percentComplete,
+    isReadyForFinal: r.isReadyForFinal,
+    blockedRules,
+    unconfirmedFacts,
+    incompleteRules,
+    passedRules,
+    scopeReadinessMap
+  };
+}

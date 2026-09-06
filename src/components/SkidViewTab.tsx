@@ -40,6 +40,46 @@ interface SkidViewTabProps {
 
 import { SEGMENT_COLORS } from '../utils/segmentCatalog';
 
+interface BufferedChecklistCommentInputProps {
+  instanceKey: string;
+  initialValue?: string;
+  onCommit: (instanceKey: string, comment: string) => void;
+  inputRef: (el: HTMLInputElement | null) => void;
+}
+
+const BufferedChecklistCommentInput: React.FC<BufferedChecklistCommentInputProps> = ({
+  instanceKey,
+  initialValue = '',
+  onCommit,
+  inputRef
+}) => {
+  const [comment, setComment] = useState(initialValue);
+  useEffect(() => {
+    setComment(initialValue);
+  }, [initialValue]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={comment}
+      onChange={(e) => setComment(e.target.value)}
+      onBlur={() => {
+        if (comment !== initialValue) {
+          onCommit(instanceKey, comment);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      placeholder="Add comment..."
+      className="w-full text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-slate-900 dark:text-slate-200 placeholder-slate-400 outline-none transition-colors"
+    />
+  );
+};
+
 export const SkidViewTab: React.FC<SkidViewTabProps> = ({
   skid,
   segments,
@@ -443,15 +483,11 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                       )}
                                     </td>
                                     <td className="py-2 px-4">
-                                      <input
-                                        ref={el => (commentInputRefs.current[instance.instanceKey] = el)}
-                                        type="text"
-                                        value={instance.detailerComment}
-                                        onChange={(e) =>
-                                          onUpdateChecklistComment(instance.instanceKey, e.target.value)
-                                        }
-                                        placeholder="Add comment..."
-                                        className="w-full text-xs bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus:border-blue-500 rounded px-2 py-1 text-slate-900 dark:text-slate-200 placeholder-slate-400 outline-none transition-colors"
+                                      <BufferedChecklistCommentInput
+                                        instanceKey={instance.instanceKey}
+                                        initialValue={instance.detailerComment}
+                                        onCommit={onUpdateChecklistComment}
+                                        inputRef={el => (commentInputRefs.current[instance.instanceKey] = el)}
                                       />
                                     </td>
                                     <td className="py-2 px-3 text-center">

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import type { ThemeMode } from './types';
 import { desktopBridge } from './services/desktopBridge';
-import { computeUnitReadiness } from './utils/readiness';
 import { useProjectSession } from './hooks/useProjectSession';
 import { useRulePackSession } from './hooks/useRulePackSession';
 
@@ -114,6 +113,7 @@ export const AppContent: React.FC = () => {
     lastSavedAt,
     exportNotice,
     exportError,
+    readiness,
     setSqItems,
     setGeneralComments,
     leaveProject,
@@ -130,6 +130,10 @@ export const AppContent: React.FC = () => {
     handleBatchResolveDefaults,
     handleUpdateChecklistStatus,
     handleUpdateChecklistComment,
+    handleUpdateSpecialQuote,
+    handleDeleteSpecialQuote,
+    handleReorderSpecialQuotes,
+    handleUpdateGeneralComments,
     handleSaveDvl,
     handleExportExcel,
     dismissExportNotice,
@@ -288,8 +292,6 @@ export const AppContent: React.FC = () => {
     dimensions: graph.dimensions
   };
 
-  const readiness = computeUnitReadiness(facts, checklists, activeRules);
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Left Navigation Rail */}
@@ -333,6 +335,8 @@ export const AppContent: React.FC = () => {
           onOpenProjectIdentityModal={() => setIsProjectIdentityModalOpen(true)}
           onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
           onOpenComModal={() => setIsComModalOpen(true)}
+          onOpenDvl={handleOpenDvl}
+          onImportXml={loadXmlData}
         />
 
         {/* Browser Mode Warning */}
@@ -474,9 +478,12 @@ export const AppContent: React.FC = () => {
               onUpdateFact={handleUpdateFact}
               onRevertFact={handleRevertFact}
               onUpdateSqItems={setSqItems}
-              onUpdateComments={setGeneralComments}
+              onUpdateComments={handleUpdateGeneralComments || setGeneralComments}
               onOpenResolutionCenter={() => setIsResolutionOpen(true)}
               onOpenDetailerModal={() => setIsDetailerModalOpen(true)}
+              onUpdateSpecialQuote={handleUpdateSpecialQuote}
+              onDeleteSpecialQuote={handleDeleteSpecialQuote}
+              onReorderSpecialQuotes={handleReorderSpecialQuotes}
             />
           ) : activeTab === 'unit-checks' ? (
             <SkidViewTab

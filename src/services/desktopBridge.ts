@@ -2,7 +2,7 @@ import type { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedX
 import { saveDvlToFile } from './projectStorage.ts';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog.ts';
 import { EFFECTIVE_APPLICATION_VERSION } from './version.ts';
-import type { ProjectSessionSnapshot, SessionCommandResult } from '../types/session.ts';
+import type { ProjectSessionSnapshot, SessionCommandResult, BatchOverrideFactsPayload, ReorderSpecialQuotesPayload } from '../types/session.ts';
 export * from '../types/session.ts';
 
 declare global {
@@ -110,6 +110,10 @@ export interface INativeBridge {
     manifestXml?: string;
     isUpz?: boolean;
     isTrusted?: boolean;
+    initialOverrides?: Record<string, Fact>;
+    initialChecklists?: ChecklistInstance[];
+    initialSpecialQuotes?: SpecialQuote[];
+    initialGeneralComments?: string;
   }): Promise<ProjectSessionSnapshot>;
   projectSessionGetSnapshot(): Promise<ProjectSessionSnapshot>;
   projectSessionOverrideFact(payload: {
@@ -120,6 +124,7 @@ export interface INativeBridge {
     comment?: string;
     author?: string;
   }): Promise<SessionCommandResult>;
+  projectSessionBatchOverrideFacts(payload: BatchOverrideFactsPayload): Promise<SessionCommandResult>;
   projectSessionRevertFact(payload: {
     sessionId: string;
     expectedRevision: number;
@@ -143,6 +148,7 @@ export interface INativeBridge {
     expectedRevision: number;
     quoteId: string;
   }): Promise<SessionCommandResult>;
+  projectSessionReorderSpecialQuotes(payload: ReorderSpecialQuotesPayload): Promise<SessionCommandResult>;
   projectSessionUpdateGeneralComments(payload: {
     sessionId: string;
     expectedRevision: number;
@@ -383,6 +389,10 @@ export class WebView2DesktopBridge implements INativeBridge {
     return this.sendRequest('projectSession_overrideFact', payload);
   }
 
+  public async projectSessionBatchOverrideFacts(payload: any): Promise<SessionCommandResult> {
+    return this.sendRequest('projectSession_batchOverrideFacts', payload);
+  }
+
   public async projectSessionRevertFact(payload: any): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_revertFact', payload);
   }
@@ -397,6 +407,10 @@ export class WebView2DesktopBridge implements INativeBridge {
 
   public async projectSessionDeleteSpecialQuote(payload: any): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_deleteSpecialQuote', payload);
+  }
+
+  public async projectSessionReorderSpecialQuotes(payload: any): Promise<SessionCommandResult> {
+    return this.sendRequest('projectSession_reorderSpecialQuotes', payload);
   }
 
   public async projectSessionUpdateGeneralComments(payload: any): Promise<SessionCommandResult> {
@@ -604,6 +618,10 @@ export class BrowserPreviewBridge implements INativeBridge {
     throw new Error('ProjectSession requires desktop host.');
   }
 
+  public async projectSessionBatchOverrideFacts(_payload: any): Promise<SessionCommandResult> {
+    throw new Error('ProjectSession requires desktop host.');
+  }
+
   public async projectSessionRevertFact(_payload: any): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
@@ -617,6 +635,10 @@ export class BrowserPreviewBridge implements INativeBridge {
   }
 
   public async projectSessionDeleteSpecialQuote(_payload: any): Promise<SessionCommandResult> {
+    throw new Error('ProjectSession requires desktop host.');
+  }
+
+  public async projectSessionReorderSpecialQuotes(_payload: any): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
@@ -769,6 +791,10 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.projectSessionOverrideFact(payload);
   }
 
+  public async projectSessionBatchOverrideFacts(payload: any) {
+    return this.activeBridge.projectSessionBatchOverrideFacts(payload);
+  }
+
   public async projectSessionRevertFact(payload: any) {
     return this.activeBridge.projectSessionRevertFact(payload);
   }
@@ -783,6 +809,10 @@ export class DesktopBridge implements INativeBridge {
 
   public async projectSessionDeleteSpecialQuote(payload: any) {
     return this.activeBridge.projectSessionDeleteSpecialQuote(payload);
+  }
+
+  public async projectSessionReorderSpecialQuotes(payload: any) {
+    return this.activeBridge.projectSessionReorderSpecialQuotes(payload);
   }
 
   public async projectSessionUpdateGeneralComments(payload: any) {

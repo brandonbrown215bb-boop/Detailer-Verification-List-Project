@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   ChecklistInstance,
   CheckStatus,
@@ -10,6 +10,12 @@ import type {
   SpecialQuote,
   UpzBundle
 } from '../types';
+import type {
+  BatchFactOverrideItem,
+  ProjectSessionSnapshot,
+  SessionCommandResult,
+  SpecialQuoteSlotAssignment
+} from '../types/session';
 import {
   extractBrowserPreviewFacts,
   parseBrowserPreviewAhuXml,
@@ -28,6 +34,7 @@ import {
   type ActiveRulePackArtifacts,
   type SourceMetadata
 } from '../orchestration/projectSession';
+import { computeUnitReadiness, projectSessionReadiness, type UnitReadiness } from '../utils/readiness';
 
 export interface ExportNotice {
   fileName: string;
@@ -56,6 +63,8 @@ export interface UseProjectSessionResult {
   lastSavedAt: string | null;
   exportNotice: ExportNotice | null;
   exportError: string | null;
+  sessionSnapshot: ProjectSessionSnapshot | null;
+  readiness: UnitReadiness;
   setSqItems: Dispatch<SetStateAction<SpecialQuote[]>>;
   setGeneralComments: Dispatch<SetStateAction<string>>;
   leaveProject: () => void;
@@ -72,6 +81,10 @@ export interface UseProjectSessionResult {
   handleBatchResolveDefaults: () => void;
   handleUpdateChecklistStatus: (instanceKey: string, status: CheckStatus) => void;
   handleUpdateChecklistComment: (instanceKey: string, detailerComment: string) => void;
+  handleUpdateSpecialQuote?: (item: SpecialQuote) => void;
+  handleDeleteSpecialQuote?: (slotOrId: number | string) => void;
+  handleReorderSpecialQuotes?: (assignments: SpecialQuoteSlotAssignment[]) => void;
+  handleUpdateGeneralComments?: (comments: string) => void;
   handleSaveDvl: (forceSaveAs?: boolean) => Promise<void>;
   handleExportExcel: (isDraft?: boolean) => Promise<void>;
   dismissExportNotice: () => void;
@@ -104,12 +117,75 @@ export function useProjectSession({
   const [exportNotice, setExportNotice] = useState<ExportNotice | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [projectIntegrityClassification, setProjectIntegrityClassification] = useState<string | null>(null);
+
+  // Authoritative C# ProjectSession state & command synchronization queue
+  const [sessionSnapshot, setSessionSnapshot] = useState<ProjectSessionSnapshot | null>(null);
+  const sessionSnapshotRef = useRef<ProjectSessionSnapshot | null>(null);
+  sessionSnapshotRef.current = sessionSnapshot;
+  const pendingCommandChain = useRef<Promise<any>>(Promise.resolve());
+
   const sessionRevision = useRef(0);
   const previousPackHash = useRef(rulePackIdentity.sha256);
   const latestFacts = useRef(facts);
   latestFacts.current = facts;
   const latestChecklists = useRef(checklists);
   latestChecklists.current = checklists;
+
+  const syncFromSnapshot = useCallback((snapshot: ProjectSessionSnapshot) => {
+    setSessionSnapshot(snapshot);
+    sessionSnapshotRef.current = snapshot;
+    setGraph(snapshot.graph);
+    setFacts(snapshot.facts);
+    setSqItems(snapshot.specialQuotes || []);
+    setChecklists(snapshot.checklists || []);
+    setGeneralComments(snapshot.generalComments || '');
+    setSourceIsTrusted(snapshot.source?.isTrusted === true);
+    latestFacts.current = snapshot.facts;
+    latestChecklists.current = snapshot.checklists || [];
+  }, []);
+
+  const dispatchSessionCommand = useCallback(async (
+    runCommand: (sessionId: string, expectedRevision: number) => Promise<SessionCommandResult>
+  ): Promise<ProjectSessionSnapshot | null> => {
+    const run = async () => {
+      const current = sessionSnapshotRef.current;
+      if (!current) throw new Error('No active project session.');
+      try {
+        const result = await runCommand(current.sessionId, current.revision);
+        if (result.snapshot) {
+          syncFromSnapshot(result.snapshot);
+          return result.snapshot;
+        }
+        const latest = await desktopBridge.projectSessionGetSnapshot();
+        syncFromSnapshot(latest);
+        return latest;
+      } catch (err: any) {
+        console.error('Session command execution error, recovering latest snapshot:', err);
+        try {
+          const latest = await desktopBridge.projectSessionGetSnapshot();
+          syncFromSnapshot(latest);
+        } catch (recoverErr) {
+          console.warn('Failed to recover snapshot after session command failure:', recoverErr);
+        }
+        throw err;
+      }
+    };
+
+    const chained = pendingCommandChain.current.then(run, run);
+    pendingCommandChain.current = chained.catch(err => {
+      console.error('Session command failed in sequential queue:', err);
+    });
+    return chained;
+  }, [syncFromSnapshot]);
+
+  // Derived readiness: Authoritative projection from C# ProjectSession when active,
+  // falling back to computeUnitReadiness in standalone web preview / test environments.
+  const readiness = useMemo<UnitReadiness>(() => {
+    if (sessionSnapshot) {
+      return projectSessionReadiness(sessionSnapshot);
+    }
+    return computeUnitReadiness(facts, checklists, activeRules);
+  }, [sessionSnapshot, facts, checklists, activeRules]);
 
   // Startup and Settings pack changes share this migration boundary. Every
   // applied pack change invalidates old asynchronous verification work.
@@ -125,26 +201,41 @@ export function useProjectSession({
     const overrides = manualOverridesFromFacts(latestFacts.current);
     if (desktopBridge.isRunningInDesktop() && wasTrusted && rawXml) {
       setPendingVerifications(count => count + 1);
-      void desktopBridge.verifySource(
-        rawXml,
-        sourceMetadata.rawOrderRevisionXml,
-        sourceMetadata.rawManifestXml,
-        overrides,
-        sqItems,
-        checklists
-      ).then(verified => {
+      void desktopBridge.projectSessionOpen({
+        configXml: rawXml,
+        orderRevXml: sourceMetadata.rawOrderRevisionXml,
+        manifestXml: sourceMetadata.rawManifestXml,
+        filePath: sourceMetadata.fileName || 'Config.xml',
+        isUpz: !!sourceMetadata.isUpzBundle,
+        isTrusted: true,
+        initialOverrides: overrides,
+        initialChecklists: latestChecklists.current,
+        initialSpecialQuotes: sqItems,
+        initialGeneralComments: generalComments
+      }).then(snapshot => {
         if (revision !== sessionRevision.current) return;
-        setGraph(verified.graph);
-        setFacts(verified.facts);
-        setChecklists(verified.checklists);
-        setSourceIsTrusted(verified.sourceIsTrusted === true);
+        syncFromSnapshot(snapshot);
       }).catch(err => {
-        console.warn('Failed to recompute project after Rule Pack update:', err);
+        console.warn('Failed to recompute project after Rule Pack update via session open, trying fallback verify:', err);
+        return desktopBridge.verifySource(
+          rawXml,
+          sourceMetadata.rawOrderRevisionXml,
+          sourceMetadata.rawManifestXml,
+          overrides,
+          sqItems,
+          checklists
+        ).then(verified => {
+          if (revision !== sessionRevision.current) return;
+          setGraph(verified.graph);
+          setFacts(verified.facts);
+          setChecklists(verified.checklists);
+          setSourceIsTrusted(verified.sourceIsTrusted === true);
+        });
       }).finally(() => setPendingVerifications(count => count - 1));
     } else {
       setChecklists(generateChecklists(activeRules, graph, latestFacts.current, latestChecklists.current));
     }
-  }, [rulePackIdentity.sha256, activeRules, graph, isProjectLoaded, rawXml, sourceMetadata, sqItems, checklists, sourceIsTrusted]);
+  }, [rulePackIdentity.sha256, activeRules, graph, isProjectLoaded, rawXml, sourceMetadata, sqItems, checklists, sourceIsTrusted, generalComments, syncFromSnapshot]);
 
   // Autosave when active data changes. Project creation is cancellable so a
   // slower integrity hash cannot publish an older session snapshot.
@@ -174,84 +265,94 @@ export function useProjectSession({
     }
   }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata, activeRules, rulePackIdentity, activeRulePackArtifacts, projectIntegrityClassification]);
 
+  // Browser Preview fallback for fact editing
   const applyFactEdit = useCallback((updated: Record<string, Fact>) => {
     if (!graph) return;
-    const revision = ++sessionRevision.current;
     latestFacts.current = updated;
     setFacts(updated);
-    if (!desktopBridge.isRunningInDesktop() || !sourceIsTrusted) {
-      setChecklists(generateChecklists(activeRules, graph, updated, latestChecklists.current));
-      return;
-    }
-    setPendingVerifications(count => count + 1);
-    void desktopBridge.verifySource(
-      rawXml,
-      sourceMetadata.rawOrderRevisionXml,
-      sourceMetadata.rawManifestXml,
-      manualOverridesFromFacts(updated),
-      sqItems,
-      latestChecklists.current
-    )
-      .then(verified => {
-        if (revision !== sessionRevision.current) return;
-        setFacts(verified.facts);
-        setChecklists(verified.checklists);
-        setSourceIsTrusted(verified.sourceIsTrusted === true);
-      })
-      .catch(error => {
-        if (revision !== sessionRevision.current) return;
-        setSourceIsTrusted(false);
-        setExportError(`Host verification failed: ${error.message}`);
-      })
-      .finally(() => setPendingVerifications(count => count - 1));
-  }, [graph, rawXml, sourceMetadata, sqItems, activeRules, sourceIsTrusted]);
+    setChecklists(generateChecklists(activeRules, graph, updated, latestChecklists.current));
+  }, [graph, activeRules]);
 
   const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
     try {
       const typedValue = typeof value === 'string' ? parseFactInput(key, value) : value;
+      if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+        void dispatchSessionCommand((sessionId, expectedRevision) =>
+          desktopBridge.projectSessionOverrideFact({
+            sessionId,
+            expectedRevision,
+            factId: key,
+            value: typedValue,
+            author,
+            comment: note
+          })
+        );
+        return;
+      }
       applyFactEdit(overrideFact(latestFacts.current, key, typedValue, author, note));
     } catch (error: any) {
       alert(error.message);
     }
-  }, [applyFactEdit]);
+  }, [applyFactEdit, dispatchSessionCommand]);
 
   const handleRevertFact = useCallback((key: string) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionRevertFact({
+          sessionId,
+          expectedRevision,
+          factId: key
+        })
+      );
+      return;
+    }
     applyFactEdit(revertFact(latestFacts.current, key));
-  }, [applyFactEdit]);
+  }, [applyFactEdit, dispatchSessionCommand]);
 
   const loadXmlData = useCallback(async (xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
     const revision = ++sessionRevision.current;
-    let trusted = false;
     let orderRev = bundle?.orderRevision;
     if (!orderRev && bundle?.rawOrderRevXml) {
       orderRev = parseBrowserPreviewOrderRevXml(bundle.rawOrderRevXml);
     }
     const meta = sourceMetadataFromBundle(bundle, sourceFileName, orderRev);
 
-    let newGraph: NormalizedXmlGraph;
-    let newFacts: Record<string, Fact>;
-    let newChecklists: ChecklistInstance[];
-
     if (desktopBridge.isRunningInDesktop()) {
       try {
-        const verified = await desktopBridge.verifySource(xmlString, bundle?.rawOrderRevXml, bundle?.rawManifestXml);
+        const snapshot = await desktopBridge.projectSessionOpen({
+          configXml: xmlString,
+          orderRevXml: bundle?.rawOrderRevXml,
+          manifestXml: bundle?.rawManifestXml,
+          filePath: sourceFileName || meta.fileName || 'Config.xml',
+          isUpz: !!bundle,
+          isTrusted: true
+        });
         if (revision !== sessionRevision.current) return;
-        trusted = verified.sourceIsTrusted === true;
-        newGraph = verified.graph;
-        newFacts = verified.facts;
-        newChecklists = verified.checklists;
+        syncFromSnapshot(snapshot);
+        setRawXml(xmlString);
+        setSourceMetadata(meta);
+        setCurrentProjectPath(null);
+        setProjectIntegrityWarning(null);
+        setProjectIntegrityClassification(null);
+        setIsProjectLoaded(true);
+        onSessionLoaded?.();
+
+        if (!snapshot.facts['unit.comNumber']?.value) {
+          onRequestComNumber?.();
+        }
+        return;
       } catch (err: any) {
         alert(`Host verification failed: ${err.message}`);
         return;
       }
-    } else {
-      newGraph = parseBrowserPreviewAhuXml(xmlString);
-      newFacts = extractBrowserPreviewFacts(newGraph, orderRev);
-      newChecklists = generateChecklists(activeRules, newGraph, newFacts);
     }
 
+    const newGraph = parseBrowserPreviewAhuXml(xmlString);
+    const newFacts = extractBrowserPreviewFacts(newGraph, orderRev);
+    const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
+
     setSourceMetadata(meta);
-    setSourceIsTrusted(trusted);
+    setSourceIsTrusted(false);
     setRawXml(xmlString);
     setGraph(newGraph);
     setFacts(newFacts);
@@ -266,7 +367,7 @@ export function useProjectSession({
     if (!newFacts['unit.comNumber']?.value) {
       onRequestComNumber?.();
     }
-  }, [activeRules, onRequestComNumber, onSessionLoaded]);
+  }, [activeRules, onRequestComNumber, onSessionLoaded, syncFromSnapshot]);
 
   const handleOpenDvl = useCallback(async (project: DvlProjectFile, _rawJson?: string, filePath?: string) => {
     const revision = ++sessionRevision.current;
@@ -285,24 +386,36 @@ export function useProjectSession({
         rawManifestXml: persistedSource.rawManifestXml
       };
 
+      if (persistedSource.rawXml && desktopBridge.isRunningInDesktop()) {
+        const snapshot = await desktopBridge.projectSessionOpen({
+          configXml: persistedSource.rawXml,
+          orderRevXml: persistedSource.rawOrderRevisionXml,
+          manifestXml: persistedSource.rawManifestXml,
+          filePath: filePath || persistedMetadata.fileName || 'Project.dvl',
+          isUpz: !!persistedMetadata.isUpzBundle,
+          isTrusted: true,
+          initialOverrides: manualOverridesFromFacts(persistedFacts),
+          initialChecklists: persistedChecklists,
+          initialSpecialQuotes: persistedSqItems,
+          initialGeneralComments: project.generalComments || ''
+        });
+        if (revision !== sessionRevision.current) return;
+        syncFromSnapshot(snapshot);
+        setRawXml(persistedSource.rawXml || '');
+        setGeneralComments(snapshot.generalComments || project.generalComments || '');
+        setSourceMetadata(persistedMetadata);
+        setCurrentProjectPath(filePath || null);
+        setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
+        setProjectIntegrityClassification(integrity.status === 'unverified' ? integrity.classification : null);
+        setIsProjectLoaded(true);
+        onSessionLoaded?.();
+        return;
+      }
+
       let loadedGraph = project.normalizedGraph;
       let loadedFacts = persistedFacts;
       let loadedChecklists = persistedChecklists;
-      if (persistedSource.rawXml && desktopBridge.isRunningInDesktop()) {
-        const verified = await desktopBridge.verifySource(
-          persistedSource.rawXml,
-          persistedSource.rawOrderRevisionXml,
-          persistedSource.rawManifestXml,
-          manualOverridesFromFacts(persistedFacts),
-          persistedSqItems,
-          persistedChecklists
-        );
-        if (revision !== sessionRevision.current) return;
-        trusted = verified.sourceIsTrusted === true;
-        loadedGraph = verified.graph;
-        loadedFacts = verified.facts;
-        loadedChecklists = verified.checklists;
-      } else if (persistedSource.rawXml) {
+      if (persistedSource.rawXml) {
         loadedGraph = parseBrowserPreviewAhuXml(persistedSource.rawXml);
         const extractedFacts = extractBrowserPreviewFacts(loadedGraph, persistedSource.orderRevision);
         loadedFacts = Object.entries(manualOverridesFromFacts(persistedFacts)).reduce(
@@ -313,6 +426,8 @@ export function useProjectSession({
       }
 
       if (revision !== sessionRevision.current) return;
+      setSessionSnapshot(null);
+      sessionSnapshotRef.current = null;
       setSourceIsTrusted(trusted);
       setGraph(loadedGraph);
       setFacts(loadedFacts);
@@ -329,10 +444,12 @@ export function useProjectSession({
     } catch (err: any) {
       alert(`Error loading .dvl project: ${err.message}`);
     }
-  }, [activeRules, onSessionLoaded, rulePackIdentity]);
+  }, [activeRules, onSessionLoaded, rulePackIdentity, syncFromSnapshot]);
 
   const handleManualCreate = useCallback((config: ManualUnitConfig) => {
     ++sessionRevision.current;
+    setSessionSnapshot(null);
+    sessionSnapshotRef.current = null;
     setSourceIsTrusted(false);
     try {
       const manual = createManualUnit(config, activeRules);
@@ -367,8 +484,33 @@ export function useProjectSession({
     }
   }, []);
 
-  const handleLoadSample = useCallback(() => {
-    ++sessionRevision.current;
+  const handleLoadSample = useCallback(async () => {
+    const revision = ++sessionRevision.current;
+    if (desktopBridge.isRunningInDesktop()) {
+      try {
+        const snapshot = await desktopBridge.projectSessionOpen({
+          configXml: SAMPLE_CONFIG_XML,
+          filePath: 'Sample Config.xml',
+          isUpz: false,
+          isTrusted: false
+        });
+        if (revision !== sessionRevision.current) return;
+        syncFromSnapshot(snapshot);
+        setRawXml(SAMPLE_CONFIG_XML);
+        setSourceMetadata({ fileName: 'Sample Config.xml', isUpzBundle: false });
+        setCurrentProjectPath(null);
+        setProjectIntegrityWarning(null);
+        setProjectIntegrityClassification(null);
+        setIsProjectLoaded(true);
+        onSessionLoaded?.();
+        return;
+      } catch (err) {
+        console.warn('Desktop session open failed for sample, falling back to browser preview:', err);
+      }
+    }
+
+    setSessionSnapshot(null);
+    sessionSnapshotRef.current = null;
     setSourceIsTrusted(false);
     try {
       const newGraph = parseBrowserPreviewAhuXml(SAMPLE_CONFIG_XML);
@@ -406,20 +548,18 @@ export function useProjectSession({
     } catch (err: any) {
       alert(`Error loading sample: ${err.message}`);
     }
-  }, [activeRules, onSessionLoaded]);
+  }, [activeRules, onSessionLoaded, syncFromSnapshot]);
 
   const handleResetAllChanges = useCallback(async () => {
     if (!graph) return;
     try {
-      if (desktopBridge.isRunningInDesktop() && rawXml) {
-        const verified = await desktopBridge.verifySource(
-          rawXml,
-          sourceMetadata.rawOrderRevisionXml,
-          sourceMetadata.rawManifestXml
+      if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+        await dispatchSessionCommand((sessionId, expectedRevision) =>
+          desktopBridge.projectSessionReset({
+            sessionId,
+            expectedRevision
+          })
         );
-        setGraph(verified.graph);
-        setFacts(verified.facts);
-        setChecklists(verified.checklists);
         return;
       }
       const freshFacts = extractBrowserPreviewFacts(graph, sourceMetadata.orderRevision);
@@ -429,7 +569,7 @@ export function useProjectSession({
     } catch (err: any) {
       alert(`Error resetting changes: ${err.message}`);
     }
-  }, [graph, rawXml, sourceMetadata, activeRules]);
+  }, [graph, sourceMetadata, activeRules, dispatchSessionCommand]);
 
   const handleFileUpload = useCallback((file: File) => {
     const reader = new FileReader();
@@ -451,20 +591,52 @@ export function useProjectSession({
 
   const handleBatchResolveDefaults = useCallback(() => {
     if (!graph) return;
-    let updated = { ...latestFacts.current };
-    if (updated['unit.noa'] && updated['unit.noa'].confidence === 'RequiresConfirmation') {
-      updated = overrideFact(updated, 'unit.noa', false, 'Detailer', 'Standard Non-NOA unit');
+    const currentFacts = latestFacts.current;
+    const items: BatchFactOverrideItem[] = [];
+    if (currentFacts['unit.noa'] && currentFacts['unit.noa'].confidence === 'RequiresConfirmation') {
+      items.push({ factId: 'unit.noa', value: false, author: 'Detailer', comment: 'Standard Non-NOA unit' });
     }
-    if (updated['unit.isSeismic'] && updated['unit.isSeismic'].confidence === 'RequiresConfirmation') {
-      updated = overrideFact(updated, 'unit.isSeismic', false, 'Detailer', 'Standard Non-Seismic');
+    if (currentFacts['unit.isSeismic'] && currentFacts['unit.isSeismic'].confidence === 'RequiresConfirmation') {
+      items.push({ factId: 'unit.isSeismic', value: false, author: 'Detailer', comment: 'Standard Non-Seismic' });
     }
-    if (updated['unit.knockdown'] && updated['unit.knockdown'].confidence === 'RequiresConfirmation') {
-      updated = overrideFact(updated, 'unit.knockdown', false, 'Detailer', 'Factory Assembled');
+    if (currentFacts['unit.knockdown'] && currentFacts['unit.knockdown'].confidence === 'RequiresConfirmation') {
+      items.push({ factId: 'unit.knockdown', value: false, author: 'Detailer', comment: 'Factory Assembled' });
     }
+
+    if (items.length === 0) return;
+
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionBatchOverrideFacts({
+          sessionId,
+          expectedRevision,
+          overrides: items
+        })
+      );
+      return;
+    }
+
+    let updated = { ...currentFacts };
+    items.forEach(item => {
+      updated = overrideFact(updated, item.factId, item.value, item.author, item.comment);
+    });
     applyFactEdit(updated);
-  }, [graph, applyFactEdit]);
+  }, [graph, applyFactEdit, dispatchSessionCommand]);
 
   const handleUpdateChecklistStatus = useCallback((instanceKey: string, status: CheckStatus) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      const item = latestChecklists.current.find(c => c.instanceKey === instanceKey);
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionUpdateChecklist({
+          sessionId,
+          expectedRevision,
+          checkId: instanceKey,
+          status,
+          comment: item?.detailerComment
+        })
+      );
+      return;
+    }
     ++sessionRevision.current;
     setChecklists(prev => prev.map(item => {
       if (item.instanceKey === instanceKey) {
@@ -474,9 +646,22 @@ export function useProjectSession({
       }
       return item;
     }));
-  }, [activeRules]);
+  }, [activeRules, dispatchSessionCommand]);
 
   const handleUpdateChecklistComment = useCallback((instanceKey: string, detailerComment: string) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      const item = latestChecklists.current.find(c => c.instanceKey === instanceKey);
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionUpdateChecklist({
+          sessionId,
+          expectedRevision,
+          checkId: instanceKey,
+          status: item?.status || 'Incomplete',
+          comment: detailerComment
+        })
+      );
+      return;
+    }
     ++sessionRevision.current;
     setChecklists(prev => prev.map(item => {
       if (item.instanceKey === instanceKey) {
@@ -484,10 +669,83 @@ export function useProjectSession({
       }
       return item;
     }));
-  }, []);
+  }, [dispatchSessionCommand]);
+
+  const handleUpdateSpecialQuote = useCallback((item: SpecialQuote) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionUpdateSpecialQuote({
+          sessionId,
+          expectedRevision,
+          specialQuote: item
+        })
+      );
+      return;
+    }
+    setSqItems(prev => {
+      const existingIndex = prev.findIndex(s => (s.id && item.id && s.id === item.id) || s.slot === item.slot);
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = item;
+        return next.sort((a, b) => a.slot - b.slot);
+      }
+      return [...prev, item].sort((a, b) => a.slot - b.slot);
+    });
+  }, [dispatchSessionCommand]);
+
+  const handleDeleteSpecialQuote = useCallback((slotOrId: number | string) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionDeleteSpecialQuote({
+          sessionId,
+          expectedRevision,
+          quoteId: String(slotOrId)
+        })
+      );
+      return;
+    }
+    setSqItems(prev => prev.filter(s => s.slot !== slotOrId && s.id !== slotOrId));
+  }, [dispatchSessionCommand]);
+
+  const handleReorderSpecialQuotes = useCallback((assignments: SpecialQuoteSlotAssignment[]) => {
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionReorderSpecialQuotes({
+          sessionId,
+          expectedRevision,
+          assignments
+        })
+      );
+      return;
+    }
+    setSqItems(prev => {
+      const map = new Map(assignments.map(a => [a.quoteId, a.slot]));
+      return prev.map(s => {
+        const newSlot = map.get(s.id);
+        return newSlot !== undefined ? { ...s, slot: newSlot } : s;
+      }).sort((a, b) => a.slot - b.slot);
+    });
+  }, [dispatchSessionCommand]);
+
+  const handleUpdateGeneralComments = useCallback((comments: string) => {
+    setGeneralComments(comments);
+    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      void dispatchSessionCommand((sessionId, expectedRevision) =>
+        desktopBridge.projectSessionUpdateGeneralComments({
+          sessionId,
+          expectedRevision,
+          generalComments: comments
+        })
+      );
+    }
+  }, [dispatchSessionCommand]);
 
   const handleSaveDvl = useCallback(async (forceSaveAs: boolean = false) => {
     if (!graph) return;
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await pendingCommandChain.current;
     try {
       const project = await createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata, {
         rulePackIdentity,
@@ -522,6 +780,10 @@ export function useProjectSession({
   }, [graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata, rulePackIdentity, activeRules, activeRulePackArtifacts, projectIntegrityClassification, currentProjectPath]);
 
   const handleExportExcel = useCallback(async (isDraft: boolean = false) => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await pendingCommandChain.current;
     if (!graph) {
       setExportError('Cannot export Excel deliverable: No project geometry or graph is loaded.');
       return;
@@ -590,9 +852,15 @@ export function useProjectSession({
     lastSavedAt,
     exportNotice,
     exportError,
+    sessionSnapshot,
+    readiness,
     setSqItems,
     setGeneralComments,
-    leaveProject: () => setIsProjectLoaded(false),
+    leaveProject: () => {
+      setSessionSnapshot(null);
+      sessionSnapshotRef.current = null;
+      setIsProjectLoaded(false);
+    },
     loadXmlData,
     handleOpenDvl,
     handleManualCreate,
@@ -606,6 +874,10 @@ export function useProjectSession({
     handleBatchResolveDefaults,
     handleUpdateChecklistStatus,
     handleUpdateChecklistComment,
+    handleUpdateSpecialQuote,
+    handleDeleteSpecialQuote,
+    handleReorderSpecialQuotes,
+    handleUpdateGeneralComments,
     handleSaveDvl,
     handleExportExcel,
     dismissExportNotice: () => setExportNotice(null),

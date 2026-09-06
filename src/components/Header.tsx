@@ -16,8 +16,9 @@ import {
   CheckCircle2,
   User
 } from 'lucide-react';
-import { Fact, ChecklistInstance, ThemeMode } from '../types';
+import { Fact, ChecklistInstance, ThemeMode, DvlProjectFile, UpzBundle } from '../types';
 import { UnitReadiness, computeUnitReadiness } from '../utils/readiness';
+import { desktopBridge } from '../services/desktopBridge';
 
 interface HeaderProps {
   jobName: string;
@@ -45,6 +46,8 @@ interface HeaderProps {
   onOpenProjectIdentityModal?: () => void;
   onOpenDetailerModal?: () => void;
   onOpenComModal?: () => void;
+  onOpenDvl?: (project: DvlProjectFile, rawJson?: string, filePath?: string) => Promise<void>;
+  onImportXml?: (xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -72,7 +75,9 @@ export const Header: React.FC<HeaderProps> = ({
   hasUnsavedChanges,
   onOpenProjectIdentityModal,
   onOpenDetailerModal,
-  onOpenComModal
+  onOpenComModal,
+  onOpenDvl,
+  onImportXml
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,6 +92,32 @@ export const Header: React.FC<HeaderProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       onFileUpload(file);
+    }
+  };
+
+  const handleUploadClick = async () => {
+    if (desktopBridge.isRunningInDesktop()) {
+      try {
+        const result = await desktopBridge.openFileDialog();
+        if (result) {
+          if (result.isDvl) {
+            try {
+              const project = JSON.parse(result.content);
+              await onOpenDvl?.(project, result.content, result.filePath);
+            } catch (err: any) {
+              alert(`Error reading .dvl project file: ${err.message}`);
+            }
+          } else if (result.isUpz && result.bundle) {
+            await onImportXml?.(result.content, result.bundle, result.fileName);
+          } else {
+            await onImportXml?.(result.content, undefined, result.fileName);
+          }
+        }
+      } catch (err: any) {
+        alert(`File ingestion error: ${err.message}`);
+      }
+    } else {
+      fileInputRef.current?.click();
     }
   };
 
@@ -214,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Upload XML */}
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleUploadClick}
           title="Upload custom Config.xml or .dvl project"
           className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 font-medium transition-all"
         >
