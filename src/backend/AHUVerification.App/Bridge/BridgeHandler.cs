@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -9,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using AHUVerification.App.Services;
 using AHUVerification.Core.Bridge;
+using AHUVerification.Core.Manual;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
 using AHUVerification.Core.Services;
@@ -26,8 +28,11 @@ namespace AHUVerification.App.Bridge
         private readonly UpzBundleExtractor _upzExtractor = new();
         private readonly UpdateService _updateService = new();
         private readonly ProjectSessionService _sessionService = new();
+        private readonly ConcurrentDictionary<string, string> _authorizedSourceHandles = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _authorizedPickerPaths = new(StringComparer.OrdinalIgnoreCase);
 
         private RulePackBundle? _activeRulePack;
+        private string? _rulePackError;
         private int _rulePackGeneration = 1;
         private readonly string _rulePackPath;
         private readonly Func<string?>? _exportPathSelector;
@@ -46,12 +51,53 @@ namespace AHUVerification.App.Bridge
             LoadActiveRulePack();
         }
 
+        public string AuthorizeSourcePath(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path cannot be empty", nameof(filePath));
+            string fullPath = Path.GetFullPath(filePath);
+            string handle = Guid.NewGuid().ToString("N");
+            _authorizedSourceHandles[handle] = fullPath;
+            lock (_authorizedPickerPaths)
+            {
+                _authorizedPickerPaths.Add(fullPath);
+            }
+            return handle;
+        }
+
+        public bool IsSourcePathAuthorized(string? filePath, string? sourceHandle = null)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return false;
+            string fullPath = Path.GetFullPath(filePath);
+
+            if (!string.IsNullOrWhiteSpace(sourceHandle) && _authorizedSourceHandles.TryGetValue(sourceHandle, out var authorizedPath))
+            {
+                if (string.Equals(fullPath, authorizedPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            lock (_authorizedPickerPaths)
+            {
+                return _authorizedPickerPaths.Contains(fullPath);
+            }
+        }
+
         private void LoadActiveRulePack()
         {
-            if (!Directory.Exists(_rulePackPath))
-                throw new DirectoryNotFoundException($"Rule pack directory not found: {_rulePackPath}");
+            try
+            {
+                if (!Directory.Exists(_rulePackPath))
+                    throw new DirectoryNotFoundException($"Rule pack directory not found: {_rulePackPath}");
 
-            _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
+                _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
+                _rulePackError = null;
+            }
+            catch (Exception ex)
+            {
+                _activeRulePack = null;
+                _rulePackError = $"Failed to load active rule pack from '{_rulePackPath}': {ex.Message}";
+            }
         }
 
         public BridgeResponse Handle(string jsonMessage)
@@ -124,6 +170,8 @@ namespace AHUVerification.App.Bridge
                     "projectSession_reorderSpecialQuotes" => ReorderProjectSessionSpecialQuotes(req.Payload),
                     "projectSession_updateGeneralComments" => UpdateProjectSessionGeneralComments(req.Payload),
                     "projectSession_reset" => ResetProjectSession(req.Payload),
+                    "projectSession_createManual" => CreateManualProjectSession(req.Payload),
+                    "getSegmentTemplates" => GetSegmentTemplates(),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
@@ -143,19 +191,22 @@ namespace AHUVerification.App.Bridge
                 appVersion = ApplicationVersion.Current,
                 rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
-                isDesktopHost = true
+                isDesktopHost = true,
+                rulePackError = _rulePackError
             };
         }
 
         private object GetRulePack()
         {
-            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null && _rulePackError == null) LoadActiveRulePack();
             return new
             {
                 manifest = _activeRulePack?.Manifest,
                 rules = _activeRulePack?.Rules,
                 templateMap = _activeRulePack?.TemplateMap,
-                approvedMappings = _activeRulePack?.ApprovedMappings
+                approvedMappings = _activeRulePack?.ApprovedMappings,
+                generation = _rulePackGeneration,
+                error = _rulePackError
             };
         }
 
@@ -174,6 +225,7 @@ namespace AHUVerification.App.Bridge
 
                 if (ofd.ShowDialog(_parentForm) == DialogResult.OK)
                 {
+                    string sourceHandle = AuthorizeSourcePath(ofd.FileName);
                     if (ofd.FileName.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
                     {
                         var bundle = _upzExtractor.Extract(ofd.FileName);
@@ -181,6 +233,7 @@ namespace AHUVerification.App.Bridge
                         {
                             fileName = Path.GetFileName(ofd.FileName),
                             filePath = ofd.FileName,
+                            sourceHandle,
                             content = bundle.RawConfigXml,
                             isDvl = false,
                             isUpz = true,
@@ -201,6 +254,7 @@ namespace AHUVerification.App.Bridge
                         {
                             fileName = Path.GetFileName(ofd.FileName),
                             filePath = ofd.FileName,
+                            sourceHandle,
                             content,
                             isDvl = ofd.FileName.EndsWith(".dvl", StringComparison.OrdinalIgnoreCase),
                             isUpz = false
@@ -444,10 +498,13 @@ namespace AHUVerification.App.Bridge
             string lkg = Path.Combine(localData, "lkg_rulepack");
 
             bool success = _rulePackManager.SyncFromRemote(remotePath, staging, active, lkg);
+            ProjectSessionSnapshot? updatedSnapshot = null;
             if (success)
             {
                 _activeRulePack = _rulePackManager.LoadFromDirectory(active);
                 _rulePackGeneration++;
+                _rulePackError = null;
+                updatedSnapshot = _sessionService.UpdateActiveRulePack(_activeRulePack, _rulePackGeneration);
             }
 
             return new
@@ -459,7 +516,9 @@ namespace AHUVerification.App.Bridge
                 rules = _activeRulePack?.Rules,
                 templateMap = _activeRulePack?.TemplateMap,
                 approvedMappings = _activeRulePack?.ApprovedMappings,
-                manifest = _activeRulePack?.Manifest
+                manifest = _activeRulePack?.Manifest,
+                generation = _rulePackGeneration,
+                sessionSnapshot = updatedSnapshot
             };
         }
 
@@ -579,6 +638,16 @@ namespace AHUVerification.App.Bridge
             var cmd = JsonSerializer.Deserialize<OpenSourceCommand>(payload.GetRawText(), options)
                 ?? new OpenSourceCommand();
 
+            // Enforce CE1 source authenticity: renderer payload cannot assert trust.
+            // Source is trusted ONLY if host reads and extracts an authentic file directly from disk
+            // that was authorized by native picker or presents a valid host-issued handle.
+            cmd.IsTrusted = false;
+
+            string? sourceHandle = !string.IsNullOrWhiteSpace(cmd.SourceHandle)
+                ? cmd.SourceHandle
+                : BridgeValidation.GetStringPropertyOrDefault(payload, "sourceHandle", "");
+            bool isAuthorized = IsSourcePathAuthorized(cmd.FilePath, sourceHandle);
+
             if (!string.IsNullOrWhiteSpace(cmd.FilePath) && File.Exists(cmd.FilePath))
             {
                 if (cmd.FilePath.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
@@ -588,13 +657,25 @@ namespace AHUVerification.App.Bridge
                     cmd.OrderRevXml = bundle.RawOrderRevXml;
                     cmd.ManifestXml = bundle.RawManifestXml;
                     cmd.IsUpz = true;
-                    cmd.IsTrusted = true;
+                    cmd.IsTrusted = isAuthorized;
+                    if (isAuthorized)
+                    {
+                        cmd.InitialChecklists = null;
+                    }
                 }
                 else if (cmd.FilePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                 {
                     cmd.ConfigXml = File.ReadAllText(cmd.FilePath);
                     cmd.IsUpz = false;
-                    cmd.IsTrusted = true;
+                    // Reading a standalone XML file from disk authenticates only that XML configuration.
+                    // It does not authenticate OrderRev or Manifest data, and cannot retain renderer-supplied OrderRev/Manifest data.
+                    cmd.OrderRevXml = null;
+                    cmd.ManifestXml = null;
+                    cmd.IsTrusted = isAuthorized;
+                    if (isAuthorized)
+                    {
+                        cmd.InitialChecklists = null;
+                    }
                 }
             }
 
@@ -686,6 +767,24 @@ namespace AHUVerification.App.Bridge
             var cmd = JsonSerializer.Deserialize<ResetSessionCommand>(payload.GetRawText(), options)
                 ?? throw new ArgumentException("Invalid ResetSessionCommand payload");
             return _sessionService.ResetSession(cmd);
+        }
+
+        private object CreateManualProjectSession(JsonElement payload)
+        {
+            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null)
+                throw new InvalidOperationException(_rulePackError ?? "Active rule pack bundle not loaded.");
+
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<CreateManualProjectCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid CreateManualProjectCommand payload");
+
+            return _sessionService.CreateManualProject(cmd, _activeRulePack, _rulePackGeneration);
+        }
+
+        private object GetSegmentTemplates()
+        {
+            return ManualUnitFactory.AvailableSegmentTemplates;
         }
     }
 }

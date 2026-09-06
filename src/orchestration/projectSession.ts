@@ -2,6 +2,8 @@ import type { Fact, RulePackIdentity, UpzBundle } from '../types';
 
 export interface SourceMetadata {
   fileName?: string;
+  filePath?: string;
+  fileSha256?: string;
   isUpzBundle?: boolean;
   orderRevision?: UpzBundle['orderRevision'];
   rawOrderRevisionXml?: string;

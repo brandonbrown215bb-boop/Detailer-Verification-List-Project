@@ -48,6 +48,31 @@ namespace AHUVerification.Core.Session
             }
         }
 
+        public ProjectSessionSnapshot CreateManualProject(CreateManualProjectCommand cmd, RulePackBundle activePack, int packGeneration)
+        {
+            if (cmd == null) throw new ArgumentNullException(nameof(cmd));
+            if (cmd.Config == null) throw new ArgumentException("ManualUnitConfig cannot be null", nameof(cmd));
+
+            lock (_lock)
+            {
+                var session = ProjectSession.CreateManual(cmd.Config, activePack, packGeneration);
+                _activeSession = session;
+                return session.CreateSnapshot();
+            }
+        }
+
+        public ProjectSessionSnapshot? UpdateActiveRulePack(RulePackBundle newPack, int packGeneration)
+        {
+            if (newPack == null) throw new ArgumentNullException(nameof(newPack));
+
+            lock (_lock)
+            {
+                if (_activeSession == null) return null;
+                var result = _activeSession.UpdateRulePack(newPack, packGeneration);
+                return result.Snapshot;
+            }
+        }
+
         public ProjectSessionSnapshot? GetCurrentSnapshot()
         {
             lock (_lock)

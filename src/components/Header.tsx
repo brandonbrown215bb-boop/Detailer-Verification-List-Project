@@ -47,7 +47,7 @@ interface HeaderProps {
   onOpenDetailerModal?: () => void;
   onOpenComModal?: () => void;
   onOpenDvl?: (project: DvlProjectFile, rawJson?: string, filePath?: string) => Promise<void>;
-  onImportXml?: (xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => Promise<void>;
+  onImportXml?: (xmlString: string, bundle?: UpzBundle, sourceFileName?: string, sourceFilePath?: string, sourceHandle?: string) => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -108,9 +108,9 @@ export const Header: React.FC<HeaderProps> = ({
               alert(`Error reading .dvl project file: ${err.message}`);
             }
           } else if (result.isUpz && result.bundle) {
-            await onImportXml?.(result.content, result.bundle, result.fileName);
+            await onImportXml?.(result.content, result.bundle, result.fileName, result.filePath, result.sourceHandle);
           } else {
-            await onImportXml?.(result.content, undefined, result.fileName);
+            await onImportXml?.(result.content, undefined, result.fileName, result.filePath, result.sourceHandle);
           }
         }
       } catch (err: any) {

@@ -756,14 +756,36 @@ export function createManualUnit(config: ManualUnitConfig, activeRules: RuleDefi
   facts = overrideFact(facts, 'casing.floorMaterial', casingMaterials.floorMaterialType, config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'casing.floorGauge', casingMaterials.floorMaterialGauge, config.detailerName, 'Manual Project Creation');
 
+  function escapeXml(value: any): string {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function escapeXmlComment(value: any): string {
+    if (value === null || value === undefined) return '';
+    let sanitized = String(value);
+    while (sanitized.includes('--')) {
+      sanitized = sanitized.replace(/--/g, '- -');
+    }
+    if (sanitized.endsWith('-')) {
+      sanitized += ' ';
+    }
+    return sanitized;
+  }
+
   // 4. Generate Rule Checklists
   const checklists = generateChecklists(activeRules, graph, facts);
 
   // 5. Synthesize XML Representation for .dvl persistence
   const segmentsXml = segments.map(s => `      <segment_${s.typeCode}>
-        <segmentID>${s.id}</segmentID>
+        <segmentID>${escapeXml(s.id)}</segmentID>
         <weight>${s.weight}</weight>
-        <airPressureType>${s.airPressureType}</airPressureType>
+        <airPressureType>${escapeXml(s.airPressureType)}</airPressureType>
         <airVolume>${s.airVolume}</airVolume>
         <geometry>
           <xLength>${s.dimensions.xLength}</xLength>
@@ -771,31 +793,31 @@ export function createManualUnit(config: ManualUnitConfig, activeRules: RuleDefi
           <zLength>${s.dimensions.zLength}</zLength>
         </geometry>
         <constructionOptions>
-          <housingStyle>${s.casing.housingStyle}</housingStyle>
-          <insulationType>${s.casing.insulationType}</insulationType>
+          <housingStyle>${escapeXml(s.casing.housingStyle)}</housingStyle>
+          <insulationType>${escapeXml(s.casing.insulationType)}</insulationType>
           <surfaceDetail_Front>
-            <exteriorMaterialType>${s.casing.exteriorMaterial}</exteriorMaterialType>
+            <exteriorMaterialType>${escapeXml(s.casing.exteriorMaterial)}</exteriorMaterialType>
             <exteriorMaterialGauge>${s.casing.exteriorGauge}</exteriorMaterialGauge>
-            <interiorMaterialType>${s.casing.interiorMaterial}</interiorMaterialType>
+            <interiorMaterialType>${escapeXml(s.casing.interiorMaterial)}</interiorMaterialType>
             <interiorMaterialGauge>${s.casing.interiorGauge}</interiorMaterialGauge>
             <housingThickness>${s.casing.housingThickness}</housingThickness>
           </surfaceDetail_Front>
         </constructionOptions>
-        ${s.internals.map(i => `<internalFeature>${i}</internalFeature>`).join('\n        ')}
+        ${s.internals.map(i => `<internalFeature>${escapeXml(i)}</internalFeature>`).join('\n        ')}
       </segment_${s.typeCode}>`).join('\n');
 
   const skidsXml = skids.map(sk => `      <shippingSkid>
-        <skidID>${sk.id}</skidID>
-        <name>${sk.name}</name>
-        ${sk.segmentIds.map(sid => `<segmentReference><segmentID>${sid}</segmentID></segmentReference>`).join('\n        ')}
-        ${sk.baseIds.map(bid => `<unitBaseReference><unitBaseID>${bid}</unitBaseID></unitBaseReference>`).join('\n        ')}
+        <skidID>${escapeXml(sk.id)}</skidID>
+        <name>${escapeXml(sk.name)}</name>
+        ${sk.segmentIds.map(sid => `<segmentReference><segmentID>${escapeXml(sid)}</segmentID></segmentReference>`).join('\n        ')}
+        ${sk.baseIds.map(bid => `<unitBaseReference><unitBaseID>${escapeXml(bid)}</unitBaseID></unitBaseReference>`).join('\n        ')}
       </shippingSkid>`).join('\n');
 
   const basesXml = bases.map(b => `      <unitBase>
-        <unitBaseID>${b.id}</unitBaseID>
-        <unitBaseMaterialType>${b.materialType}</unitBaseMaterialType>
-        <unitBaseType>${b.baseType}</unitBaseType>
-        <subFloorMaterialType>${b.subFloorMaterial}</subFloorMaterialType>
+        <unitBaseID>${escapeXml(b.id)}</unitBaseID>
+        <unitBaseMaterialType>${escapeXml(b.materialType)}</unitBaseMaterialType>
+        <unitBaseType>${escapeXml(b.baseType)}</unitBaseType>
+        <subFloorMaterialType>${escapeXml(b.subFloorMaterial)}</subFloorMaterialType>
         <geometry>
           <yLength>${b.height}</yLength>
           <xLength>${b.dimensions.xLength}</xLength>
@@ -804,22 +826,22 @@ export function createManualUnit(config: ManualUnitConfig, activeRules: RuleDefi
       </unitBase>`).join('\n');
 
   const rawXml = `<?xml version="1.0" encoding="utf-8"?>
-<!-- Manually Created AHU Project: ${config.jobName || 'Custom AHU'} (${config.comNumber || 'COM-000000'}) -->
+<!-- Manually Created AHU Project: ${escapeXmlComment(config.jobName || 'Custom AHU')} (${escapeXmlComment(config.comNumber || 'COM-000000')}) -->
 <AHU>
   <unitWeight>${graph.unitWeight}</unitWeight>
   <totalStaticPressure>${graph.totalStaticPressure}</totalStaticPressure>
   <unitOptions>
-    <unitType>${config.unitType || 'Outdoor'}</unitType>
+    <unitType>${escapeXml(config.unitType || 'Outdoor')}</unitType>
     <brandOption>YORKCustom</brandOption>
     <defaultUnitBaseHeight>${defaultBaseHeight}</defaultUnitBaseHeight>
     <defaultConstructionOptions>
-      <housingStyle>${casingMaterials.housingStyle}</housingStyle>
-      <insulationType>${casingMaterials.insulationType}</insulationType>
-      <exteriorMaterialType>${casingMaterials.exteriorMaterialType}</exteriorMaterialType>
+      <housingStyle>${escapeXml(casingMaterials.housingStyle)}</housingStyle>
+      <insulationType>${escapeXml(casingMaterials.insulationType)}</insulationType>
+      <exteriorMaterialType>${escapeXml(casingMaterials.exteriorMaterialType)}</exteriorMaterialType>
       <exteriorMaterialGauge>${casingMaterials.exteriorMaterialGauge}</exteriorMaterialGauge>
-      <interiorMaterialType>${casingMaterials.interiorMaterialType}</interiorMaterialType>
+      <interiorMaterialType>${escapeXml(casingMaterials.interiorMaterialType)}</interiorMaterialType>
       <interiorMaterialGauge>${casingMaterials.interiorMaterialGauge}</interiorMaterialGauge>
-      <floorMaterialType>${casingMaterials.floorMaterialType}</floorMaterialType>
+      <floorMaterialType>${escapeXml(casingMaterials.floorMaterialType)}</floorMaterialType>
       <floorMaterialGauge>${casingMaterials.floorMaterialGauge}</floorMaterialGauge>
     </defaultConstructionOptions>
   </unitOptions>
@@ -843,4 +865,3 @@ ${segmentsXml}
     generalComments: `Manually configured AHU unit with ${skids.length} shipping skids and ${segments.length} segments.`
   };
 }
-

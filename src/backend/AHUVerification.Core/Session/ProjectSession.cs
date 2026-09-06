@@ -16,6 +16,49 @@ namespace AHUVerification.Core.Session
         private readonly object _syncLock = new();
         private readonly FactExtractor _factExtractor = new();
         private readonly AstRuleEvaluator _evaluator = new();
+        private readonly Dictionary<string, SessionCommandResult> _recentRequestResults = new();
+        private readonly Queue<string> _recentRequestOrder = new();
+        private const int MaxTrackedRequests = 100;
+
+        private bool TryGetDeduplicatedResult(string? requestId, out SessionCommandResult? result)
+        {
+            result = null;
+            if (string.IsNullOrWhiteSpace(requestId)) return false;
+            if (_recentRequestResults.TryGetValue(requestId, out result))
+            {
+                if (result.Snapshot != null && result.Snapshot.Revision < Revision)
+                {
+                    result = null;
+                    return false;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        private void InvalidateDeduplicationCache()
+        {
+            _recentRequestResults.Clear();
+            _recentRequestOrder.Clear();
+        }
+
+        private SessionCommandResult RecordCommandResult(string? requestId, SessionCommandResult result)
+        {
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                if (!_recentRequestResults.ContainsKey(requestId))
+                {
+                    if (_recentRequestOrder.Count >= MaxTrackedRequests)
+                    {
+                        var oldest = _recentRequestOrder.Dequeue();
+                        _recentRequestResults.Remove(oldest);
+                    }
+                    _recentRequestOrder.Enqueue(requestId);
+                }
+                _recentRequestResults[requestId] = result;
+            }
+            return result;
+        }
 
         public string SessionId { get; }
         public long Revision { get; private set; }
@@ -54,7 +97,10 @@ namespace AHUVerification.Core.Session
             Dictionary<string, Fact>? initialOverrides = null,
             List<ChecklistInstance>? initialChecklists = null,
             List<SpecialQuote>? initialSpecialQuotes = null,
-            string? initialGeneralComments = null)
+            string? initialGeneralComments = null,
+            NormalizedXmlGraph? synthesizedGraph = null,
+            Dictionary<string, Fact>? synthesizedBaselineFacts = null,
+            Dictionary<string, Fact>? synthesizedFacts = null)
         {
             if (string.IsNullOrWhiteSpace(configXml))
                 throw new ArgumentException("Config.xml content cannot be empty", nameof(configXml));
@@ -65,7 +111,7 @@ namespace AHUVerification.Core.Session
             Revision = 1;
 
             FilePath = filePath ?? "";
-            FileName = !string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : (isUpz ? "UnitPackage.upz" : "Config.xml");
+            FileName = !string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : (isUpz ? "UnitPackage.upz" : (isTrusted ? "Config.xml" : "Manual Unit Configuration.xml"));
             FileSha256 = ComputeSha256(configXml);
             IsUpz = isUpz;
             IsTrusted = isTrusted;
@@ -77,39 +123,59 @@ namespace AHUVerification.Core.Session
             ActiveRulePack = activePack;
             RulePackGeneration = packGeneration;
 
-            // Parse graph
-            Graph = new NormalizedXmlParser().Parse(configXml);
-
-            // Parse order revision if present
-            if (!string.IsNullOrEmpty(orderRevXml))
+            if (synthesizedGraph != null)
             {
-                OrderRevision = new OrderRevParser().Parse(orderRevXml);
-            }
+                Graph = synthesizedGraph;
+                BaselineFacts = synthesizedBaselineFacts != null ? CloneFacts(synthesizedBaselineFacts) : _factExtractor.ExtractFacts(Graph, OrderRevision);
+                Facts = synthesizedFacts != null ? CloneFacts(synthesizedFacts) : CloneFacts(BaselineFacts);
+                ManualOverrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
 
-            // Extract initial baseline facts
-            BaselineFacts = _factExtractor.ExtractFacts(Graph, OrderRevision);
-
-            // Clone baseline facts for active dictionary
-            Facts = CloneFacts(BaselineFacts);
-            ManualOverrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
-
-            if (initialOverrides != null)
-            {
-                foreach (var kvp in initialOverrides)
+                if (initialOverrides != null)
                 {
-                    string key = FactContractValidator.CanonicalizeKey(kvp.Key, ActiveRulePack.FactContract);
-                    if (Facts.ContainsKey(key))
+                    foreach (var kvp in initialOverrides)
                     {
-                        var lastAudit = kvp.Value.AuditHistory?.LastOrDefault();
-                        string author = lastAudit?.By ?? "Detailer";
-                        string reason = lastAudit?.Note ?? "Restored override";
-                        _factExtractor.OverrideFact(Facts, key, kvp.Value.Value, author, reason);
-                        ManualOverrides[key] = Facts[key];
+                        ManualOverrides[kvp.Key] = CloneFact(kvp.Value);
+                    }
+                }
+            }
+            else
+            {
+                // Parse graph
+                Graph = new NormalizedXmlParser().Parse(configXml);
+
+                // Parse order revision if present
+                if (!string.IsNullOrEmpty(orderRevXml))
+                {
+                    OrderRevision = new OrderRevParser().Parse(orderRevXml);
+                }
+
+                // Extract initial baseline facts
+                BaselineFacts = _factExtractor.ExtractFacts(Graph, OrderRevision);
+
+                // Clone baseline facts for active dictionary
+                Facts = CloneFacts(BaselineFacts);
+                ManualOverrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
+
+                if (initialOverrides != null)
+                {
+                    foreach (var kvp in initialOverrides)
+                    {
+                        string key = FactContractValidator.CanonicalizeKey(kvp.Key, ActiveRulePack.FactContract);
+                        if (Facts.ContainsKey(key))
+                        {
+                            var lastAudit = kvp.Value.AuditHistory?.LastOrDefault();
+                            string author = lastAudit?.By ?? "Detailer";
+                            string reason = lastAudit?.Note ?? "Restored override";
+                            _factExtractor.OverrideFact(Facts, key, kvp.Value.Value, author, reason);
+                            ManualOverrides[key] = Facts[key];
+                        }
                     }
                 }
             }
 
-            Checklists = initialChecklists != null
+            // Enforce CE1 authority boundary: legacy hydration (e.g. from saved DVL projects)
+            // must never establish trusted verification history on an authentic source session.
+            Checklists = (!isTrusted && initialChecklists != null)
                 ? initialChecklists.Select(CloneChecklist).ToList()
                 : new List<ChecklistInstance>();
 
@@ -118,10 +184,35 @@ namespace AHUVerification.Core.Session
                 : new List<SpecialQuote>();
 
             GeneralComments = initialGeneralComments ?? "";
-            IsDirty = initialOverrides != null || initialSpecialQuotes != null || !string.IsNullOrEmpty(initialGeneralComments);
+            IsDirty = !isTrusted || initialOverrides != null || initialSpecialQuotes != null || !string.IsNullOrEmpty(initialGeneralComments);
 
             // Generate initial checklists
             ReevaluateInternal();
+        }
+
+        public static ProjectSession CreateManual(
+            Manual.ManualUnitConfig config,
+            RulePackBundle activePack,
+            int packGeneration)
+        {
+            var synthesis = new Manual.ManualUnitFactory().Synthesize(config);
+            return new ProjectSession(
+                filePath: "",
+                configXml: synthesis.RawConfigXml,
+                orderRevXml: null,
+                manifestXml: null,
+                isUpz: false,
+                isTrusted: false,
+                activePack: activePack,
+                packGeneration: packGeneration,
+                initialOverrides: synthesis.ManualOverrides,
+                initialChecklists: null,
+                initialSpecialQuotes: null,
+                initialGeneralComments: synthesis.GeneralComments,
+                synthesizedGraph: synthesis.Graph,
+                synthesizedBaselineFacts: synthesis.BaselineFacts,
+                synthesizedFacts: synthesis.Facts
+            );
         }
 
         public ProjectSessionSnapshot CreateSnapshot()
@@ -146,7 +237,9 @@ namespace AHUVerification.Core.Session
                         FileSha256 = FileSha256,
                         IsUpz = IsUpz,
                         IsTrusted = IsTrusted,
-                        OrderRevision = OrderRevision
+                        OrderRevision = OrderRevision,
+                        RawOrderRevisionXml = RawOrderRevXml,
+                        RawManifestXml = RawManifestXml
                     },
                     RulePack = new RulePackSummary
                     {
@@ -155,7 +248,8 @@ namespace AHUVerification.Core.Session
                         Generation = RulePackGeneration
                     },
                     Readiness = readiness,
-                    IsDirty = IsDirty
+                    IsDirty = IsDirty,
+                    RawConfigXml = RawConfigXml
                 };
             }
         }
@@ -164,28 +258,33 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 string key = FactContractValidator.CanonicalizeKey(cmd.FactId, ActiveRulePack.FactContract);
                 if (!Facts.ContainsKey(key))
                 {
-                    return SessionCommandResult.Fail($"Fact '{cmd.FactId}' does not exist in registry", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Fact '{cmd.FactId}' does not exist in registry", CreateSnapshot()));
                 }
 
                 object? val = NormalizeValue(cmd.Value);
                 if (val == null)
                 {
-                    return SessionCommandResult.Fail($"Override for '{cmd.FactId}' must provide a non-null value", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Override for '{cmd.FactId}' must provide a non-null value", CreateSnapshot()));
                 }
 
                 if (ActiveRulePack.FactContract.ValueKind == JsonValueKind.Object
                     && !FactContractValidator.IsFactValueCompatible(ActiveRulePack.FactContract, key, val))
                 {
-                    return SessionCommandResult.Fail($"Value for '{cmd.FactId}' is incompatible with fact contract", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Value for '{cmd.FactId}' is incompatible with fact contract", CreateSnapshot()));
                 }
 
                 string author = !string.IsNullOrWhiteSpace(cmd.Author) ? cmd.Author : "Detailer";
@@ -196,7 +295,7 @@ namespace AHUVerification.Core.Session
                 Revision++;
                 ReevaluateInternal();
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -204,15 +303,20 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 if (cmd.Overrides == null || cmd.Overrides.Count == 0)
                 {
-                    return SessionCommandResult.Fail("Batch overrides list cannot be empty", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail("Batch overrides list cannot be empty", CreateSnapshot()));
                 }
 
                 // Validate all overrides first
@@ -222,19 +326,19 @@ namespace AHUVerification.Core.Session
                     string key = FactContractValidator.CanonicalizeKey(entry.FactId, ActiveRulePack.FactContract);
                     if (!Facts.ContainsKey(key))
                     {
-                        return SessionCommandResult.Fail($"Fact '{entry.FactId}' does not exist in registry", CreateSnapshot());
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Fact '{entry.FactId}' does not exist in registry", CreateSnapshot()));
                     }
 
                     object? val = NormalizeValue(entry.Value);
                     if (val == null)
                     {
-                        return SessionCommandResult.Fail($"Override for '{entry.FactId}' must provide a non-null value", CreateSnapshot());
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Override for '{entry.FactId}' must provide a non-null value", CreateSnapshot()));
                     }
 
                     if (ActiveRulePack.FactContract.ValueKind == JsonValueKind.Object
                         && !FactContractValidator.IsFactValueCompatible(ActiveRulePack.FactContract, key, val))
                     {
-                        return SessionCommandResult.Fail($"Value for '{entry.FactId}' is incompatible with fact contract", CreateSnapshot());
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Value for '{entry.FactId}' is incompatible with fact contract", CreateSnapshot()));
                     }
 
                     string author = !string.IsNullOrWhiteSpace(entry.Author) ? entry.Author : "Detailer";
@@ -252,7 +356,7 @@ namespace AHUVerification.Core.Session
                 Revision++;
                 ReevaluateInternal();
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -260,16 +364,21 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 string key = FactContractValidator.CanonicalizeKey(cmd.FactId, ActiveRulePack.FactContract);
                 if (!Facts.ContainsKey(key))
                 {
-                    return SessionCommandResult.Fail($"Fact '{cmd.FactId}' does not exist in registry", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Fact '{cmd.FactId}' does not exist in registry", CreateSnapshot()));
                 }
 
                 _factExtractor.RevertFact(Facts, key);
@@ -279,7 +388,7 @@ namespace AHUVerification.Core.Session
                 Revision++;
                 ReevaluateInternal();
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -287,10 +396,15 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 var check = Checklists.FirstOrDefault(c =>
@@ -299,7 +413,7 @@ namespace AHUVerification.Core.Session
 
                 if (check == null)
                 {
-                    return SessionCommandResult.Fail($"Checklist item '{cmd.CheckId}' not found", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Checklist item '{cmd.CheckId}' not found", CreateSnapshot()));
                 }
 
                 check.Status = cmd.Status;
@@ -316,7 +430,7 @@ namespace AHUVerification.Core.Session
                 IsDirty = true;
                 Revision++;
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -324,16 +438,21 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 var incoming = cmd.SpecialQuote;
                 if (incoming == null)
                 {
-                    return SessionCommandResult.Fail("SpecialQuote cannot be null", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail("SpecialQuote cannot be null", CreateSnapshot()));
                 }
 
                 if (string.IsNullOrWhiteSpace(incoming.Id))
@@ -362,7 +481,7 @@ namespace AHUVerification.Core.Session
                 IsDirty = true;
                 Revision++;
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -370,22 +489,27 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 int removed = SpecialQuotes.RemoveAll(sq => sq.Id == cmd.QuoteId || sq.Slot.ToString() == cmd.QuoteId);
                 if (removed == 0)
                 {
-                    return SessionCommandResult.Fail($"Special quote '{cmd.QuoteId}' not found", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Special quote '{cmd.QuoteId}' not found", CreateSnapshot()));
                 }
 
                 IsDirty = true;
                 Revision++;
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -393,15 +517,20 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 if (cmd.Assignments == null || cmd.Assignments.Count == 0)
                 {
-                    return SessionCommandResult.Fail("Reorder assignments cannot be empty", CreateSnapshot());
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail("Reorder assignments cannot be empty", CreateSnapshot()));
                 }
 
                 var map = cmd.Assignments.ToDictionary(a => a.QuoteId, a => a.Slot, StringComparer.Ordinal);
@@ -418,7 +547,7 @@ namespace AHUVerification.Core.Session
                 IsDirty = true;
                 Revision++;
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -426,17 +555,22 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
 
                 GeneralComments = cmd.Comments ?? "";
                 IsDirty = true;
                 Revision++;
 
-                return SessionCommandResult.Ok(CreateSnapshot());
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
             }
         }
 
@@ -444,11 +578,18 @@ namespace AHUVerification.Core.Session
         {
             lock (_syncLock)
             {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
                 if (cmd.ExpectedRevision != Revision)
                 {
-                    return SessionCommandResult.Conflict(Revision, CreateSnapshot(),
-                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
                 }
+
+                InvalidateDeduplicationCache();
 
                 Facts = CloneFacts(BaselineFacts);
                 ManualOverrides.Clear();
@@ -456,6 +597,24 @@ namespace AHUVerification.Core.Session
                 SpecialQuotes.Clear();
                 GeneralComments = "";
                 IsDirty = false;
+
+                ReevaluateInternal();
+                Revision++;
+
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
+            }
+        }
+
+        public SessionCommandResult UpdateRulePack(RulePackBundle newPack, int packGeneration)
+        {
+            if (newPack == null) throw new ArgumentNullException(nameof(newPack));
+
+            lock (_syncLock)
+            {
+                InvalidateDeduplicationCache();
+
+                ActiveRulePack = newPack;
+                RulePackGeneration = packGeneration;
 
                 ReevaluateInternal();
                 Revision++;
@@ -545,6 +704,14 @@ namespace AHUVerification.Core.Session
                 blockers.Add($"{incompleteSqCount} special quote items are incomplete");
             }
 
+            bool templateRetrievable = !string.IsNullOrEmpty(ActiveRulePack?.TemplatePath) && File.Exists(ActiveRulePack.TemplatePath);
+            bool exportBlocked = !templateRetrievable;
+
+            if (!templateRetrievable)
+            {
+                blockers.Add("Excel template artifact (template.xlsx) is missing or unavailable");
+            }
+
             // Build per-scope readiness map
             var scopeMap = new Dictionary<string, ScopeReadinessSummary>(StringComparer.OrdinalIgnoreCase);
             var scopeIds = Checklists.Select(c => c.ScopeTargetId).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -601,7 +768,9 @@ namespace AHUVerification.Core.Session
                 IncompleteSpecialQuotesCount = incompleteSqCount,
                 PercentComplete = percentComplete,
                 ScopeReadinessMap = scopeMap,
-                Blockers = blockers
+                Blockers = blockers,
+                ExportBlocked = exportBlocked,
+                TemplateRetrievable = templateRetrievable
             };
         }
 
@@ -617,35 +786,39 @@ namespace AHUVerification.Core.Session
             var dict = new Dictionary<string, Fact>(StringComparer.Ordinal);
             foreach (var kvp in source)
             {
-                var f = kvp.Value;
-                dict[kvp.Key] = new Fact
-                {
-                    Key = f.Key,
-                    Label = f.Label,
-                    Category = f.Category,
-                    Value = f.Value,
-                    Status = f.Status,
-                    Confidence = f.Confidence,
-                    SourceRawValue = f.SourceRawValue,
-                    SourcePointer = f.SourcePointer,
-                    DerivationName = f.DerivationName,
-                    PromptNote = f.PromptNote,
-                    SourceState = f.SourceState,
-                    AuditHistory = f.AuditHistory != null ? new List<FactAuditEntry>(f.AuditHistory) : new List<FactAuditEntry>(),
-                    OriginalSnapshot = f.OriginalSnapshot != null ? new FactSnapshot
-                    {
-                        Value = f.OriginalSnapshot.Value,
-                        Status = f.OriginalSnapshot.Status,
-                        Confidence = f.OriginalSnapshot.Confidence,
-                        SourceRawValue = f.OriginalSnapshot.SourceRawValue,
-                        SourcePointer = f.OriginalSnapshot.SourcePointer,
-                        DerivationName = f.OriginalSnapshot.DerivationName,
-                        PromptNote = f.OriginalSnapshot.PromptNote,
-                        SourceState = f.OriginalSnapshot.SourceState
-                    } : null
-                };
+                dict[kvp.Key] = CloneFact(kvp.Value);
             }
             return dict;
+        }
+
+        private static Fact CloneFact(Fact f)
+        {
+            return new Fact
+            {
+                Key = f.Key,
+                Label = f.Label,
+                Category = f.Category,
+                Value = f.Value,
+                Status = f.Status,
+                Confidence = f.Confidence,
+                SourceRawValue = f.SourceRawValue,
+                SourcePointer = f.SourcePointer,
+                DerivationName = f.DerivationName,
+                PromptNote = f.PromptNote,
+                SourceState = f.SourceState,
+                AuditHistory = f.AuditHistory != null ? new List<FactAuditEntry>(f.AuditHistory) : new List<FactAuditEntry>(),
+                OriginalSnapshot = f.OriginalSnapshot != null ? new FactSnapshot
+                {
+                    Value = f.OriginalSnapshot.Value,
+                    Status = f.OriginalSnapshot.Status,
+                    Confidence = f.OriginalSnapshot.Confidence,
+                    SourceRawValue = f.OriginalSnapshot.SourceRawValue,
+                    SourcePointer = f.OriginalSnapshot.SourcePointer,
+                    DerivationName = f.OriginalSnapshot.DerivationName,
+                    PromptNote = f.OriginalSnapshot.PromptNote,
+                    SourceState = f.OriginalSnapshot.SourceState
+                } : null
+            };
         }
 
         private static ChecklistInstance CloneChecklist(ChecklistInstance c)

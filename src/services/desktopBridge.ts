@@ -2,7 +2,23 @@ import type { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedX
 import { saveDvlToFile } from './projectStorage.ts';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog.ts';
 import { EFFECTIVE_APPLICATION_VERSION } from './version.ts';
-import type { ProjectSessionSnapshot, SessionCommandResult, BatchOverrideFactsPayload, ReorderSpecialQuotesPayload } from '../types/session.ts';
+import type {
+  ProjectSessionSnapshot,
+  SessionCommandResult,
+  ProjectSessionOpenPayload,
+  OverrideFactPayload,
+  BatchOverrideFactsPayload,
+  RevertFactPayload,
+  UpdateChecklistPayload,
+  UpdateSpecialQuotePayload,
+  DeleteSpecialQuotePayload,
+  ReorderSpecialQuotesPayload,
+  UpdateGeneralCommentsPayload,
+  ResetSessionPayload,
+  CreateManualProjectCommand,
+  SegmentTemplate
+} from '../types/session.ts';
+import { AVAILABLE_SEGMENT_TEMPLATES } from './manualUnitFactory.ts';
 export * from '../types/session.ts';
 
 declare global {
@@ -34,6 +50,7 @@ export interface INativeBridge {
     content: string;
     isDvl: boolean;
     isUpz?: boolean;
+    sourceHandle?: string;
     bundle?: UpzBundle;
   } | null>;
   extractUpz(filePath: string): Promise<{
@@ -103,61 +120,19 @@ export interface INativeBridge {
   }>;
   downloadAppUpdate(): Promise<{ success: boolean; error?: string }>;
   applyAppUpdate(): Promise<void>;
-  projectSessionOpen(payload: {
-    filePath?: string;
-    configXml?: string;
-    orderRevXml?: string;
-    manifestXml?: string;
-    isUpz?: boolean;
-    isTrusted?: boolean;
-    initialOverrides?: Record<string, Fact>;
-    initialChecklists?: ChecklistInstance[];
-    initialSpecialQuotes?: SpecialQuote[];
-    initialGeneralComments?: string;
-  }): Promise<ProjectSessionSnapshot>;
+  projectSessionOpen(payload: ProjectSessionOpenPayload): Promise<ProjectSessionSnapshot>;
   projectSessionGetSnapshot(): Promise<ProjectSessionSnapshot>;
-  projectSessionOverrideFact(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    factId: string;
-    value: any;
-    comment?: string;
-    author?: string;
-  }): Promise<SessionCommandResult>;
+  projectSessionOverrideFact(payload: OverrideFactPayload): Promise<SessionCommandResult>;
   projectSessionBatchOverrideFacts(payload: BatchOverrideFactsPayload): Promise<SessionCommandResult>;
-  projectSessionRevertFact(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    factId: string;
-  }): Promise<SessionCommandResult>;
-  projectSessionUpdateChecklist(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    checkId: string;
-    status: string;
-    comment?: string;
-    detailerInitials?: string;
-  }): Promise<SessionCommandResult>;
-  projectSessionUpdateSpecialQuote(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    specialQuote: SpecialQuote;
-  }): Promise<SessionCommandResult>;
-  projectSessionDeleteSpecialQuote(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    quoteId: string;
-  }): Promise<SessionCommandResult>;
+  projectSessionRevertFact(payload: RevertFactPayload): Promise<SessionCommandResult>;
+  projectSessionUpdateChecklist(payload: UpdateChecklistPayload): Promise<SessionCommandResult>;
+  projectSessionUpdateSpecialQuote(payload: UpdateSpecialQuotePayload): Promise<SessionCommandResult>;
+  projectSessionDeleteSpecialQuote(payload: DeleteSpecialQuotePayload): Promise<SessionCommandResult>;
   projectSessionReorderSpecialQuotes(payload: ReorderSpecialQuotesPayload): Promise<SessionCommandResult>;
-  projectSessionUpdateGeneralComments(payload: {
-    sessionId: string;
-    expectedRevision: number;
-    comments: string;
-  }): Promise<SessionCommandResult>;
-  projectSessionReset(payload: {
-    sessionId: string;
-    expectedRevision: number;
-  }): Promise<SessionCommandResult>;
+  projectSessionUpdateGeneralComments(payload: UpdateGeneralCommentsPayload): Promise<SessionCommandResult>;
+  projectSessionReset(payload: ResetSessionPayload): Promise<SessionCommandResult>;
+  projectSessionCreateManual(payload: CreateManualProjectCommand): Promise<ProjectSessionSnapshot>;
+  getSegmentTemplates(): Promise<SegmentTemplate[]>;
 }
 
 export function isDesktopHost(): boolean {
@@ -238,6 +213,7 @@ export class WebView2DesktopBridge implements INativeBridge {
     content: string;
     isDvl: boolean;
     isUpz?: boolean;
+    sourceHandle?: string;
     bundle?: UpzBundle;
   } | null> {
     return this.sendRequest('openFileDialog');
@@ -377,7 +353,7 @@ export class WebView2DesktopBridge implements INativeBridge {
     await this.sendRequest('applyAppUpdate');
   }
 
-  public async projectSessionOpen(payload: any): Promise<ProjectSessionSnapshot> {
+  public async projectSessionOpen(payload: ProjectSessionOpenPayload): Promise<ProjectSessionSnapshot> {
     return this.sendRequest('projectSession_open', payload);
   }
 
@@ -385,40 +361,48 @@ export class WebView2DesktopBridge implements INativeBridge {
     return this.sendRequest('projectSession_getSnapshot');
   }
 
-  public async projectSessionOverrideFact(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionOverrideFact(payload: OverrideFactPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_overrideFact', payload);
   }
 
-  public async projectSessionBatchOverrideFacts(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionBatchOverrideFacts(payload: BatchOverrideFactsPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_batchOverrideFacts', payload);
   }
 
-  public async projectSessionRevertFact(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionRevertFact(payload: RevertFactPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_revertFact', payload);
   }
 
-  public async projectSessionUpdateChecklist(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateChecklist(payload: UpdateChecklistPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_updateChecklist', payload);
   }
 
-  public async projectSessionUpdateSpecialQuote(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateSpecialQuote(payload: UpdateSpecialQuotePayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_updateSpecialQuote', payload);
   }
 
-  public async projectSessionDeleteSpecialQuote(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionDeleteSpecialQuote(payload: DeleteSpecialQuotePayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_deleteSpecialQuote', payload);
   }
 
-  public async projectSessionReorderSpecialQuotes(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionReorderSpecialQuotes(payload: ReorderSpecialQuotesPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_reorderSpecialQuotes', payload);
   }
 
-  public async projectSessionUpdateGeneralComments(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateGeneralComments(payload: UpdateGeneralCommentsPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_updateGeneralComments', payload);
   }
 
-  public async projectSessionReset(payload: any): Promise<SessionCommandResult> {
+  public async projectSessionReset(payload: ResetSessionPayload): Promise<SessionCommandResult> {
     return this.sendRequest('projectSession_reset', payload);
+  }
+
+  public async projectSessionCreateManual(payload: CreateManualProjectCommand): Promise<ProjectSessionSnapshot> {
+    return this.sendRequest('projectSession_createManual', payload);
+  }
+
+  public async getSegmentTemplates(): Promise<SegmentTemplate[]> {
+    return this.sendRequest('getSegmentTemplates');
   }
 }
 
@@ -450,6 +434,7 @@ export class BrowserPreviewBridge implements INativeBridge {
     content: string;
     isDvl: boolean;
     isUpz?: boolean;
+    sourceHandle?: string;
     bundle?: UpzBundle;
   } | null> {
     return null;
@@ -606,7 +591,7 @@ export class BrowserPreviewBridge implements INativeBridge {
     console.warn('App update restart is only available in desktop host.');
   }
 
-  public async projectSessionOpen(_payload: any): Promise<ProjectSessionSnapshot> {
+  public async projectSessionOpen(_payload: ProjectSessionOpenPayload): Promise<ProjectSessionSnapshot> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
@@ -614,40 +599,48 @@ export class BrowserPreviewBridge implements INativeBridge {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionOverrideFact(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionOverrideFact(_payload: OverrideFactPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionBatchOverrideFacts(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionBatchOverrideFacts(_payload: BatchOverrideFactsPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionRevertFact(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionRevertFact(_payload: RevertFactPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionUpdateChecklist(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateChecklist(_payload: UpdateChecklistPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionUpdateSpecialQuote(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateSpecialQuote(_payload: UpdateSpecialQuotePayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionDeleteSpecialQuote(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionDeleteSpecialQuote(_payload: DeleteSpecialQuotePayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionReorderSpecialQuotes(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionReorderSpecialQuotes(_payload: ReorderSpecialQuotesPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionUpdateGeneralComments(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionUpdateGeneralComments(_payload: UpdateGeneralCommentsPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
   }
 
-  public async projectSessionReset(_payload: any): Promise<SessionCommandResult> {
+  public async projectSessionReset(_payload: ResetSessionPayload): Promise<SessionCommandResult> {
     throw new Error('ProjectSession requires desktop host.');
+  }
+
+  public async projectSessionCreateManual(_payload: CreateManualProjectCommand): Promise<ProjectSessionSnapshot> {
+    throw new Error('ProjectSession requires desktop host.');
+  }
+
+  public async getSegmentTemplates(): Promise<SegmentTemplate[]> {
+    return AVAILABLE_SEGMENT_TEMPLATES as SegmentTemplate[];
   }
 }
 
@@ -779,7 +772,7 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.applyAppUpdate();
   }
 
-  public async projectSessionOpen(payload: any) {
+  public async projectSessionOpen(payload: ProjectSessionOpenPayload) {
     return this.activeBridge.projectSessionOpen(payload);
   }
 
@@ -787,40 +780,48 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.projectSessionGetSnapshot();
   }
 
-  public async projectSessionOverrideFact(payload: any) {
+  public async projectSessionOverrideFact(payload: OverrideFactPayload) {
     return this.activeBridge.projectSessionOverrideFact(payload);
   }
 
-  public async projectSessionBatchOverrideFacts(payload: any) {
+  public async projectSessionBatchOverrideFacts(payload: BatchOverrideFactsPayload) {
     return this.activeBridge.projectSessionBatchOverrideFacts(payload);
   }
 
-  public async projectSessionRevertFact(payload: any) {
+  public async projectSessionRevertFact(payload: RevertFactPayload) {
     return this.activeBridge.projectSessionRevertFact(payload);
   }
 
-  public async projectSessionUpdateChecklist(payload: any) {
+  public async projectSessionUpdateChecklist(payload: UpdateChecklistPayload) {
     return this.activeBridge.projectSessionUpdateChecklist(payload);
   }
 
-  public async projectSessionUpdateSpecialQuote(payload: any) {
+  public async projectSessionUpdateSpecialQuote(payload: UpdateSpecialQuotePayload) {
     return this.activeBridge.projectSessionUpdateSpecialQuote(payload);
   }
 
-  public async projectSessionDeleteSpecialQuote(payload: any) {
+  public async projectSessionDeleteSpecialQuote(payload: DeleteSpecialQuotePayload) {
     return this.activeBridge.projectSessionDeleteSpecialQuote(payload);
   }
 
-  public async projectSessionReorderSpecialQuotes(payload: any) {
+  public async projectSessionReorderSpecialQuotes(payload: ReorderSpecialQuotesPayload) {
     return this.activeBridge.projectSessionReorderSpecialQuotes(payload);
   }
 
-  public async projectSessionUpdateGeneralComments(payload: any) {
+  public async projectSessionUpdateGeneralComments(payload: UpdateGeneralCommentsPayload) {
     return this.activeBridge.projectSessionUpdateGeneralComments(payload);
   }
 
-  public async projectSessionReset(payload: any) {
+  public async projectSessionReset(payload: ResetSessionPayload) {
     return this.activeBridge.projectSessionReset(payload);
+  }
+
+  public async projectSessionCreateManual(payload: CreateManualProjectCommand) {
+    return this.activeBridge.projectSessionCreateManual(payload);
+  }
+
+  public async getSegmentTemplates() {
+    return this.activeBridge.getSegmentTemplates();
   }
 }
 

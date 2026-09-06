@@ -346,6 +346,7 @@ namespace AHUVerification.Core.Services
                 unitContext[kv.Key] = kv.Value.Value;
             }
 
+
             foreach (var rule in rules.Where(r => r.IsArchived != true))
             {
                 string fingerprint = ComputeSemanticFingerprint(rule);
@@ -375,7 +376,9 @@ namespace AHUVerification.Core.Services
                         ApplicabilityReason = eval.Trace,
                         Status = ResolveStatus(existing, applicability, fingerprint),
                         DetailerComment = existing?.DetailerComment ?? "",
+                        DetailerInitials = existing?.DetailerInitials,
                         CheckerComment = existing?.CheckerComment,
+                        CheckerInitials = existing?.CheckerInitials,
                         UpdatedAt = existing?.UpdatedAt ?? DateTime.UtcNow.ToString("o"),
                         FactTraces = traces,
                         SemanticFingerprint = fingerprint
@@ -432,7 +435,9 @@ namespace AHUVerification.Core.Services
                             ApplicabilityReason = eval.Trace,
                             Status = ResolveStatus(existing, applicability, fingerprint),
                             DetailerComment = existing?.DetailerComment ?? "",
+                            DetailerInitials = existing?.DetailerInitials,
                             CheckerComment = existing?.CheckerComment,
+                            CheckerInitials = existing?.CheckerInitials,
                             UpdatedAt = existing?.UpdatedAt ?? DateTime.UtcNow.ToString("o"),
                             FactTraces = traces,
                             SemanticFingerprint = fingerprint

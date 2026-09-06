@@ -22,7 +22,10 @@ namespace AHUVerification.Core.Session
         public bool IsUpz { get; set; }
 
         [JsonPropertyName("isTrusted")]
-        public bool IsTrusted { get; set; } = true;
+        public bool IsTrusted { get; set; } = false;
+
+        [JsonPropertyName("sourceHandle")]
+        public string? SourceHandle { get; set; }
 
         [JsonPropertyName("initialOverrides")]
         public Dictionary<string, Fact>? InitialOverrides { get; set; }
@@ -35,6 +38,12 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("initialGeneralComments")]
         public string? InitialGeneralComments { get; set; }
+    }
+
+    public class CreateManualProjectCommand
+    {
+        [JsonPropertyName("config")]
+        public Manual.ManualUnitConfig Config { get; set; } = new();
     }
 
     public class BatchFactOverrideItem
@@ -60,6 +69,9 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
 
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
         [JsonPropertyName("overrides")]
         public List<BatchFactOverrideItem> Overrides { get; set; } = new();
     }
@@ -71,6 +83,9 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
 
         [JsonPropertyName("factId")]
         public string FactId { get; set; } = "";
@@ -93,6 +108,9 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
 
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
         [JsonPropertyName("factId")]
         public string FactId { get; set; } = "";
     }
@@ -104,6 +122,9 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
 
         [JsonPropertyName("checkId")]
         public string CheckId { get; set; } = "";
@@ -126,6 +147,9 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
 
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
         [JsonPropertyName("specialQuote")]
         public SpecialQuote SpecialQuote { get; set; } = new();
     }
@@ -137,6 +161,9 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
 
         [JsonPropertyName("quoteId")]
         public string QuoteId { get; set; } = "";
@@ -159,6 +186,9 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
 
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
         [JsonPropertyName("assignments")]
         public List<SpecialQuoteSlotAssignment> Assignments { get; set; } = new();
     }
@@ -171,8 +201,24 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
 
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
         [JsonPropertyName("comments")]
         public string Comments { get; set; } = "";
+
+        [JsonPropertyName("generalComments")]
+        public string? GeneralCommentsAlias
+        {
+            get => Comments;
+            set
+            {
+                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Comments))
+                {
+                    Comments = value;
+                }
+            }
+        }
     }
 
     public class ResetSessionCommand
@@ -182,6 +228,9 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
     }
 
     public class SessionCommandResult

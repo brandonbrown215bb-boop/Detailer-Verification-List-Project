@@ -69,6 +69,12 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("blockers")]
         public List<string> Blockers { get; set; } = new();
+
+        [JsonPropertyName("exportBlocked")]
+        public bool ExportBlocked { get; set; }
+
+        [JsonPropertyName("templateRetrievable")]
+        public bool TemplateRetrievable { get; set; } = true;
     }
 
     public class SourceMetadataSummary
@@ -90,6 +96,12 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("orderRevision")]
         public OrderRevisionData? OrderRevision { get; set; }
+
+        [JsonPropertyName("rawOrderRevisionXml")]
+        public string? RawOrderRevisionXml { get; set; }
+
+        [JsonPropertyName("rawManifestXml")]
+        public string? RawManifestXml { get; set; }
     }
 
     public class RulePackSummary
@@ -138,5 +150,8 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("isDirty")]
         public bool IsDirty { get; set; }
+
+        [JsonPropertyName("rawConfigXml")]
+        public string RawConfigXml { get; set; } = "";
     }
 }

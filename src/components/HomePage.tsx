@@ -30,7 +30,7 @@ interface HomePageProps {
   autosavedProject: DvlProjectFile | null;
   onResumeAutosave: () => void;
   onClearAutosave: () => void;
-  onImportXml: (xmlContent: string, bundle?: UpzBundle, sourceFileName?: string) => void | Promise<void>;
+  onImportXml: (xmlContent: string, bundle?: UpzBundle, sourceFileName?: string, sourceFilePath?: string, sourceHandle?: string) => void | Promise<void>;
   onOpenDvl: (project: DvlProjectFile, rawJson?: string, filePath?: string) => void | Promise<void>;
   onOpenManualModal: () => void;
   onLoadSample: () => void;
@@ -206,10 +206,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               });
             }
           } else if (result.isUpz && result.bundle) {
-            await onImportXml(result.content, result.bundle, result.fileName);
+            await onImportXml(result.content, result.bundle, result.fileName, result.filePath, result.sourceHandle);
             setIsProcessing(false);
           } else {
-            await onImportXml(result.content, undefined, result.fileName);
+            await onImportXml(result.content, undefined, result.fileName, result.filePath, result.sourceHandle);
             setIsProcessing(false);
           }
         } else {

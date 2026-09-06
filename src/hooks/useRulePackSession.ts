@@ -26,6 +26,7 @@ export interface UseRulePackSessionResult {
   dismissAppUpdateNotice: () => void;
   applyAppUpdate: () => Promise<void>;
   handleRulePackUpdated: (updatedBundle: RulePackPayload) => void;
+  rulePackError: string | null;
 }
 
 export function useRulePackSession(): UseRulePackSessionResult {
@@ -36,6 +37,7 @@ export function useRulePackSession(): UseRulePackSessionResult {
     return localStorage.getItem('dvl_central_rulepack_path') || '';
   });
   const [rulePackNotice, setRulePackNotice] = useState<string | null>(null);
+  const [rulePackError, setRulePackError] = useState<string | null>(null);
   const [appUpdateNotice, setAppUpdateNotice] = useState<AppUpdateNotice | null>(null);
   const packLoadRevision = useRef(0);
   const activeHostGeneration = useRef(-1);
@@ -60,9 +62,21 @@ export function useRulePackSession(): UseRulePackSessionResult {
       // These operations are intentionally ordered. A slower initial read must
       // never overwrite a newer pack accepted by synchronization.
       try {
-        applyPack(await desktopBridge.getRulePack());
-      } catch (err) {
+        const pack = await desktopBridge.getRulePack();
+        if ((pack as any)?.success === false || (pack as any)?.error) {
+          setRulePackError((pack as any).error || 'Failed to load rule pack from desktop host.');
+          return;
+        }
+        if (!pack?.rules?.length) {
+          setRulePackError('Active rule pack contains no valid rules.');
+          return;
+        }
+        setRulePackError(null);
+        applyPack(pack);
+      } catch (err: any) {
         console.warn('Failed to load initial rule pack from bridge:', err);
+        setRulePackError(err?.message || 'Failed to load rule pack from desktop host.');
+        return;
       }
 
       const configuredPath = localStorage.getItem('dvl_central_rulepack_path');
@@ -143,6 +157,7 @@ export function useRulePackSession(): UseRulePackSessionResult {
     appUpdateNotice,
     dismissAppUpdateNotice,
     applyAppUpdate,
-    handleRulePackUpdated
+    handleRulePackUpdated,
+    rulePackError
   };
 }

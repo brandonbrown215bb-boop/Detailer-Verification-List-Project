@@ -20,6 +20,21 @@ namespace AHUVerification.Tests
             _activePack = new RulePackManager().LoadFromDirectory(_rulePackPath);
         }
 
+        private ProjectSession CreateTestSession()
+        {
+            string configXml = File.ReadAllText(_configXmlPath);
+            return new ProjectSession(
+                filePath: _configXmlPath,
+                configXml: configXml,
+                orderRevXml: null,
+                manifestXml: null,
+                isUpz: false,
+                isTrusted: true,
+                activePack: _activePack,
+                packGeneration: 1
+            );
+        }
+
         [Fact]
         public void OpenSource_ValidXml_InitializesSessionWithSnapshot()
         {
@@ -449,6 +464,195 @@ namespace AHUVerification.Tests
             Assert.Equal("Hydrated SQ", snapshot.SpecialQuotes[0].Text);
             Assert.Equal("Hydrated comments", snapshot.GeneralComments);
             Assert.True(snapshot.IsDirty);
+        }
+
+        [Fact]
+        public void ResetToBaseline_InvalidatesCachedDeduplicationResults_RetryReturnsMismatchNotStaleSnapshot()
+        {
+            var session = CreateTestSession();
+            object? baselineJobValue = session.Facts["unit.jobName"].Value;
+
+            // 1. Override fact from rev 1 -> rev 2
+            string requestId = "req-override-dedup-reset";
+            var overrideCmd = new OverrideFactCommand
+            {
+                SessionId = session.SessionId,
+                ExpectedRevision = 1,
+                RequestId = requestId,
+                FactId = "unit.jobName",
+                Value = "Overridden Job Name",
+                Author = "Detailer",
+                Comment = "First edit"
+            };
+            var res1 = session.OverrideFact(overrideCmd);
+            Assert.True(res1.Success);
+            Assert.Equal(2, res1.Revision);
+            Assert.Equal("Overridden Job Name", res1.Snapshot!.Facts["unit.jobName"].Value?.ToString());
+
+            // 2. Reset session from rev 2 -> rev 3
+            var resetCmd = new ResetSessionCommand
+            {
+                SessionId = session.SessionId,
+                ExpectedRevision = 2,
+                RequestId = "req-reset-1"
+            };
+            var resetRes = session.ResetToBaseline(resetCmd);
+            Assert.True(resetRes.Success);
+            Assert.Equal(3, resetRes.Revision);
+            Assert.Equal(baselineJobValue, resetRes.Snapshot!.Facts["unit.jobName"].Value);
+
+            // 3. Retry override with identical requestId from step 1
+            // Must NOT return cached rev 2 snapshot containing "Overridden Job Name"
+            var retryRes = session.OverrideFact(overrideCmd);
+            Assert.False(retryRes.Success, "Retry with stale expectedRevision 1 should fail/conflict on reset session at rev 3");
+            Assert.Equal(3, retryRes.Revision);
+            Assert.NotEqual("Overridden Job Name", retryRes.Snapshot!.Facts["unit.jobName"].Value?.ToString());
+        }
+
+        [Fact]
+        public void UpdateRulePack_InvalidatesCachedDeduplicationResults()
+        {
+            var session = CreateTestSession();
+
+            // 1. Override fact from rev 1 -> rev 2
+            string requestId = "req-override-dedup-pack";
+            var overrideCmd = new OverrideFactCommand
+            {
+                SessionId = session.SessionId,
+                ExpectedRevision = 1,
+                RequestId = requestId,
+                FactId = "unit.jobName",
+                Value = "Pre Pack Update Name",
+                Author = "Detailer",
+                Comment = "Before pack update"
+            };
+            var res1 = session.OverrideFact(overrideCmd);
+            Assert.True(res1.Success);
+            Assert.Equal(2, res1.Revision);
+
+            // 2. Update rule pack from rev 2 -> rev 3
+            var packRes = session.UpdateRulePack(_activePack, 2);
+            Assert.True(packRes.Success);
+            Assert.Equal(3, packRes.Revision);
+
+            // 3. Retry override with identical requestId
+            // Must NOT return cached rev 2 snapshot
+            var retryRes = session.OverrideFact(overrideCmd);
+            Assert.False(retryRes.Success);
+            Assert.Equal(3, retryRes.Revision);
+        }
+
+        [Fact]
+        public void CreateSnapshot_PopulatesRawOrderRevisionXmlAndRawManifestXml()
+        {
+            string configXml = File.ReadAllText(_configXmlPath);
+            string orderRevXml = "<OrderRev><JobName>Sample</JobName></OrderRev>";
+            string manifestXml = "<Manifest><Version>1.0</Version></Manifest>";
+
+            var session = new ProjectSession(
+                filePath: _configXmlPath,
+                configXml: configXml,
+                orderRevXml: orderRevXml,
+                manifestXml: manifestXml,
+                isUpz: true,
+                isTrusted: true,
+                activePack: _activePack,
+                packGeneration: 1
+            );
+
+            var snapshot = session.CreateSnapshot();
+
+            Assert.NotNull(snapshot);
+            Assert.NotNull(snapshot.Source);
+            Assert.Equal(orderRevXml, snapshot.Source.RawOrderRevisionXml);
+            Assert.Equal(manifestXml, snapshot.Source.RawManifestXml);
+        }
+
+        [Fact]
+        public void TrustedSession_RejectsInitialChecklists_AuthorityBoundaryEnforced()
+        {
+            string configXml = File.ReadAllText(_configXmlPath);
+            var firstRule = _activePack.Rules.First(r => r.Scope == RuleScope.Unit);
+            string fingerprint = AstRuleEvaluator.ComputeSemanticFingerprint(firstRule);
+
+            var fakeChecklist = new ChecklistInstance
+            {
+                RuleId = firstRule.Id,
+                SemanticKey = firstRule.SemanticKey,
+                InstanceKey = $"unit:{firstRule.Id}",
+                ScopeTargetId = "unit",
+                Applicability = RuleApplicability.Applicable,
+                Status = CheckStatus.Passed,
+                DetailerInitials = "HACK",
+                CheckerInitials = "FAKE",
+                CheckerComment = "Injected approval",
+                UpdatedAt = "2020-01-01T00:00:00Z",
+                SemanticFingerprint = fingerprint
+            };
+
+            var session = new ProjectSession(
+                filePath: _configXmlPath,
+                configXml: configXml,
+                orderRevXml: null,
+                manifestXml: null,
+                isUpz: false,
+                isTrusted: true,
+                activePack: _activePack,
+                packGeneration: 1,
+                initialChecklists: new List<ChecklistInstance> { fakeChecklist }
+            );
+
+            var check = session.Checklists.FirstOrDefault(c => c.RuleId == firstRule.Id);
+            Assert.NotNull(check);
+            Assert.NotEqual(CheckStatus.Passed, check.Status);
+            Assert.Null(check.CheckerInitials);
+            Assert.Null(check.DetailerInitials);
+            Assert.Null(check.CheckerComment);
+            Assert.False(session.CreateSnapshot().Readiness.IsReadyForFinal);
+        }
+
+        [Fact]
+        public void UntrustedSession_HydratesInitialChecklists_ForLegacyDvlHydration()
+        {
+            string configXml = File.ReadAllText(_configXmlPath);
+            var firstRule = _activePack.Rules.First(r => r.Scope == RuleScope.Unit);
+            string fingerprint = AstRuleEvaluator.ComputeSemanticFingerprint(firstRule);
+
+            var legacyChecklist = new ChecklistInstance
+            {
+                RuleId = firstRule.Id,
+                SemanticKey = firstRule.SemanticKey,
+                InstanceKey = $"unit:{firstRule.Id}",
+                ScopeTargetId = "unit",
+                Applicability = RuleApplicability.Applicable,
+                Status = CheckStatus.Passed,
+                DetailerInitials = "LEGACY",
+                CheckerInitials = "SIGN",
+                CheckerComment = "Persisted comment",
+                UpdatedAt = "2025-01-01T00:00:00Z",
+                SemanticFingerprint = fingerprint
+            };
+
+            var session = new ProjectSession(
+                filePath: _configXmlPath,
+                configXml: configXml,
+                orderRevXml: null,
+                manifestXml: null,
+                isUpz: false,
+                isTrusted: false,
+                activePack: _activePack,
+                packGeneration: 1,
+                initialChecklists: new List<ChecklistInstance> { legacyChecklist }
+            );
+
+            var check = session.Checklists.FirstOrDefault(c => c.RuleId == firstRule.Id);
+            Assert.NotNull(check);
+            Assert.Equal(CheckStatus.Passed, check.Status);
+            Assert.Equal("LEGACY", check.DetailerInitials);
+            Assert.Equal("SIGN", check.CheckerInitials);
+            Assert.Equal("Persisted comment", check.CheckerComment);
+            // Untrusted session can never be ready for final export
+            Assert.False(session.CreateSnapshot().Readiness.IsReadyForFinal);
         }
     }
 }

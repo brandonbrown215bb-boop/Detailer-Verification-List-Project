@@ -187,5 +187,226 @@ namespace AHUVerification.Tests
             Assert.Equal(4, reorderResult.Revision);
             Assert.Equal(5, reorderResult.Snapshot!.SpecialQuotes[0].Slot);
         }
+
+        [Fact]
+        public void ProjectSession_RendererXmlWithoutHostFile_IsAlwaysUntrusted()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            // Client attempts to claim isTrusted: true, but passes non-existent file path
+            string openReq = JsonSerializer.Serialize(new
+            {
+                id = "req-untrusted-1",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = "NonExistentClientFile.xml",
+                    configXml,
+                    isUpz = false,
+                    isTrusted = true // Client self-proclaiming trust
+                }
+            });
+
+            var openRes = handler.Handle(openReq);
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+            Assert.NotNull(snapshot);
+            Assert.False(snapshot.Source.IsTrusted, "Renderer-provided XML must NEVER be trusted unless host reads from disk");
+            Assert.True(snapshot.Readiness.IsDraftOnly);
+        }
+
+        [Fact]
+        public void ProjectSession_RequestDeduplication_ReturnsSameResultWithoutIncrementingRevision()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-dedup",
+                action = "projectSession_open",
+                payload = new { filePath = configXmlPath }
+            }));
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+
+            string requestId = "unique-mutation-uuid-12345";
+            string overrideReq = JsonSerializer.Serialize(new
+            {
+                id = "req-override-first",
+                action = "projectSession_overrideFact",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 1,
+                    requestId,
+                    factId = "unit.jobName",
+                    value = "Deduplicated Job Name",
+                    author = "Detailer",
+                    comment = "First attempt"
+                }
+            });
+
+            var res1 = handler.Handle(overrideReq);
+            Assert.True(res1.Success);
+            var cmdResult1 = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(res1.Data), options)!;
+            Assert.True(cmdResult1.Success);
+            Assert.Equal(2, cmdResult1.Revision);
+            Assert.Equal("Deduplicated Job Name", cmdResult1.Snapshot!.Facts["unit.jobName"].Value?.ToString());
+
+            // Re-send exact same command with identical requestId (e.g. timeout retry)
+            string retryReq = JsonSerializer.Serialize(new
+            {
+                id = "req-override-retry",
+                action = "projectSession_overrideFact",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 1, // original expected revision
+                    requestId,
+                    factId = "unit.jobName",
+                    value = "Deduplicated Job Name",
+                    author = "Detailer",
+                    comment = "First attempt"
+                }
+            });
+
+            var res2 = handler.Handle(retryReq);
+            Assert.True(res2.Success);
+            var cmdResult2 = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(res2.Data), options)!;
+            Assert.True(cmdResult2.Success);
+            Assert.Equal(2, cmdResult2.Revision); // NOT 3! Deduplicated!
+
+            // Current snapshot revision is still 2
+            var snapRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-snap-check",
+                action = "projectSession_getSnapshot"
+            }));
+            var currentSnapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(snapRes.Data), options)!;
+            Assert.Equal(2, currentSnapshot.Revision);
+        }
+
+        [Fact]
+        public void ProjectSession_UpdateGeneralComments_CommitsSuccessfully()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-comm",
+                action = "projectSession_open",
+                payload = new { filePath = configXmlPath }
+            }));
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+
+            var commentRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-comments",
+                action = "projectSession_updateGeneralComments",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = 1,
+                    requestId = "comm-req-1",
+                    comments = "Unit approved with field notes."
+                }
+            }));
+
+            Assert.True(commentRes.Success);
+            var result = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(commentRes.Data), options)!;
+            Assert.True(result.Success);
+            Assert.Equal(2, result.Revision);
+            Assert.Equal("Unit approved with field notes.", result.Snapshot!.GeneralComments);
+        }
+
+        [Fact]
+        public void ProjectSession_ExistingDiskPath_WithoutAuthorization_IsUntrusted()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            // Client supplies real file path from disk without host authorization / handle
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-unauth",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    isTrusted = true // client claims trust
+                }
+            }));
+
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+            Assert.NotNull(snapshot);
+            Assert.False(snapshot.Source.IsTrusted, "Existing disk path without native picker authorization must NOT be trusted.");
+        }
+
+        [Fact]
+        public void ProjectSession_AuthorizedDiskPath_ViaHandle_IsTrusted()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            // Host authorizes path (simulating native picker selection)
+            string handle = handler.AuthorizeSourcePath(configXmlPath);
+
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-auth",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    sourceHandle = handle
+                }
+            }));
+
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+            Assert.NotNull(snapshot);
+            Assert.True(snapshot.Source.IsTrusted, "Authorized path via host handle must be trusted.");
+        }
+
+        [Fact]
+        public void ProjectSession_XmlSource_StripsRendererSuppliedOrderRevAndManifest()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            string handle = handler.AuthorizeSourcePath(configXmlPath);
+
+            // Client attempts to attach unauthenticated OrderRev and Manifest to standalone XML
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-xml-strip",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    sourceHandle = handle,
+                    orderRevXml = "<untrustedOrderRev><JobName>Injected Job</JobName></untrustedOrderRev>",
+                    manifestXml = "<untrustedManifest />"
+                }
+            }));
+
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+            Assert.NotNull(snapshot);
+            Assert.True(snapshot.Source.IsTrusted);
+            Assert.Null(snapshot.Source.RawOrderRevisionXml);
+            Assert.Null(snapshot.Source.RawManifestXml);
+            Assert.NotEqual("Injected Job", snapshot.Facts["unit.jobName"].Value?.ToString());
+        }
     }
 }
