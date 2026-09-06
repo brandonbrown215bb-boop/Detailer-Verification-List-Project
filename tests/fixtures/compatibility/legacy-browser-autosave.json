@@ -1,0 +1,86 @@
+{
+  "formatVersion": "2.0",
+  "appVersion": "1.0.0",
+  "createdAt": "2026-09-05T12:00:00.000Z",
+  "lastSavedAt": "2026-09-05T12:05:00.000Z",
+  "author": "Detailer",
+  "jobName": "Hospital Tower West",
+  "comNumber": "COM-842910",
+  "rulePack": {
+    "version": "14.0.0",
+    "sha256": "3a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b",
+    "ruleSemanticFingerprint": "fingerprint-v14",
+    "templateSha256": "4b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c",
+    "templateMapSha256": "5c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d",
+    "approvedMappingsSha256": "6d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e",
+    "templateRetrievable": true
+  },
+  "sourceXml": {
+    "fileName": "Config.xml",
+    "fileSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "schemaVersion": "2018.9.14.1003",
+    "rawXml": "<AhuConfiguration DocumentVersion=\"2018.9.14.1003\"><UnitOptions/></AhuConfiguration>",
+    "isUpzBundle": false
+  },
+  "normalizedGraph": {
+    "documentVersion": "2018.9.14.1003",
+    "unitOptions": {
+      "modelNumber": "AHU-2000",
+      "materials": {
+        "exteriorMaterialType": "Galvanized",
+        "floorMaterialType": "Galvanized",
+        "floorMaterialGauge": 16
+      }
+    },
+    "skids": [
+      {
+        "skidNumber": 1,
+        "skidName": "Skid 1",
+        "segments": [
+          {
+            "segmentNumber": 1,
+            "segmentType": "SupplyFan",
+            "name": "Supply Fan Section",
+            "length": 72.0,
+            "width": 96.0,
+            "height": 84.0,
+            "weight": 1500.0
+          }
+        ]
+      }
+    ]
+  },
+  "factRegistry": {
+    "unit.jobName": {
+      "id": "unit.jobName",
+      "value": "Hospital Tower West",
+      "status": "Known",
+      "confidence": "Authoritative",
+      "source": "OrderRevXml"
+    },
+    "casing.floorMaterial": {
+      "id": "casing.floorMaterial",
+      "value": "Galvanized",
+      "status": "Known",
+      "confidence": "Authoritative",
+      "source": "ConfigXml"
+    }
+  },
+  "sqItems": [],
+  "checklistInstances": [
+    {
+      "checkId": "CHK-001",
+      "ruleId": "RULE-GEN-01",
+      "title": "Verify Baserail Specification",
+      "status": "Applicable",
+      "comment": "Verified against submittal"
+    }
+  ],
+  "generalComments": "Initial project setup",
+  "integrity": {
+    "algorithm": "dvl-canonical-json-v1",
+    "sourceXmlSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "completeStateSha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "state": "complete"
+  }
+}

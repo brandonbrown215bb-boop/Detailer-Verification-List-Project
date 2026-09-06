@@ -1,0 +1,19 @@
+{
+  "fileName": "COM-842910_UnitPackage.upz",
+  "filePath": "C:\\Engineering\\Jobs\\COM-842910_UnitPackage.upz",
+  "isUpz": true,
+  "isDvl": false,
+  "bundle": {
+    "orderRevision": {
+      "orderNumber": "842910",
+      "jobName": "Hospital Tower West",
+      "customer": "HealthCorp",
+      "engineer": "Smith Engineering"
+    },
+    "manifest": {
+      "packageVersion": "1.0",
+      "createdDate": "2026-09-01T08:00:00Z",
+      "files": ["Config.xml", "OrderRev.xml", "Manifest.xml"]
+    }
+  }
+}

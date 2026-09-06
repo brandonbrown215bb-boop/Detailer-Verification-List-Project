@@ -12,6 +12,7 @@ using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
 using AHUVerification.Core.Services;
+using AHUVerification.Core.Session;
 using AHUVerification.Core.Utils;
 
 namespace AHUVerification.App.Bridge
@@ -24,8 +25,10 @@ namespace AHUVerification.App.Bridge
         private readonly RulePackManager _rulePackManager = new();
         private readonly UpzBundleExtractor _upzExtractor = new();
         private readonly UpdateService _updateService = new();
+        private readonly ProjectSessionService _sessionService = new();
 
         private RulePackBundle? _activeRulePack;
+        private int _rulePackGeneration = 1;
         private readonly string _rulePackPath;
         private readonly Func<string?>? _exportPathSelector;
         private readonly Action<ProcessStartInfo> _processLauncher;
@@ -110,6 +113,15 @@ namespace AHUVerification.App.Bridge
                     "checkAppUpdate" => await CheckAppUpdateAsync(),
                     "downloadAppUpdate" => await DownloadAppUpdateAsync(),
                     "applyAppUpdate" => ApplyAppUpdate(),
+                    "projectSession_open" => OpenProjectSession(req.Payload),
+                    "projectSession_getSnapshot" => GetProjectSessionSnapshot(),
+                    "projectSession_overrideFact" => OverrideProjectSessionFact(req.Payload),
+                    "projectSession_revertFact" => RevertProjectSessionFact(req.Payload),
+                    "projectSession_updateChecklist" => UpdateProjectSessionChecklist(req.Payload),
+                    "projectSession_updateSpecialQuote" => UpdateProjectSessionSpecialQuote(req.Payload),
+                    "projectSession_deleteSpecialQuote" => DeleteProjectSessionSpecialQuote(req.Payload),
+                    "projectSession_updateGeneralComments" => UpdateProjectSessionGeneralComments(req.Payload),
+                    "projectSession_reset" => ResetProjectSession(req.Payload),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
 
@@ -433,6 +445,7 @@ namespace AHUVerification.App.Bridge
             if (success)
             {
                 _activeRulePack = _rulePackManager.LoadFromDirectory(active);
+                _rulePackGeneration++;
             }
 
             return new
@@ -552,6 +565,122 @@ namespace AHUVerification.App.Bridge
         {
             _updateService.ApplyUpdatesAndRestart();
             return new { success = true };
+        }
+
+        private object OpenProjectSession(JsonElement payload)
+        {
+            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null)
+                throw new InvalidOperationException("Active rule pack bundle not loaded.");
+
+            string filePath = BridgeValidation.GetStringPropertyOrDefault(payload, "filePath", "");
+            string configXml = BridgeValidation.GetStringPropertyOrDefault(payload, "configXml", "");
+            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
+            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
+            bool isUpz = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isUpz", false);
+            bool isTrusted = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isTrusted", true);
+
+            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            {
+                if (filePath.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
+                {
+                    var bundle = _upzExtractor.Extract(filePath);
+                    configXml = bundle.RawConfigXml;
+                    orderRevXml = bundle.RawOrderRevXml;
+                    manifestXml = bundle.RawManifestXml;
+                    isUpz = true;
+                    isTrusted = true;
+                }
+                else if (filePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    configXml = File.ReadAllText(filePath);
+                    isUpz = false;
+                    isTrusted = true;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(configXml))
+            {
+                throw new ArgumentException("Opening a project session requires either a valid filePath on disk or configXml content in payload.");
+            }
+
+            var cmd = new OpenSourceCommand
+            {
+                FilePath = filePath,
+                ConfigXml = configXml,
+                OrderRevXml = orderRevXml,
+                ManifestXml = manifestXml,
+                IsUpz = isUpz,
+                IsTrusted = isTrusted
+            };
+
+            return _sessionService.OpenSource(cmd, _activeRulePack, _rulePackGeneration);
+        }
+
+        private object GetProjectSessionSnapshot()
+        {
+            var snapshot = _sessionService.GetCurrentSnapshot();
+            if (snapshot == null)
+            {
+                throw new InvalidOperationException("No active project session exists.");
+            }
+            return snapshot;
+        }
+
+        private object OverrideProjectSessionFact(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<OverrideFactCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid OverrideFactCommand payload");
+            return _sessionService.OverrideFact(cmd);
+        }
+
+        private object RevertProjectSessionFact(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<RevertFactCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid RevertFactCommand payload");
+            return _sessionService.RevertFact(cmd);
+        }
+
+        private object UpdateProjectSessionChecklist(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<UpdateChecklistCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid UpdateChecklistCommand payload");
+            return _sessionService.UpdateChecklist(cmd);
+        }
+
+        private object UpdateProjectSessionSpecialQuote(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<UpdateSpecialQuoteCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid UpdateSpecialQuoteCommand payload");
+            return _sessionService.UpdateSpecialQuote(cmd);
+        }
+
+        private object DeleteProjectSessionSpecialQuote(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<DeleteSpecialQuoteCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid DeleteSpecialQuoteCommand payload");
+            return _sessionService.DeleteSpecialQuote(cmd);
+        }
+
+        private object UpdateProjectSessionGeneralComments(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<UpdateGeneralCommentsCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid UpdateGeneralCommentsCommand payload");
+            return _sessionService.UpdateGeneralComments(cmd);
+        }
+
+        private object ResetProjectSession(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<ResetSessionCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid ResetSessionCommand payload");
+            return _sessionService.ResetSession(cmd);
         }
     }
 }
