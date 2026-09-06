@@ -28,7 +28,9 @@ namespace AHUVerification.Core.Models
         Incomplete,
         Passed,
         NA,
-        Flagged
+        Flagged,
+        NeedsInput,
+        NotApplicable
     }
 
     public class RuleDefinition
@@ -117,14 +119,23 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("detailerComment")]
         public string DetailerComment { get; set; } = "";
 
+        [JsonPropertyName("detailerInitials")]
+        public string? DetailerInitials { get; set; }
+
         [JsonPropertyName("checkerComment")]
         public string? CheckerComment { get; set; }
+
+        [JsonPropertyName("checkerInitials")]
+        public string? CheckerInitials { get; set; }
 
         [JsonPropertyName("updatedAt")]
         public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("o");
 
         [JsonPropertyName("factTraces")]
         public List<FactTrace> FactTraces { get; set; } = new();
+
+        [JsonPropertyName("semanticFingerprint")]
+        public string? SemanticFingerprint { get; set; }
     }
 
     public class SpecialQuote

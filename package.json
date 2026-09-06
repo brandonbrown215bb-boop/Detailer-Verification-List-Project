@@ -3,11 +3,21 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0 <23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node scripts/test_readiness.mjs && node scripts/stress_test_readiness_adversarial.mjs && node scripts/test_ast_converter.mjs && node scripts/test_reducers.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs && node scripts/test_m2_parity_and_bridge.mjs",
+    "test": "npm run test:version && npm run test:fact && npm run test:dvl && node scripts/test_readiness.mjs && node scripts/stress_test_readiness_adversarial.mjs && node scripts/test_ast_converter.mjs && node scripts/test_reducers.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs && node scripts/test_m2_parity_and_bridge.mjs",
+    "test:version": "node scripts/verify_version.mjs && node scripts/test_version_consistency.mjs",
+    "test:fact": "node scripts/test_fact_contract.mjs",
+    "test:dvl": "node scripts/test_dvl_canonical.mjs",
+    "test:dist": "node scripts/verify_dist_assets.mjs",
+    "test:bundle": "node scripts/verify_bundle_budget.mjs",
+    "test:coverage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_core_coverage.ps1",
+    "test:graph": "node scripts/measure_bundle_graph.mjs",
     "test:readiness": "node scripts/test_readiness.mjs",
     "test:stress": "node scripts/stress_test_readiness_adversarial.mjs",
     "test:ast": "node scripts/test_ast_converter.mjs",

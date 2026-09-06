@@ -35,6 +35,51 @@ namespace AHUVerification.Core.Models
         public string? Note { get; set; }
     }
 
+    public class FactSnapshot
+    {
+        [JsonPropertyName("value")]
+        public object? Value { get; set; }
+
+        [JsonPropertyName("status")]
+        public FactStatus Status { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public FactConfidence Confidence { get; set; }
+
+        [JsonPropertyName("sourceRawValue")]
+        public object? SourceRawValue { get; set; }
+
+        [JsonPropertyName("sourcePointer")]
+        public string? SourcePointer { get; set; }
+
+        [JsonPropertyName("derivationName")]
+        public string? DerivationName { get; set; }
+
+        [JsonPropertyName("promptNote")]
+        public string? PromptNote { get; set; }
+
+        [JsonPropertyName("sourceState")]
+        public string? SourceState { get; set; }
+    }
+
+    public class FactAuditEntry
+    {
+        [JsonPropertyName("action")]
+        public string Action { get; set; } = "";
+
+        [JsonPropertyName("timestamp")]
+        public string Timestamp { get; set; } = DateTime.UtcNow.ToString("o");
+
+        [JsonPropertyName("by")]
+        public string By { get; set; } = "Detailer";
+
+        [JsonPropertyName("note")]
+        public string? Note { get; set; }
+
+        [JsonPropertyName("snapshot")]
+        public FactSnapshot Snapshot { get; set; } = new();
+    }
+
     public class Fact
     {
         [JsonPropertyName("key")]
@@ -67,7 +112,19 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("promptNote")]
         public string? PromptNote { get; set; }
 
+        [JsonPropertyName("sourceState")]
+        public string? SourceState { get; set; }
+
+        [JsonPropertyName("calculatedValue")]
+        public object? CalculatedValue { get; set; }
+
         [JsonPropertyName("overrideHistory")]
         public List<FactOverrideEntry> OverrideHistory { get; set; } = new();
+
+        [JsonPropertyName("originalSnapshot")]
+        public FactSnapshot? OriginalSnapshot { get; set; }
+
+        [JsonPropertyName("auditHistory")]
+        public List<FactAuditEntry> AuditHistory { get; set; } = new();
     }
 }

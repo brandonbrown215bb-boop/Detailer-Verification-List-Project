@@ -1,0 +1,575 @@
+{
+  "contractVersion": "1.0.0",
+  "factStatuses": [
+    "Known",
+    "Derived",
+    "Unknown",
+    "ManuallyOverridden"
+  ],
+  "factConfidences": [
+    "Authoritative",
+    "RequiresConfirmation"
+  ],
+  "facts": [
+    {
+      "key": "unit.jobName",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.comNumber",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.orderNumber",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.tag",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.productType",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.detailer",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.date",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.baseHeight",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.curbrest",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.lipHeight",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.hasUTL",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.isTiered",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.isStacked",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.hasFloorDrains",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.shellType",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.unitType",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.thermalBreak",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.knockdown",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.shippingProtection",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.thicknessFront",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.thicknessTop",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.exteriorMaterial",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.exteriorGauge",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.interiorMaterial",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.interiorGauge",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.floorMaterial",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.floorGauge",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.floorGaugeString",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "casing.insulationType",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "roof.hasSlopedRoof",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "roof.roofPeak",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "roof.roofSlope",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "roof.roofPeakZDim",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "opening.totalCount",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "door.totalCount",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "damper.totalCount",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "floorDrain.totalCount",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.isSeismic",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.noa",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.deflectionTest",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.totalWeight",
+      "type": "number",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.totalStaticPressure",
+      "type": "number",
+      "scope": "Unit"
+    }
+  ],
+  "patterns": [
+    {
+      "key": "base.{id}.height",
+      "type": "number",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.lipHeight",
+      "type": "number",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.hasSubFloor",
+      "type": "boolean",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.subFloorMaterial",
+      "type": "string",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.subFloorGauge",
+      "type": "number",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.subFloorPaint",
+      "type": "string",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.paintType",
+      "type": "string",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.floorAttachment",
+      "type": "string",
+      "scope": "Base"
+    },
+    {
+      "key": "base.{id}.isUpperBase",
+      "type": "boolean",
+      "scope": "Base"
+    },
+    {
+      "key": "skid.weight",
+      "type": "number",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasSplit",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.segmentCount",
+      "type": "number",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasDrainPan",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasFans",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasCoils",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasFilters",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.hasHeatWheel",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.weight",
+      "type": "number",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasSplit",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.segmentCount",
+      "type": "number",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasDrainPan",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasFans",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasCoils",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasFilters",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasHeatWheel",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.hasSubFloor",
+      "type": "boolean",
+      "scope": "Skid"
+    },
+    {
+      "key": "skid.{id}.floorDrainCount",
+      "type": "number",
+      "scope": "Skid"
+    },
+    {
+      "key": "door.{id}.width",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "door.{id}.height",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "door.{id}.swing",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "door.{id}.hingeSide",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "door.{id}.hasWindow",
+      "type": "boolean",
+      "scope": "Opening"
+    },
+    {
+      "key": "door.{id}.segmentId",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "damper.{id}.type",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "damper.{id}.actuator",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "damper.{id}.width",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "damper.{id}.height",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "floorDrain.{id}.type",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "floorDrain.{id}.pipingMaterial",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "floorDrain.{id}.connectionDiameter",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "floorDrain.{id}.holeDiameter",
+      "type": "number",
+      "scope": "Opening"
+    },
+    {
+      "key": "floorDrain.{id}.segmentId",
+      "type": "string",
+      "scope": "Opening"
+    },
+    {
+      "key": "fan.{id}.isFanArray",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.arrayGrid",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.hasRedundancy",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.hasStand",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.hasRemovalRail",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.isolationType",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.motorHp",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "fan.{id}.voltage",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "coil.{id}.bulkheadMaterial",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "coil.{id}.hasStackingRack",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "coil.{id}.dripPanMaterial",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "coil.{id}.staggeredOverlap",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "coil.{id}.connectionHand",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "filter.{id}.loadMethod",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "filter.{id}.bulkheadMaterial",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "filter.{id}.gaugeType",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "filter.{id}.gaugeDoorId",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "wheel.{id}.hasPurge",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "wheel.{id}.mediaType",
+      "type": "string",
+      "scope": "Component"
+    },
+    {
+      "key": "wheel.{id}.allowVariableSpeed",
+      "type": "boolean",
+      "scope": "Component"
+    },
+    {
+      "key": "motorControl.{id}.disconnectSize",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "motorControl.{id}.fla",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "motorControl.{id}.voltage",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "motorControl.{id}.hp",
+      "type": "number",
+      "scope": "Component"
+    },
+    {
+      "key": "motorControl.{id}.unitSide",
+      "type": "string",
+      "scope": "Component"
+    }
+  ],
+  "legacyAliases": {
+    "unit.wallThickness": "casing.thicknessFront",
+    "unit.roofPeak": "roof.roofPeak",
+    "unit.location": "unit.unitType",
+    "unit.utl": "unit.hasUTL",
+    "unit.linerMaterial": "casing.interiorMaterial",
+    "unit.linerGauge": "casing.interiorGauge",
+    "unit.skinMaterial": "casing.exteriorMaterial",
+    "unit.skinGauge": "casing.exteriorGauge",
+    "unit.floorMaterial": "casing.floorMaterial",
+    "unit.floorGauge": "casing.floorGauge",
+    "unit.casingMaterial": "casing.exteriorMaterial"
+  }
+}

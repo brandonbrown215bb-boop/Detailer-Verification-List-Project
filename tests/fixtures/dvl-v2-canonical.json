@@ -1,0 +1,19 @@
+{
+  "lastSavedAt": "2026-09-04T12:00:00.000Z",
+  "integrity": { "completeStateSha256": "ignored-by-canonical-payload" },
+  "sqItems": [
+    { "slot": 1, "text": "SQ one" }
+  ],
+  "sourceXml": {
+    "rawXml": "<Config />",
+    "fileSha256": "ignored-in-fixture"
+  },
+  "formatVersion": "2.0",
+  "factRegistry": {
+    "measurement": { "value": -0.5 },
+    "count": { "value": 42 }
+  },
+  "normalizedGraph": {
+    "dimensions": { "height": 96.5, "length": 120, "width": 84 }
+  }
+}

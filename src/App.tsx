@@ -1,24 +1,9 @@
 import React, { useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
-import {
-  NormalizedXmlGraph,
-  Fact,
-  SpecialQuote,
-  ChecklistInstance,
-  CheckStatus,
-  DvlProjectFile,
-  ThemeMode,
-  UpzBundle,
-  RuleDefinition
-} from './types';
-import { parseAhuXml, parseOrderRevXml } from './services/xmlParser';
-import { extractFactsFromGraph, overrideFact, revertFact } from './services/factRegistry';
-import { RULES_CATALOG, RULE_PACK_IDENTITY } from './services/rulesCatalog';
-import { generateChecklists } from './services/ruleEvaluator';
-import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from './services/projectStorage';
-import { createManualUnit, ManualUnitConfig } from './services/manualUnitFactory';
+import type { ThemeMode } from './types';
 import { desktopBridge } from './services/desktopBridge';
 import { computeUnitReadiness } from './utils/readiness';
-import { SAMPLE_CONFIG_XML } from './fixtures/sampleConfigXml';
+import { useProjectSession } from './hooks/useProjectSession';
+import { useRulePackSession } from './hooks/useRulePackSession';
 
 import { HomePage } from './components/HomePage';
 import { ManualUnitModal } from './components/ManualUnitModal';
@@ -81,29 +66,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const AppContent: React.FC = () => {
-  // Application Data States
-  const [isProjectLoaded, setIsProjectLoaded] = useState(false);
-  const [graph, setGraph] = useState<NormalizedXmlGraph | null>(null);
-  const [facts, setFacts] = useState<Record<string, Fact>>({});
-  const [sqItems, setSqItems] = useState<SpecialQuote[]>([]);
-  const [checklists, setChecklists] = useState<ChecklistInstance[]>([]);
-  const [rawXml, setRawXml] = useState<string>('');
-  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(() => loadAutosave());
-  const [generalComments, setGeneralComments] = useState<string>(
-    'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
-  );
-  const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
-  const [projectIntegrityWarning, setProjectIntegrityWarning] = useState<string | null>(null);
-  const [sourceMetadata, setSourceMetadata] = useState<{
-    fileName?: string;
-    isUpzBundle?: boolean;
-    orderRevision?: any;
-  }>({});
-
-  // Active view: 'general' | 'unit-checks' | skid ID ('skid-1', 'skid-2', etc.)
   const [activeTab, setActiveTab] = useState<string>('general');
-
-  // Modals & Navigation state
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isResolutionOpen, setIsResolutionOpen] = useState(false);
   const [isPreFlightOpen, setIsPreFlightOpen] = useState(false);
@@ -113,122 +76,77 @@ export const AppContent: React.FC = () => {
   const [isDetailerModalOpen, setIsDetailerModalOpen] = useState(false);
   const [isComModalOpen, setIsComModalOpen] = useState(false);
 
-  // Sidebar Collapse state (persisted in localStorage)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('dvl_sidebar_collapsed') === 'true';
   });
-
-  // 3-Way Theme Mode state ('dark' | 'light' | 'system')
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('dvl_theme_mode') as ThemeMode;
     return saved || 'dark';
   });
 
-  // Live Autosave status tracking
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const {
+    activeRules,
+    rulePackIdentity,
+    activeRulePackArtifacts,
+    centralRulePackPath,
+    setCentralRulePackPath,
+    rulePackNotice,
+    dismissRulePackNotice,
+    appUpdateNotice,
+    dismissAppUpdateNotice,
+    applyAppUpdate,
+    handleRulePackUpdated
+  } = useRulePackSession();
 
-  // Export success and error toast states
-  const [exportNotice, setExportNotice] = useState<{ fileName: string; filePath?: string } | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
-
-  // Dynamic Rule Pack State
-  const [activeRules, setActiveRules] = useState<RuleDefinition[]>(RULES_CATALOG);
-  const [rulePackIdentity, setRulePackIdentity] = useState(RULE_PACK_IDENTITY);
-  const [centralRulePackPath, setCentralRulePackPath] = useState<string>(() => {
-    return localStorage.getItem('dvl_central_rulepack_path') || '';
+  const requestComNumber = useCallback(() => setIsComModalOpen(true), []);
+  const resetActiveTab = useCallback(() => setActiveTab('general'), []);
+  const {
+    isProjectLoaded,
+    graph,
+    facts,
+    sqItems,
+    checklists,
+    generalComments,
+    autosavedProject,
+    projectIntegrityWarning,
+    sourceIsTrusted,
+    pendingVerifications,
+    lastSavedAt,
+    exportNotice,
+    exportError,
+    setSqItems,
+    setGeneralComments,
+    leaveProject,
+    loadXmlData,
+    handleOpenDvl,
+    handleManualCreate,
+    handleResumeAutosave,
+    handleClearAutosave,
+    handleLoadSample,
+    handleResetAllChanges,
+    handleFileUpload,
+    handleUpdateFact,
+    handleRevertFact,
+    handleBatchResolveDefaults,
+    handleUpdateChecklistStatus,
+    handleUpdateChecklistComment,
+    handleSaveDvl,
+    handleExportExcel,
+    dismissExportNotice,
+    dismissExportError
+  } = useProjectSession({
+    activeRules,
+    rulePackIdentity,
+    activeRulePackArtifacts,
+    onRequestComNumber: requestComNumber,
+    onSessionLoaded: resetActiveTab
   });
-  const [rulePackNotice, setRulePackNotice] = useState<string | null>(null);
-  const [appUpdateNotice, setAppUpdateNotice] = useState<{ message: string; canRestart?: boolean } | null>(null);
+  const handleBatchResolveDefaultsAndClose = useCallback(() => {
+    handleBatchResolveDefaults();
+    setIsResolutionOpen(false);
+  }, [handleBatchResolveDefaults]);
 
-  // Initial rule pack fetch from desktop host, autonomous SharePoint sync, and background app update check
-  useEffect(() => {
-    if (desktopBridge.isRunningInDesktop()) {
-      desktopBridge.getRulePack().then(pack => {
-        if (pack && pack.rules && pack.rules.length > 0) {
-          setActiveRules(pack.rules);
-          if (pack.manifest) {
-            setRulePackIdentity({
-              version: pack.manifest.version,
-              sha256: pack.manifest.bundleSha256
-            });
-          }
-        }
-      }).catch(err => console.warn('Failed to load initial rule pack from bridge:', err));
-
-      const configuredPath = localStorage.getItem('dvl_central_rulepack_path');
-      const autoSync = localStorage.getItem('dvl_auto_sync_rulepack') !== 'false';
-
-      // Auto-discover location (e.g. synced SharePoint/OneDrive) if not configured
-      desktopBridge.resolveRulePackLocation(configuredPath || undefined).then(async resolved => {
-        const effectivePath = resolved.path;
-        if (effectivePath && autoSync) {
-          try {
-            const updateInfo = await desktopBridge.checkRulePackUpdate(effectivePath);
-            if (updateInfo.hasUpdate && !updateInfo.error) {
-              const syncResult = await desktopBridge.syncRulePack(effectivePath);
-              if (syncResult.success && syncResult.rules) {
-                setActiveRules(syncResult.rules);
-                setRulePackIdentity({
-                  version: syncResult.version,
-                  sha256: syncResult.bundleSha256 || ''
-                });
-                const origin = resolved.isAutoDetected ? 'SharePoint sync' : 'central path';
-                setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules) from ${origin}`);
-              }
-            }
-          } catch (err) {
-            console.warn('Rule pack auto-sync check failed:', err);
-          }
-        }
-      }).catch(err => console.warn('Rule pack location discovery failed:', err));
-
-      // Check for Velopack desktop app updates in background
-      desktopBridge.checkAppUpdate().then(async appUpdate => {
-        if (appUpdate.hasUpdate && appUpdate.remoteVersion) {
-          setAppUpdateNotice({
-            message: `New desktop app v${appUpdate.remoteVersion} detected. Downloading in background...`,
-            canRestart: false
-          });
-          try {
-            const downloaded = await desktopBridge.downloadAppUpdate();
-            if (downloaded.success) {
-              setAppUpdateNotice({
-                message: `App update v${appUpdate.remoteVersion} is ready to apply.`,
-                canRestart: true
-              });
-            } else {
-              setAppUpdateNotice({
-                message: `Failed to download desktop app update v${appUpdate.remoteVersion}${downloaded.error ? `: ${downloaded.error}` : '.'}`,
-                canRestart: false
-              });
-            }
-          } catch (dlErr: any) {
-            console.warn('Desktop app update download failed:', dlErr);
-            setAppUpdateNotice({
-              message: `Failed to download desktop app update v${appUpdate.remoteVersion}: ${dlErr?.message || 'Network error'}`,
-              canRestart: false
-            });
-          }
-        }
-      }).catch(err => console.warn('Desktop app update check failed:', err));
-    }
-  }, []);
-
-  const handleRulePackUpdated = useCallback((updatedBundle: any) => {
-    if (updatedBundle && updatedBundle.rules) {
-      setActiveRules(updatedBundle.rules);
-      setRulePackIdentity({
-        version: updatedBundle.version,
-        sha256: updatedBundle.bundleSha256 || ''
-      });
-      setRulePackNotice(`Rule Pack updated to v${updatedBundle.version} (${updatedBundle.ruleCount} active rules)`);
-      if (graph && facts) {
-        setChecklists(prev => generateChecklists(updatedBundle.rules, graph, facts, prev));
-      }
-    }
-  }, [graph, facts]);
-
-  // Prompt for Detailer Name on first launch if blank
+  // Prompt for Detailer Name on first launch if blank.
   useEffect(() => {
     const savedDetailer = localStorage.getItem('dvl_detailer_name');
     if (!savedDetailer) {
@@ -236,7 +154,7 @@ export const AppContent: React.FC = () => {
     }
   }, []);
 
-  // Apply Theme Mode class to document element
+  // Apply Theme Mode class to document element.
   useEffect(() => {
     const applyTheme = (mode: ThemeMode) => {
       let isDark = true;
@@ -265,12 +183,12 @@ export const AppContent: React.FC = () => {
     }
   }, [themeMode]);
 
-  // Persist sidebar collapsed state
+  // Persist sidebar collapsed state.
   useEffect(() => {
     localStorage.setItem('dvl_sidebar_collapsed', String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
-  // Responsive Auto-Collapse Sidebar < 1200px
+  // Responsive Auto-Collapse Sidebar < 1200px.
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1200) {
@@ -286,332 +204,7 @@ export const AppContent: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-
-  // Autosave when active data changes
-  useEffect(() => {
-    if (isProjectLoaded && graph && facts && sqItems && checklists) {
-      let cancelled = false;
-      void createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata)
-        .then(proj => {
-          if (cancelled) return;
-          autosaveToLocal(proj);
-          setAutosavedProject(proj);
-          setLastSavedAt(new Date().toISOString());
-        })
-        .catch(error => console.warn('Autosave project creation failed:', error));
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata]);
-
-  // Fact Update & Revert Handlers
-  const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
-    if (!graph) return;
-    setFacts(prev => {
-      const updated = overrideFact(prev, key, value, author, note);
-      const newChecklists = generateChecklists(activeRules, graph, updated, checklists);
-      setChecklists(newChecklists);
-      return updated;
-    });
-  }, [graph, checklists, activeRules]);
-
-  const handleRevertFact = useCallback((key: string) => {
-    if (!graph) return;
-    setFacts(prev => {
-      const reverted = revertFact(prev, key);
-      const newChecklists = generateChecklists(activeRules, graph, reverted, checklists);
-      setChecklists(newChecklists);
-      return reverted;
-    });
-  }, [graph, checklists, activeRules]);
-
-  // Handler for loading new XML or UPZ bundle
-  const loadXmlData = useCallback((xmlString: string, bundle?: UpzBundle, sourceFileName?: string) => {
-    const newGraph = parseAhuXml(xmlString);
-
-    let orderRev = bundle?.orderRevision;
-    if (!orderRev && bundle?.rawOrderRevXml) {
-      orderRev = parseOrderRevXml(bundle.rawOrderRevXml);
-    }
-
-    const newFacts = extractFactsFromGraph(newGraph, orderRev);
-    const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
-
-    const meta = {
-      fileName: sourceFileName || (bundle ? 'bundle.upz' : 'Config.xml'),
-      isUpzBundle: !!bundle,
-      orderRevision: orderRev
-    };
-
-    setSourceMetadata(meta);
-    setRawXml(xmlString);
-    setGraph(newGraph);
-    setFacts(newFacts);
-    setChecklists(newChecklists);
-    setSqItems([]);
-    setCurrentProjectPath(null);
-    setProjectIntegrityWarning(null);
-    setActiveTab('general');
-    setIsProjectLoaded(true);
-
-    // Prompt for COM# if not populated
-    if (!newFacts['unit.comNumber']?.value) {
-      setIsComModalOpen(true);
-    }
-  }, [activeRules]);
-
-  // Handler for loading saved .dvl project
-  const handleOpenDvl = useCallback(async (project: DvlProjectFile, _rawJson?: string, filePath?: string) => {
-    try {
-      const integrity = await inspectDvlIntegrity(project);
-      setGraph(project.normalizedGraph);
-      setFacts(project.factRegistry);
-      setSqItems(project.sqItems || []);
-      setChecklists(project.checklistInstances || []);
-      setRawXml(project.sourceXml?.rawXml || '');
-      setGeneralComments(project.generalComments || '');
-      setSourceMetadata({
-        fileName: project.sourceXml?.fileName,
-        isUpzBundle: project.sourceXml?.isUpzBundle,
-        orderRevision: project.sourceXml?.orderRevision
-      });
-      setCurrentProjectPath(filePath || null);
-      setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
-      setActiveTab('general');
-      setIsProjectLoaded(true);
-    } catch (err: any) {
-      alert(`Error loading .dvl project: ${err.message}`);
-    }
-  }, []);
-
-  // Handler for creating manual unit
-  const handleManualCreate = useCallback((config: ManualUnitConfig) => {
-    try {
-      const manual = createManualUnit(config);
-      setGraph(manual.graph);
-      setFacts(manual.facts);
-      setChecklists(manual.checklists);
-      setSqItems(manual.sqItems);
-      setRawXml(manual.rawXml);
-      setGeneralComments(manual.generalComments);
-      setCurrentProjectPath(null);
-      setProjectIntegrityWarning(null);
-      setActiveTab('general');
-      setIsProjectLoaded(true);
-    } catch (err: any) {
-      alert(`Error creating manual unit: ${err.message}`);
-    }
-  }, []);
-
-  // Handler for resuming autosave
-  const handleResumeAutosave = useCallback(() => {
-    if (autosavedProject) {
-      handleOpenDvl(autosavedProject);
-    }
-  }, [autosavedProject, handleOpenDvl]);
-
-  // Handler for clearing autosave
-  const handleClearAutosave = useCallback(() => {
-    try {
-      localStorage.removeItem('ahu_dvl_autosave');
-      setAutosavedProject(null);
-      setLastSavedAt(null);
-    } catch (e) {
-      console.warn('Failed to clear autosave:', e);
-    }
-  }, []);
-
-  // Handler for loading demo sample
-  const handleLoadSample = useCallback(() => {
-    try {
-      const newGraph = parseAhuXml(SAMPLE_CONFIG_XML);
-      const newFacts = extractFactsFromGraph(newGraph);
-      const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
-
-      setRawXml(SAMPLE_CONFIG_XML);
-      setGraph(newGraph);
-      setFacts(newFacts);
-      setChecklists(newChecklists);
-      setSqItems([
-        {
-          slot: 1,
-          id: 'sq-1',
-          text: 'Custom drain pan depth 3.5 in. with copper downspout connection',
-          linkedSkidId: 'skid-3',
-          initials: 'TD',
-          isCompleted: true
-        },
-        {
-          slot: 2,
-          id: 'sq-2',
-          text: 'Dual 630 EBM Fan Wall array with individual disconnects',
-          linkedSkidId: 'skid-4',
-          initials: 'TD',
-          isCompleted: false
-        }
-      ]);
-      setCurrentProjectPath(null);
-      setProjectIntegrityWarning(null);
-      setActiveTab('general');
-      setIsProjectLoaded(true);
-    } catch (err: any) {
-      alert(`Error loading sample: ${err.message}`);
-    }
-  }, [activeRules]);
-
-  // Reset all manual changes handler
-  const handleResetAllChanges = useCallback(() => {
-    if (!graph) return;
-    try {
-      const freshFacts = extractFactsFromGraph(graph, sourceMetadata.orderRevision);
-      const freshChecklists = generateChecklists(activeRules, graph, freshFacts);
-      setFacts(freshFacts);
-      setChecklists(freshChecklists);
-    } catch (err: any) {
-      alert(`Error resetting changes: ${err.message}`);
-    }
-  }, [graph, sourceMetadata, activeRules]);
-
-  // Handler for opening files (.xml or .dvl) from Header
-  const handleFileUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (file.name.endsWith('.dvl')) {
-        try {
-          const project = JSON.parse(text);
-          handleOpenDvl(project);
-        } catch (err: any) {
-          alert(`Error reading .dvl project file: ${err.message}`);
-        }
-      } else {
-        loadXmlData(text);
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleBatchResolveDefaults = useCallback(() => {
-    if (!graph) return;
-    setFacts(prev => {
-      let updated = { ...prev };
-
-      // Set standard default specs
-      if (updated['unit.noa'] && updated['unit.noa'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.noa', false, 'Detailer', 'Standard Non-NOA unit');
-      }
-      if (updated['unit.isSeismic'] && updated['unit.isSeismic'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.isSeismic', false, 'Detailer', 'Standard Non-Seismic');
-      }
-      if (updated['unit.knockdown'] && updated['unit.knockdown'].confidence === 'RequiresConfirmation') {
-        updated = overrideFact(updated, 'unit.knockdown', false, 'Detailer', 'Factory Assembled');
-      }
-
-      const newChecklists = generateChecklists(activeRules, graph, updated, checklists);
-      setChecklists(newChecklists);
-      return updated;
-    });
-    setIsResolutionOpen(false);
-  }, [graph, checklists, activeRules]);
-
-  // Checklist Update Handlers
-  const handleUpdateChecklistStatus = useCallback((instanceKey: string, status: CheckStatus) => {
-    setChecklists(prev => prev.map(item => {
-      if (item.instanceKey === instanceKey) {
-        return { ...item, status, updatedAt: new Date().toISOString() };
-      }
-      return item;
-    }));
-  }, []);
-
-  const handleUpdateChecklistComment = useCallback((instanceKey: string, detailerComment: string) => {
-    setChecklists(prev => prev.map(item => {
-      if (item.instanceKey === instanceKey) {
-        return { ...item, detailerComment, updatedAt: new Date().toISOString() };
-      }
-      return item;
-    }));
-  }, []);
-
-  // Save .dvl Project
-  const handleSaveDvl = async (forceSaveAs: boolean = false) => {
-    if (!graph) return;
-    try {
-      const project = await createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments);
-      const jobName = facts['unit.jobName']?.value || 'AHU_Project';
-      const comNumber = facts['unit.comNumber']?.value || 'COM-000000';
-      const defaultName = `${jobName}_${comNumber}.dvl`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-
-      if (desktopBridge.isRunningInDesktop()) {
-        let targetPath = forceSaveAs ? null : currentProjectPath;
-        if (!targetPath) {
-          targetPath = await desktopBridge.saveFileDialog(defaultName);
-        }
-        if (!targetPath) return;
-
-        const res = await desktopBridge.saveDvl(targetPath, project);
-        if (res.saved) {
-          setCurrentProjectPath(res.path);
-          setProjectIntegrityWarning(null);
-          setExportNotice({ fileName: res.path.split(/[\\/]/).pop() || defaultName, filePath: res.path });
-        }
-      } else {
-        saveDvlToFile(project);
-      }
-    } catch (error: any) {
-      alert(`Error saving .dvl project: ${error.message}`);
-    }
-  };
-
-  // Export Excel Deliverable
-  const handleExportExcel = async (isDraft: boolean = false) => {
-    if (!graph) {
-      setExportError('Cannot export Excel deliverable: No project geometry or graph is loaded.');
-      return;
-    }
-    const jobName = String(facts['unit.jobName']?.value || 'AHU_Project');
-    const comNumber = String(facts['unit.comNumber']?.value || 'COM-000000');
-    const defaultName = `${jobName}_${comNumber}_Detailing_Verification_List${isDraft ? '_DRAFT' : ''}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-
-    // Dynamic verification date population on export
-    const exportFacts = {
-      ...facts,
-      'unit.date': {
-        ...facts['unit.date'],
-        key: 'unit.date',
-        label: 'Verification Date',
-        category: 'Order & Identity',
-        value: new Date().toISOString().split('T')[0],
-        status: 'Known' as const,
-        confidence: 'Authoritative' as const
-      }
-    };
-
-    try {
-      setExportError(null);
-      const result = await desktopBridge.exportExcelDeliverable(
-        exportFacts,
-        sqItems,
-        checklists,
-        activeRules,
-        graph,
-        generalComments,
-        defaultName,
-        isDraft
-      );
-
-      if (result.exported && !result.cancelled) {
-        setExportNotice({ fileName: result.fileName || defaultName, filePath: result.filePath });
-      }
-    } catch (error: any) {
-      console.error('Export Excel failed:', error);
-      const errorMsg = error?.message || 'An unknown error occurred while exporting the Excel deliverable.';
-      setExportError(errorMsg);
-    }
-  };
-
-  // Keyboard Shortcuts (Ctrl+K, Ctrl+S, Ctrl+E, Ctrl+B)
+  // Keyboard Shortcuts (Ctrl+K, Ctrl+S, Ctrl+E, Ctrl+B).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -635,9 +228,8 @@ export const AppContent: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, currentProjectPath]);
+  }, [isProjectLoaded, handleSaveDvl]);
 
-  // Cycle Theme Mode handler
   const handleCycleThemeMode = useCallback(() => {
     setThemeMode(prev => {
       if (prev === 'dark') return 'light';
@@ -696,7 +288,7 @@ export const AppContent: React.FC = () => {
     dimensions: graph.dimensions
   };
 
-  const readiness = computeUnitReadiness(facts, checklists);
+  const readiness = computeUnitReadiness(facts, checklists, activeRules);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -725,7 +317,7 @@ export const AppContent: React.FC = () => {
           facts={facts}
           checklists={checklists}
           readiness={readiness}
-          onGoHome={() => setIsProjectLoaded(false)}
+          onGoHome={leaveProject}
           onOpenResolutionCenter={() => setIsResolutionOpen(true)}
           onOpenPreFlight={() => setIsPreFlightOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
@@ -743,10 +335,31 @@ export const AppContent: React.FC = () => {
           onOpenComModal={() => setIsComModalOpen(true)}
         />
 
+        {/* Browser Mode Warning */}
+        {!desktopBridge.isRunningInDesktop() && (
+          <div className="bg-amber-100 dark:bg-amber-950/80 border-b border-amber-300 dark:border-amber-700/50 px-6 py-1.5 flex items-center justify-center">
+            <span className="text-xs text-amber-900 dark:text-amber-200 font-medium flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5" />
+              Browser Mode (Non-Certifying Preview / Draft). Final export is disabled.
+            </span>
+          </div>
+        )}
+
         {projectIntegrityWarning && (
           <div className="bg-amber-100 dark:bg-amber-950/90 border-b border-amber-300 dark:border-amber-700/60 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{projectIntegrityWarning}</span>
+          </div>
+        )}
+
+        {pendingVerifications > 0 && (
+          <div role="status" className="px-6 py-2 text-xs bg-slate-100 dark:bg-slate-900">
+            Recomputing verification with the active Rule Pack…
+          </div>
+        )}
+        {desktopBridge.isRunningInDesktop() && !sourceIsTrusted && !projectIntegrityWarning && (
+          <div role="status" className="px-6 py-2 text-xs bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            This session can produce drafts. Final export requires a verified source opened through the desktop file picker.
           </div>
         )}
 
@@ -758,7 +371,7 @@ export const AppContent: React.FC = () => {
               <span>{rulePackNotice}</span>
             </div>
             <button
-              onClick={() => setRulePackNotice(null)}
+              onClick={dismissRulePackNotice}
               className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
             >
               Dismiss
@@ -777,7 +390,7 @@ export const AppContent: React.FC = () => {
               {appUpdateNotice.canRestart && (
                 <button
                   type="button"
-                  onClick={() => desktopBridge.applyAppUpdate()}
+                  onClick={applyAppUpdate}
                   className="px-2.5 py-1 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded shadow transition-colors"
                 >
                   Restart App
@@ -785,7 +398,7 @@ export const AppContent: React.FC = () => {
               )}
               <button
                 type="button"
-                onClick={() => setAppUpdateNotice(null)}
+                onClick={dismissAppUpdateNotice}
                 className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
               >
                 Dismiss
@@ -823,7 +436,7 @@ export const AppContent: React.FC = () => {
                 </>
               )}
               <button
-                onClick={() => setExportNotice(null)}
+                onClick={dismissExportNotice}
                 className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
               >
                 Dismiss
@@ -842,7 +455,7 @@ export const AppContent: React.FC = () => {
               </span>
             </div>
             <button
-              onClick={() => setExportError(null)}
+              onClick={dismissExportError}
               className="text-xs text-rose-700 hover:text-rose-950 dark:text-rose-400 dark:hover:text-white px-2 py-0.5 rounded hover:bg-rose-200/50 dark:hover:bg-rose-900/50 font-medium"
             >
               Dismiss
@@ -913,7 +526,7 @@ export const AppContent: React.FC = () => {
         rules={activeRules}
         readiness={readiness}
         onUpdateFact={handleUpdateFact}
-        onBatchResolveDefaults={handleBatchResolveDefaults}
+        onBatchResolveDefaults={handleBatchResolveDefaultsAndClose}
         onNavigateToRule={(scopeTargetId) => {
           setActiveTab(scopeTargetId === 'unit' ? 'unit-checks' : scopeTargetId);
           setIsResolutionOpen(false);
@@ -928,6 +541,7 @@ export const AppContent: React.FC = () => {
         facts={facts}
         sqItems={sqItems}
         readiness={readiness}
+        canExportFinal={desktopBridge.isRunningInDesktop() && sourceIsTrusted && pendingVerifications === 0 && !projectIntegrityWarning}
         onExportExcel={handleExportExcel}
         onExportDvl={handleSaveDvl}
         onNavigateToRule={(scopeTargetId) => {

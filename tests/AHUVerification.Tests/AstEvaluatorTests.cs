@@ -16,6 +16,9 @@ namespace AHUVerification.Tests
             var parser = new NormalizedXmlParser();
             var graph = parser.Parse(xmlContent);
 
+            // Add an empty skid with 0 weight to verify NeedsInput for missing weight
+            graph.Skids.Add(new ShippingSkid { Id = "skid-empty", Index = 99, Name = "Empty Skid", CalculatedWeight = 0 });
+
             var extractor = new FactExtractor();
             var facts = extractor.ExtractFacts(graph);
 
@@ -28,10 +31,15 @@ namespace AHUVerification.Tests
 
             Assert.NotEmpty(checklists);
 
-            // BASE-01 (Upturned lip height > 0) evaluates to Applicable
+            // BASE-01 (skid.weight > 4000) evaluates to Applicable for skid-1 (weight > 4000 lbs)
             var base01_skid1 = checklists.FirstOrDefault(c => c.InstanceKey == "skid-1:BASE-01");
             Assert.NotNull(base01_skid1);
             Assert.Equal(RuleApplicability.Applicable, base01_skid1.Applicability);
+
+            // BASE-01 evaluates to NeedsInput for skid-empty (0 weight -> Unknown / RequiresConfirmation)
+            var base01_empty = checklists.FirstOrDefault(c => c.InstanceKey == "skid-empty:BASE-01");
+            Assert.NotNull(base01_empty);
+            Assert.Equal(RuleApplicability.NeedsInput, base01_empty.Applicability);
 
             // HOUS-21 (Thermal break == 'Yes') should be Applicable
             var hous21 = checklists.FirstOrDefault(c => c.InstanceKey == "unit:HOUS-21");
@@ -87,6 +95,19 @@ namespace AHUVerification.Tests
             var predIn = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>>(jsonIn);
             var evalIn = evaluator.EvaluatePredicate(predIn, context, new System.Collections.Generic.List<string>(), factRegistry);
             Assert.True(evalIn.Result);
+        }
+
+        [Fact]
+        public void EvaluatePredicate_UnsupportedOperator_FailsClosed()
+        {
+            var evaluator = new AstRuleEvaluator();
+            var predicate = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["unsupported_operator"] = System.Text.Json.JsonDocument.Parse("[1, 2]").RootElement
+            };
+            var result = evaluator.EvaluatePredicate(predicate, new System.Collections.Generic.Dictionary<string, object>(), new System.Collections.Generic.List<string>(), new System.Collections.Generic.Dictionary<string, Fact>());
+            Assert.False(result.Result);
+            Assert.True(result.NeedsInput);
         }
     }
 }

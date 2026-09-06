@@ -413,9 +413,12 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* Launch Action Cards */}
         <div className={`grid grid-cols-1 ${isProd ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'} gap-4`}>
           {/* 1. Import Config.xml / .upz Bundle */}
-          <div
+          <button
+            type="button"
             onClick={handleNativeOpen}
-            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 cursor-pointer transition-all shadow-sm hover:shadow-blue-500/10 flex flex-col justify-between"
+            disabled={isProcessing}
+            aria-busy={isProcessing}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 cursor-pointer disabled:cursor-wait disabled:opacity-70 transition-all shadow-sm hover:shadow-blue-500/10 flex flex-col justify-between text-left"
           >
             <div className="space-y-3">
               <div className="w-12 h-12 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -433,12 +436,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span>Select File</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
-          </div>
+          </button>
 
           {/* 2. Open .dvl Project */}
-          <div
+          <button
+            type="button"
             onClick={handleNativeOpen}
-            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all shadow-sm hover:shadow-emerald-500/10 flex flex-col justify-between"
+            disabled={isProcessing}
+            aria-busy={isProcessing}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 cursor-pointer disabled:cursor-wait disabled:opacity-70 transition-all shadow-sm hover:shadow-emerald-500/10 flex flex-col justify-between text-left"
           >
             <div className="space-y-3">
               <div className="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -456,12 +462,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span>Browse Projects</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
-          </div>
+          </button>
 
           {/* 3. Manual Unit Setup */}
-          <div
+          <button
+            type="button"
             onClick={onOpenManualModal}
-            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 cursor-pointer transition-all shadow-sm hover:shadow-indigo-500/10 flex flex-col justify-between"
+            disabled={isProcessing}
+            aria-busy={isProcessing}
+            className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 cursor-pointer disabled:cursor-wait disabled:opacity-70 transition-all shadow-sm hover:shadow-indigo-500/10 flex flex-col justify-between text-left"
           >
             <div className="space-y-3">
               <div className="w-12 h-12 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -479,13 +488,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span>Configure Unit</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
-          </div>
+          </button>
 
           {/* 4. Load Demo Sample (Dev/Demo Only) */}
           {!isProd && (
-            <div
+            <button
+              type="button"
               onClick={onLoadSample}
-              className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 cursor-pointer transition-all shadow-sm hover:shadow-amber-500/10 flex flex-col justify-between"
+              disabled={isProcessing}
+              aria-busy={isProcessing}
+              className="group relative p-6 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 cursor-pointer disabled:cursor-wait disabled:opacity-70 transition-all shadow-sm hover:shadow-amber-500/10 flex flex-col justify-between text-left"
             >
               <div className="space-y-3">
                 <div className="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -503,7 +515,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span>Launch Demo</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
-            </div>
+            </button>
           )}
         </div>
       </div>

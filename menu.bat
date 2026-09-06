@@ -58,7 +58,8 @@ if /i "%choice%"=="8" (
     goto menu
 )
 if /i "%choice%"=="9" (
-    call "%~dp0publish-release.bat"
+    set /p releaseVersion="Enter explicit release SemVer (for example 1.2.3): "
+    call "%~dp0publish-release.bat" "!releaseVersion!"
     goto menu
 )
 if /i "%choice%"=="S" (

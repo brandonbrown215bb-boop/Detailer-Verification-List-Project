@@ -58,10 +58,12 @@ export const DetailerNameModal: React.FC<DetailerNameModalProps> = ({
     >
       <form onSubmit={handleSave} className="space-y-4">
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+          <label htmlFor="detailer-full-name-input" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
             Detailer Full Name:
           </label>
           <input
+            id="detailer-full-name-input"
+            aria-label="Detailer Full Name"
             type="text"
             autoFocus
             value={name}
@@ -96,7 +98,7 @@ export const DetailerNameModal: React.FC<DetailerNameModalProps> = ({
           <button
             type="submit"
             disabled={!name.trim()}
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-blue-600/30 transition-all"
+            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-blue-700/30 transition-all"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Save & Continue</span>

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using Xunit;
+using AHUVerification.Core.Models;
 using AHUVerification.Core.Services;
 
 namespace AHUVerification.Tests
@@ -113,6 +114,17 @@ namespace AHUVerification.Tests
                     Text = "Test newly published rule verification.",
                     Order = 99
                 });
+
+                baseline.TemplateMap.RuleCellMappings["TEST_CUSTOM_RULE"] = new RuleCellMapping
+                {
+                    RuleId = "TEST-99",
+                    Row = 100,
+                    NaCell = "S100",
+                    DetailerCell = "T100",
+                    CheckerCell = "V100",
+                    CommentsCell = "Y100",
+                    InitialsCell = "Z100"
+                };
 
                 var publishedBundle = manager.PublishToDirectory(
                     tempPublishDir,

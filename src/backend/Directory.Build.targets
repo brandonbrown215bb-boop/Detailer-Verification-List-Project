@@ -1,4 +1,12 @@
 <Project>
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)..\..\version.json">
+      <Link>version.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup Condition="'$(OutputType)' == 'WinExe'">
     <Content Include="$(MSBuildThisFileDirectory)..\..\dist\**\*">
       <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>

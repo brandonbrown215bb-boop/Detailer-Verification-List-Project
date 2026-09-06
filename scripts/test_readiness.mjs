@@ -67,6 +67,7 @@ function mockFact(key, label, value, status, confidence) {
 
 function mockChecklist(instanceKey, ruleId, scopeTargetId, applicability, status) {
   return {
+    allowNA: true, // This fixture explicitly models rules that permit N/A.
     ruleId,
     semanticKey: ruleId,
     instanceKey,
@@ -79,6 +80,15 @@ function mockChecklist(instanceKey, ruleId, scopeTargetId, applicability, status
     factTraces: []
   };
 }
+
+runTest('N/A requires explicit permission and active rule policy wins', () => {
+  const item = mockChecklist('unit:test', 'test', 'unit', 'Applicable', 'NA');
+  delete item.allowNA;
+  assert.equal(computeUnitReadiness({}, [item]).isReadyForFinal, false);
+  item.allowNA = true;
+  assert.equal(computeUnitReadiness({}, [item], [{ id: 'test', allowNA: false }]).isReadyForFinal, false);
+  assert.equal(computeUnitReadiness({}, [item], [{ id: 'test', allowNA: true }]).isReadyForFinal, true);
+});
 
 // ===========================================================================
 // Test Suite 1: Baseline Initial State (Fresh XML Ingestion)

@@ -6,6 +6,120 @@ echo ======================================================================
 echo  AHU Detailing Verification System - Full Architecture Setup ^& Test
 echo ======================================================================
 
+REM ------------------------------------------------------------------
+REM Verify or Automatically Install Required Node.js 22.18.x
+REM ------------------------------------------------------------------
+set "REQUIRED_NODE_VERSION=22.18.0"
+set "TOOLS_NODE_DIR=%~dp0.tools\node-v%REQUIRED_NODE_VERSION%-win-x64"
+
+REM Prioritize project-local Node if already installed
+if exist "%TOOLS_NODE_DIR%\node.exe" (
+    set "PATH=%TOOLS_NODE_DIR%;!PATH!"
+)
+
+REM Check whether current Node.js meets >=22.18.0 <23
+set "NEED_NODE_INSTALL=0"
+where node >nul 2>&1
+if errorlevel 1 (
+    set "NEED_NODE_INSTALL=1"
+) else (
+    set "CURRENT_NODE_VER="
+    for /f "tokens=1" %%i in ('node --version 2^>nul') do if not defined CURRENT_NODE_VER set "CURRENT_NODE_VER=%%i"
+    if not defined CURRENT_NODE_VER (
+        set "NEED_NODE_INSTALL=1"
+    ) else (
+        set "CLEAN_NODE_VER=!CURRENT_NODE_VER:v=!"
+        for /f "tokens=1,2 delims=." %%a in ("!CLEAN_NODE_VER!") do (
+            set "CURR_MAJOR=%%a"
+            set "CURR_MINOR=%%b"
+        )
+        if not "!CURR_MAJOR!"=="22" (
+            set "NEED_NODE_INSTALL=1"
+        ) else if !CURR_MINOR! LSS 18 (
+            set "NEED_NODE_INSTALL=1"
+        )
+    )
+)
+
+if "!NEED_NODE_INSTALL!"=="1" (
+    echo.
+    if defined CURRENT_NODE_VER (
+        echo [INFO] Node.js 22.18.x is required ^(found: !CURRENT_NODE_VER!^).
+    ) else (
+        echo [INFO] Node.js 22.18.x is required ^(not found on PATH^).
+    )
+    echo [INFO] Automatically installing Node.js %REQUIRED_NODE_VERSION%...
+    
+    set "NODE_PROVISIONED=0"
+    
+    REM 1. Try nvm if available
+    where nvm >nul 2>&1
+    if not errorlevel 1 (
+        echo [INFO] Attempting install via nvm...
+        call nvm install %REQUIRED_NODE_VERSION% >nul 2>&1
+        call nvm use %REQUIRED_NODE_VERSION% >nul 2>&1
+        for /f "tokens=1" %%i in ('node --version 2^>nul') do (
+            if "%%i"=="v%REQUIRED_NODE_VERSION%" set "NODE_PROVISIONED=1"
+        )
+    )
+    
+    REM 2. Try fnm if available and not yet provisioned
+    if "!NODE_PROVISIONED!"=="0" (
+        where fnm >nul 2>&1
+        if not errorlevel 1 (
+            echo [INFO] Attempting install via fnm...
+            call fnm install %REQUIRED_NODE_VERSION% >nul 2>&1
+            call fnm use %REQUIRED_NODE_VERSION% >nul 2>&1
+            for /f "tokens=1" %%i in ('node --version 2^>nul') do (
+                if "%%i"=="v%REQUIRED_NODE_VERSION%" set "NODE_PROVISIONED=1"
+            )
+        )
+    )
+    
+    REM 3. Standalone official portable distribution (.tools\node-v22.18.0-win-x64)
+    if "!NODE_PROVISIONED!"=="0" (
+        if not exist "%~dp0.tools" mkdir "%~dp0.tools"
+        set "NODE_ZIP=%~dp0.tools\node-v%REQUIRED_NODE_VERSION%-win-x64.zip"
+        set "NODE_URL=https://nodejs.org/dist/v%REQUIRED_NODE_VERSION%/node-v%REQUIRED_NODE_VERSION%-win-x64.zip"
+        
+        echo [INFO] Downloading official Node.js %REQUIRED_NODE_VERSION% package...
+        where curl.exe >nul 2>&1
+        if not errorlevel 1 (
+            curl.exe -L --fail --retry 3 --silent --show-error -o "!NODE_ZIP!" "!NODE_URL!"
+        ) else (
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('!NODE_URL!', '!NODE_ZIP!')"
+        )
+        
+        if not exist "!NODE_ZIP!" (
+            echo [ERROR] Failed to download Node.js package from !NODE_URL!.
+            pause
+            exit /b 1
+        )
+        
+        echo [INFO] Extracting Node.js %REQUIRED_NODE_VERSION% into .tools...
+        where tar.exe >nul 2>&1
+        if not errorlevel 1 (
+            tar.exe -xf "!NODE_ZIP!" -C "%~dp0.tools"
+        ) else (
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '!NODE_ZIP!' -DestinationPath '%~dp0.tools' -Force"
+        )
+        
+        if exist "!NODE_ZIP!" del /f /q "!NODE_ZIP!" >nul 2>&1
+        
+        if not exist "%TOOLS_NODE_DIR%\node.exe" (
+            echo [ERROR] Node.js binary was not found after extraction in "%TOOLS_NODE_DIR%".
+            pause
+            exit /b 1
+        )
+        
+        set "PATH=%TOOLS_NODE_DIR%;!PATH!"
+        set "NODE_PROVISIONED=1"
+    )
+    
+    echo [OK] Node.js %REQUIRED_NODE_VERSION% is now installed and active for this session.
+    echo.
+)
+
 call "%~dp0scripts\init_env.bat"
 if %ERRORLEVEL% NEQ 0 (
     pause
@@ -15,8 +129,8 @@ echo [OK] Environment verified (.NET SDK and Node.js/npm ready).
 
 REM 3. Install NPM Dependencies & Build Frontend
 echo.
-echo [1/4] Installing NPM dependencies and building Vite frontend...
-call npm install --no-audit --no-fund
+echo [1/4] Installing locked NPM dependencies and building Vite frontend...
+call npm ci --no-audit --no-fund
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to install npm dependencies.
     pause
@@ -65,12 +179,12 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 6. Run C# Automated Tests
+REM 6. Run C# Automated Tests and the measured Core coverage gate
 echo.
-echo [4/4] Running xUnit Automated Verification Tests...
-dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj --logger "console;verbosity=normal"
+echo [4/4] Running xUnit Automated Verification Tests and Core coverage gate...
+call npm run test:coverage
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Test suite failed.
+    echo [ERROR] Test suite or Core coverage gate failed.
     pause
     exit /b %ERRORLEVEL%
 )

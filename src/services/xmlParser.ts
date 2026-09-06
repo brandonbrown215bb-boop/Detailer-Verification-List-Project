@@ -19,6 +19,8 @@ import type {
   SegmentSurfaces
 } from '../types/index.ts';
 import { SEGMENT_NAMES } from '../utils/segmentCatalog.ts';
+import { approvedFloorDrainHoleDiameter } from './materialMapping.ts';
+import { DOCUMENT_SCHEMA_VERSION } from './version.ts';
 
 function getElements(parent: Element | Document, tagName: string): Element[] {
   const list = parent.getElementsByTagName(tagName);
@@ -109,6 +111,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   }
 
   const root = xmlDoc.documentElement;
+  const missingFacts = new Set<string>();
   const isAhuDoc = root && (
     root.tagName.toLowerCase() === 'ahu' ||
     root.tagName.toLowerCase() === 'unitrevision' ||
@@ -124,6 +127,8 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const unitMOMID = getChildText(root, 'unit_MOMID', '{00000000-0000-0000-0000-000000000000}');
   const unitWeight = getChildNumber(root, 'unitWeight', 0);
   const totalStaticPressure = getChildNumber(root, 'totalStaticPressure', 0);
+  if (!hasValidNumericChild(root, 'unitWeight')) missingFacts.add('unit.totalWeight');
+  if (!hasValidNumericChild(root, 'totalStaticPressure')) missingFacts.add('unit.totalStaticPressure');
   const cabLength = getChildNumber(root, 'cabLength', 0);
   const cabHeight = getChildNumber(root, 'cabHeight', 0);
   const cabWidth = getChildNumber(root, 'cabWidth', 0);
@@ -134,7 +139,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const schemaVerNode = docVerNode ? getElements(docVerNode, 'schemaVersion')[0] : null;
   const documentVersion = schemaVerNode
     ? `${getChildText(schemaVerNode, 'major', '2018')}.${getChildText(schemaVerNode, 'minor', '9')}.${getChildText(schemaVerNode, 'build', '14')}.${getChildText(schemaVerNode, 'revision', '1003')}`
-    : '2018.9.14.1003';
+    : DOCUMENT_SCHEMA_VERSION;
 
   const genSoftNode = docVerNode ? getElements(docVerNode, 'generatingSoftwareInfo')[0] : null;
   const generatingSoftware = genSoftNode
@@ -146,18 +151,33 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const unitOptNode = unitOptNodes[0];
   const defaultConstNode = unitOptNode ? getElements(unitOptNode, 'defaultConstructionOptions')[0] : null;
 
-  const unitConstructionType = unitOptNode ? getChildText(unitOptNode, 'unitConstructionType', 'Standard') : 'Standard';
-  const isSeismic = unitConstructionType.toUpperCase() === 'IBC' || unitConstructionType.toUpperCase() === 'OSHPD';
-  const noa = unitConstructionType.toUpperCase() === 'NOA';
-  const housingStyle = defaultConstNode ? getChildText(defaultConstNode, 'housingStyle', 'ThermalBreak') : 'ThermalBreak';
+  const unitConstructionType = unitOptNode ? getChildText(unitOptNode, 'unitConstructionType', '') : '';
+  if (!unitOptNode || !getElements(unitOptNode, 'unitType').length) missingFacts.add('unit.unitType');
+  if (!unitOptNode || !unitConstructionType) {
+    missingFacts.add('unit.isSeismic');
+    missingFacts.add('unit.noa');
+  }
+  const normalizedConstruction = unitConstructionType.toUpperCase();
+  const isSeismic = normalizedConstruction === 'IBC' || normalizedConstruction === 'OSHPD';
+  const noa = normalizedConstruction === 'NOA';
+  if (!['IBC', 'OSHPD', 'NOA', 'STANDARD', 'CAD'].includes(normalizedConstruction)) {
+    missingFacts.add('unit.isSeismic');
+    missingFacts.add('unit.noa');
+  }
+  const housingStyle = defaultConstNode ? getChildText(defaultConstNode, 'housingStyle', '') : '';
   const rawStyle = housingStyle;
-  const thermalBreak = rawStyle.toLowerCase().includes('thermalbreak') || !rawStyle.toLowerCase().includes('standard');
+  const normalizedHousingStyle = rawStyle.toLowerCase().replace(/[ _-]+/g, '');
+  const thermalBreak = normalizedHousingStyle.includes('thermalbreak') || normalizedHousingStyle !== 'standard';
+  if (!defaultConstNode || !housingStyle || (!normalizedHousingStyle.includes('thermalbreak') && normalizedHousingStyle !== 'standard')) missingFacts.add('unit.thermalBreak');
+  if (!defaultConstNode || !housingStyle || (!normalizedHousingStyle.includes('thermalbreak') && normalizedHousingStyle !== 'standard')) missingFacts.add('unit.shellType');
 
-  const floorMaterialGaugeRaw = defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialGauge', '16') : '16';
-  const floorMaterialGaugeInt = parseInt(floorMaterialGaugeRaw, 10) || 16;
+  const floorMaterialGaugeRaw = defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialGauge', '') : '';
+  const parsedFloorGauge = parseInt(floorMaterialGaugeRaw, 10);
+  const floorMaterialGaugeInt = Number.isFinite(parsedFloorGauge) ? parsedFloorGauge : 0;
+  if (!defaultConstNode || !floorMaterialGaugeRaw || !Number.isFinite(parsedFloorGauge)) missingFacts.add('casing.floorGauge');
 
   const unitOptions = {
-    unitType: unitOptNode ? getChildText(unitOptNode, 'unitType', 'Outdoor') : 'Outdoor',
+    unitType: unitOptNode ? getChildText(unitOptNode, 'unitType', '') : '',
     brandOption: unitOptNode ? getChildText(unitOptNode, 'brandOption', 'YORKCustom') : 'YORKCustom',
     unitConstructionType,
     shippingProtection: unitOptNode ? getChildText(unitOptNode, 'shippingProtection', 'ShrinkWrap') : 'ShrinkWrap',
@@ -170,17 +190,17 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     noaRating: noa ? 'NOA' : 'N/A',
     thermalBreak,
     primaryAccessSide: unitOptNode ? getChildText(unitOptNode, 'primaryAccessSide', 'Left') : 'Left',
-    defaultUnitBaseHeight: unitOptNode ? getChildNumber(unitOptNode, 'defaultUnitBaseHeight', 10) : 10,
+    defaultUnitBaseHeight: unitOptNode ? getChildNumber(unitOptNode, 'defaultUnitBaseHeight', 0) : 0,
     materials: {
-      exteriorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'exteriorMaterialType', 'STL GALV PPC') : 'STL GALV PPC',
-      exteriorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'exteriorMaterialGauge', 18)) : 18,
-      interiorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'interiorMaterialType', 'STL GALV') : 'STL GALV',
-      interiorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'interiorMaterialGauge', 22)) : 22,
-      floorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialType', 'STL GALV') : 'STL GALV',
+      exteriorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'exteriorMaterialType', '') : '',
+      exteriorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'exteriorMaterialGauge', 0)) : 0,
+      interiorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'interiorMaterialType', '') : '',
+      interiorMaterialGauge: defaultConstNode ? Math.round(getChildNumber(defaultConstNode, 'interiorMaterialGauge', 0)) : 0,
+      floorMaterialType: defaultConstNode ? getChildText(defaultConstNode, 'floorMaterialType', '') : '',
       floorMaterialGauge: floorMaterialGaugeInt,
       floorMaterialGaugeString: floorMaterialGaugeRaw,
       housingStyle,
-      insulationType: defaultConstNode ? getChildText(defaultConstNode, 'insulationType', 'Foam') : 'Foam',
+      insulationType: defaultConstNode ? getChildText(defaultConstNode, 'insulationType', '') : '',
       exteriorPaintType: defaultConstNode ? getChildText(defaultConstNode, 'exteriorPaintType', 'None') : 'None',
       interiorPaintType: defaultConstNode ? getChildText(defaultConstNode, 'interiorPaintType', 'None') : 'None',
       floorPaintType: defaultConstNode ? getChildText(defaultConstNode, 'floorPaintType', 'None') : 'None',
@@ -188,6 +208,20 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
       housingThicknessTop: defaultConstNode ? getChildNumber(defaultConstNode, 'housingThicknessTop', 2.0) : 2.0
     }
   };
+  const constructionFields: Array<[string, string]> = [
+    ['casing.exteriorMaterial', 'exteriorMaterialType'],
+    ['casing.exteriorGauge', 'exteriorMaterialGauge'],
+    ['casing.interiorMaterial', 'interiorMaterialType'],
+    ['casing.interiorGauge', 'interiorMaterialGauge'],
+    ['casing.floorMaterial', 'floorMaterialType'],
+    ['casing.insulationType', 'insulationType'],
+    ['casing.thicknessFront', 'housingThicknessFront'],
+    ['casing.thicknessTop', 'housingThicknessTop']
+  ];
+  for (const [factKey, xmlKey] of constructionFields) if (!defaultConstNode || !getElements(defaultConstNode, xmlKey).length) missingFacts.add(factKey);
+  if (!unitOptNode || !getElements(unitOptNode, 'unitType').length) missingFacts.add('unit.unitType');
+  if (!unitOptNode || !getElements(unitOptNode, 'knockdown').length) missingFacts.add('unit.knockdown');
+  if (!unitOptNode || !hasValidNumericChild(unitOptNode, 'defaultUnitBaseHeight')) missingFacts.add('unit.baseHeight');
 
   // Roof Options
   const roofNodes = getElements(root, 'roofOptions');
@@ -207,6 +241,12 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     roofPeak,
     roofPeakZDim: roofNode ? getChildNumber(roofNode, 'roofPeakZDim', 97) : 97
   };
+  if (!roofNode) {
+    missingFacts.add('roof.hasSlopedRoof');
+    missingFacts.add('roof.roofSlope');
+    missingFacts.add('roof.roofPeak');
+    missingFacts.add('roof.roofPeakZDim');
+  }
 
   // Curb Options
   const curbNodes = getElements(root, 'curbOptions');
@@ -214,6 +254,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   const curbOptions = {
     hasCurbRest: curbNode ? getChildBool(curbNode, 'hasCurbRest', true) : true
   };
+  if (!curbNode || !getElements(curbNode, 'hasCurbRest').length) missingFacts.add('unit.curbrest');
 
   // Testing Options
   const testNodes = getElements(root, 'testingOptions');
@@ -224,6 +265,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     fanVibrationTest: testNode ? getChildText(testNode, 'fanVibrationTest', 'None') : 'None',
     requireCustomerWitness: testNode ? getChildBool(testNode, 'requireCustomerWitness', false) : false
   };
+  if (!testNode || !getChildText(testNode, 'deflectionTest', '')) missingFacts.add('unit.deflectionTest');
 
   // Unit Bases
   const baseNodes = getElements(root, 'unitBase');
@@ -261,6 +303,10 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   }
   unitOptions.lipHeight = maxLipHeight;
   unitOptions.hasUTL = maxLipHeight > 0;
+  if (!getElements(root, 'unitBaseList').length || bases.length === 0) {
+    missingFacts.add('unit.lipHeight');
+    missingFacts.add('unit.hasUTL');
+  }
 
   // Segments
   const segListNodes = getElements(root, 'segmentList');
@@ -497,8 +543,8 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
   if (openingListNode) {
     const openingEls = Array.from(openingListNode.children);
     let opIdx = 1;
-    const isFloorAl = unitOptions.materials.floorMaterialType.toUpperCase().includes('AL');
-    const defaultHoleDia = isFloorAl ? 3.125 : 1.50;
+    const defaultHoleDia = approvedFloorDrainHoleDiameter(unitOptions.materials.floorMaterialType) ?? 0;
+    if (defaultHoleDia === 0) missingFacts.add('casing.floorMaterial');
 
     for (const opEl of openingEls) {
       const opType = getChildText(opEl, 'openingType', 'Standard');
@@ -564,12 +610,19 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
           geometry: opGeom
         };
         floorDrains.push(fd);
+        if (defaultHoleDia === 0) missingFacts.add(`floorDrain.${fd.id}.holeDiameter`);
         const hostSeg = segNodeMap.get(segId);
         if (hostSeg) hostSeg.floorDrains = hostSeg.floorDrains ? [...hostSeg.floorDrains, fd] : [fd];
       }
 
       opIdx++;
     }
+  } else {
+    missingFacts.add('opening.totalCount');
+    missingFacts.add('door.totalCount');
+    missingFacts.add('damper.totalCount');
+    missingFacts.add('floorDrain.totalCount');
+    missingFacts.add('unit.hasFloorDrains');
   }
 
   // Unit-level structural flags
@@ -654,6 +707,7 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     totalStaticPressure,
     isTiered,
     isStacked,
+    isStackedTopUnit: false,
     hasFloorDrains,
     dimensions: {
       length: cabLength,
@@ -670,8 +724,18 @@ export function parseAhuXml(xmlContent: string): NormalizedXmlGraph {
     motorControls,
     doors,
     dampers,
-    floorDrains
-  };
+    floorDrains,
+    ...(missingFacts.size ? { missingFacts: Array.from(missingFacts).sort((a, b) => a.localeCompare(b)) } : {}),
+    ...(missingFacts.size
+      ? { sourceFieldStates: Object.fromEntries(Array.from(missingFacts).sort((a, b) => a.localeCompare(b)).map(key => [key, 'absent'])) }
+      : {})
+  } as NormalizedXmlGraph;
+}
+
+function hasValidNumericChild(node: Element | undefined | null, tagName: string): boolean {
+  if (!node) return false;
+  const value = getElements(node, tagName)[0]?.textContent?.trim();
+  return value !== undefined && value !== '' && Number.isFinite(Number(value));
 }
 
 export function parseOrderRevXml(xmlContent: string): OrderRevisionData {

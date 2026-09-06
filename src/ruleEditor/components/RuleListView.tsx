@@ -47,10 +47,7 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
     'Knockdown',
     'UTL',
     'Paperwork',
-    'MOM',
-    'Drain Pan',
-    'Coil Panels',
-    'Reconnects'
+    'MOM'
   ];
 
   const isCatMatch = (ruleCat: string, targetCat: string) => {
@@ -142,8 +139,6 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
             <option value="All">All Scopes</option>
             <option value="Unit">Unit Scope</option>
             <option value="Skid">Skid Scope</option>
-            <option value="Segment">Segment Scope</option>
-            <option value="Component">Component Scope</option>
           </select>
 
           {/* Status Filter */}

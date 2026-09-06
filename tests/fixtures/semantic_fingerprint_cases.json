@@ -1,0 +1,42 @@
+[
+  {
+    "rule": {
+      "id": "FIXTURE",
+      "semanticKey": "fixture.semantic",
+      "scope": "Unit",
+      "category": "Housing",
+      "order": 1,
+      "text": "Fixture instructions",
+      "requiredFacts": ["unit.knockdown", "casing.floorMaterial"],
+      "predicate": {
+        "and": [
+          { "===": [{ "var": "unit.knockdown" }, true] },
+          { "in": [{ "var": "casing.floorMaterial" }, ["AL", "ALUMINUM"]] }
+        ]
+      },
+      "allowNA": true,
+      "verificationMode": "AutoEvaluated"
+    },
+    "expected": "{\"allowNA\":true,\"instructions\":\"Fixture instructions\",\"predicate\":{\"and\":[{\"===\":[{\"var\":\"unit.knockdown\"},true]},{\"in\":[{\"var\":\"casing.floorMaterial\"},[\"AL\",\"ALUMINUM\"]]}]},\"requiredFacts\":[\"casing.floorMaterial\",\"unit.knockdown\"],\"scope\":\"Unit\",\"verificationMode\":\"AutoEvaluated\"}"
+  },
+  {
+    "rule": {
+      "id": "FIXTURE_ALIAS",
+      "semanticKey": "fixture.semantic.alias",
+      "scope": "Unit",
+      "category": "Housing",
+      "order": 2,
+      "text": "Fixture instructions",
+      "requiredFacts": ["unit.knockdown", "unit.floorMaterial"],
+      "predicate": {
+        "and": [
+          { "===": [{ "var": "unit.knockdown" }, true] },
+          { "in": [{ "var": "unit.floorMaterial" }, ["AL", "ALUMINUM"]] }
+        ]
+      },
+      "allowNA": true,
+      "verificationMode": "AutoEvaluated"
+    },
+    "expected": "{\"allowNA\":true,\"instructions\":\"Fixture instructions\",\"predicate\":{\"and\":[{\"===\":[{\"var\":\"unit.knockdown\"},true]},{\"in\":[{\"var\":\"casing.floorMaterial\"},[\"AL\",\"ALUMINUM\"]]}]},\"requiredFacts\":[\"casing.floorMaterial\",\"unit.knockdown\"],\"scope\":\"Unit\",\"verificationMode\":\"AutoEvaluated\"}"
+  }
+]

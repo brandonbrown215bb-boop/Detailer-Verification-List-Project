@@ -18,4 +18,5 @@ Historical aliases: early planning material may call ADR 0002 “rules-engine se
 - [0008 - Standalone Rule & Logic Editor Desktop Studio and Visual AST Authoring](0008-rule-editor-desktop-studio-and-visual-ast-authoring.md)
 - [0009 - UPZ Baseline Fact Extraction and Rule Predicate Expansion](0009-upz-baseline-fact-extraction-and-predicate-expansion.md)
 - [0010 - Release Pipeline, Velopack 1-Click Installer, and Autonomous SharePoint Rule Pack Sync](0010-release-pipeline-velopack-installer-and-sharepoint-rulepack-sync.md)
+- [0011 - Certified Processing Authority and Noncertifying Drafts](0011-certified-processing-authority.md)
 

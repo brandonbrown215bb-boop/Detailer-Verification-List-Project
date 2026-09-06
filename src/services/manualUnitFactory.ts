@@ -1,4 +1,4 @@
-import type { NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance, ShippingSkid, UnitBase, Segment } from '../types/index.ts';
+import type { NormalizedXmlGraph, Fact, SpecialQuote, ChecklistInstance, ShippingSkid, UnitBase, Segment, RuleDefinition } from '../types/index.ts';
 import { extractFactsFromGraph, overrideFact } from './factRegistry.ts';
 import { RULES_CATALOG } from './rulesCatalog.ts';
 import { generateChecklists } from './ruleEvaluator.ts';
@@ -464,7 +464,7 @@ export const MANUAL_UNIT_PRESETS: ManualUnitPreset[] = [
   }
 ];
 
-export function createManualUnit(config: ManualUnitConfig): {
+export function createManualUnit(config: ManualUnitConfig, activeRules: RuleDefinition[] = RULES_CATALOG): {
   graph: NormalizedXmlGraph;
   facts: Record<string, Fact>;
   checklists: ChecklistInstance[];
@@ -746,18 +746,18 @@ export function createManualUnit(config: ManualUnitConfig): {
   facts = overrideFact(facts, 'unit.detailer', config.detailerName || 'Detailer', config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.unitType', config.unitType || 'Outdoor', config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.shellType', 'ISG', config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.wallThickness', defaultWallThickness, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.thicknessFront', defaultWallThickness, config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.baseHeight', defaultBaseHeight, config.detailerName, 'Manual Project Creation');
   facts = overrideFact(facts, 'unit.totalStaticPressure', totalStaticPressure, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.skinMaterial', casingMaterials.exteriorMaterialType, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.skinGauge', casingMaterials.exteriorMaterialGauge, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.linerMaterial', casingMaterials.interiorMaterialType, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.linerGauge', casingMaterials.interiorMaterialGauge, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.floorMaterial', casingMaterials.floorMaterialType, config.detailerName, 'Manual Project Creation');
-  facts = overrideFact(facts, 'unit.floorGauge', casingMaterials.floorMaterialGauge, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.exteriorMaterial', casingMaterials.exteriorMaterialType, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.exteriorGauge', casingMaterials.exteriorMaterialGauge, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.interiorMaterial', casingMaterials.interiorMaterialType, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.interiorGauge', casingMaterials.interiorMaterialGauge, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.floorMaterial', casingMaterials.floorMaterialType, config.detailerName, 'Manual Project Creation');
+  facts = overrideFact(facts, 'casing.floorGauge', casingMaterials.floorMaterialGauge, config.detailerName, 'Manual Project Creation');
 
   // 4. Generate Rule Checklists
-  const checklists = generateChecklists(RULES_CATALOG, graph, facts);
+  const checklists = generateChecklists(activeRules, graph, facts);
 
   // 5. Synthesize XML Representation for .dvl persistence
   const segmentsXml = segments.map(s => `      <segment_${s.typeCode}>

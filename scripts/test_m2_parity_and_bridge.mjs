@@ -77,6 +77,7 @@ if (typeof globalThis.DOMParser === 'undefined') {
 
 const { parseAhuXml } = await import('../src/services/xmlParser.ts');
 const { isDesktopHost, desktopBridge, BrowserPreviewBridge } = await import('../src/services/desktopBridge.ts');
+const { APPLICATION_VERSION } = await import('../src/services/version.ts');
 
 console.log('======================================================================');
 console.log(' Milestone 2 - Dual-Engine XML Parser Parity & Bridge Test Suite');
@@ -171,6 +172,7 @@ console.log('  ✓ 2.2 BrowserPreviewBridge safely guards native desktop-only ac
 const appInfo = await desktopBridge.getAppInfo();
 assert.strictEqual(appInfo.isDesktopHost, false, 'getAppInfo() in preview returns isDesktopHost: false');
 assert(appInfo.appVersion.includes('Browser Preview'), 'appVersion clearly notes Browser Preview');
+assert(appInfo.appVersion.startsWith(`${APPLICATION_VERSION} `), 'browser preview diagnostics use the authoritative application version');
 console.log('  ✓ 2.3 getAppInfo delivers browser preview metadata');
 
 // ---------------------------------------------------------------------------

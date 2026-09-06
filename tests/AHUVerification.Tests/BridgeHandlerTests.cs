@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using AHUVerification.App.Bridge;
 using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
+using AHUVerification.Core.Services;
+using AHUVerification.Core.Utils;
 using AHUVerification.RuleEditor.Bridge;
 using Xunit;
 
@@ -19,7 +22,8 @@ namespace AHUVerification.Tests
             _rulePackPath = TestPathHelper.GetRepoPath(Path.Combine("resources", "rulepack"));
         }
 
-        private BridgeHandler CreateAppHandler() => new(_rulePackPath);
+        private BridgeHandler CreateAppHandler(Func<string?>? exportPathSelector = null, Action<ProcessStartInfo>? processLauncher = null) =>
+            new(null, _rulePackPath, exportPathSelector, processLauncher);
         private RuleEditorBridgeHandler CreateRuleEditorHandler() => new(_rulePackPath);
 
         // =========================================================================
@@ -127,6 +131,7 @@ namespace AHUVerification.Tests
             string json = JsonSerializer.Serialize(response.Data);
             Assert.Contains("AHU Detailing Verification", json);
             Assert.Contains("isDesktopHost\":true", json);
+            Assert.Contains($"\"appVersion\":\"{ApplicationVersion.Current}\"", json);
         }
 
         [Fact]
@@ -151,10 +156,26 @@ namespace AHUVerification.Tests
         {
             var handler = CreateAppHandler();
             string tempDvl = Path.Combine(Path.GetTempPath(), $"test_project_{Guid.NewGuid():N}.dvl");
+            string tempDvlBad = Path.Combine(Path.GetTempPath(), $"test_project_bad_{Guid.NewGuid():N}.dvl");
 
             try
             {
-                string projectJson = "{\"version\":\"1.0.0\",\"jobName\":\"TestHospital\",\"comNumber\":\"COM-999\",\"units\":[]}";
+                var bundle = new RulePackManager().LoadFromDirectory(_rulePackPath);
+                var projectManager = new DvlProjectManager();
+                var project = projectManager.CreateProject(
+                    new NormalizedXmlGraph(),
+                    new Dictionary<string, Fact>
+                    {
+                        ["unit.jobName"] = new Fact { Key = "unit.jobName", Value = "TestHospital" },
+                        ["unit.comNumber"] = new Fact { Key = "unit.comNumber", Value = "COM-999" }
+                    },
+                    new List<SpecialQuote>(),
+                    new List<ChecklistInstance>(),
+                    "<Config />",
+                    bundle,
+                    generalComments: "Bridge Save Test");
+
+                string projectJson = JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions());
                 string requestJson = JsonSerializer.Serialize(new
                 {
                     id = "req-save-dvl",
@@ -169,24 +190,59 @@ namespace AHUVerification.Tests
                 var response = handler.Handle(requestJson);
 
                 Assert.Equal("req-save-dvl", response.Id);
-                Assert.True(response.Success);
+                Assert.True(response.Success, response.Error);
                 Assert.True(File.Exists(tempDvl));
 
                 string savedContent = File.ReadAllText(tempDvl);
                 Assert.Contains("TestHospital", savedContent);
                 Assert.Contains("COM-999", savedContent);
+
+                // Malformed payload fails without a partial write
+                string malformedRequest = JsonSerializer.Serialize(new
+                {
+                    id = "req-save-dvl-bad",
+                    action = "saveDvl",
+                    payload = new
+                    {
+                        filePath = tempDvlBad,
+                        projectJson = "{\"invalid\": \"payload\"}"
+                    }
+                });
+                var badResponse = handler.Handle(malformedRequest);
+                Assert.Equal("req-save-dvl-bad", badResponse.Id);
+                Assert.False(badResponse.Success);
+                Assert.False(File.Exists(tempDvlBad));
             }
             finally
             {
                 if (File.Exists(tempDvl)) File.Delete(tempDvl);
+                if (File.Exists(tempDvlBad)) File.Delete(tempDvlBad);
             }
+        }
+        [Fact]
+        public void Handle_VerifySource_ValidXml_ReturnsVerifiedModel()
+        {
+            var handler = CreateAppHandler();
+            string requestJson = JsonSerializer.Serialize(new
+            {
+                id = "req-verify-source",
+                action = "verifySource",
+                payload = new
+                {
+                    configXml = "<?xml version=\"1.0\"?><root></root>"
+                }
+            });
+            var response = handler.Handle(requestJson);
+            Assert.Equal("req-verify-source", response.Id);
+            Assert.True(response.Success, response.Error);
+            Assert.NotNull(response.Data);
         }
 
         [Fact]
         public void Handle_ExportExcelDeliverable_WithOutputPath_ExportsWorkbook()
         {
-            var handler = CreateAppHandler();
             string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_export_{Guid.NewGuid():N}.xlsx");
+            var handler = CreateAppHandler(() => tempXlsx);
 
             try
             {
@@ -196,6 +252,8 @@ namespace AHUVerification.Tests
                     ["orderNumber"] = new Fact { Key = "orderNumber", Value = "ORD-777123", Category = "General", Status = FactStatus.Known }
                 };
 
+                // Demonstrating that renderer-supplied outputPath is untrusted and ignored;
+                // destination is governed strictly by the native host selector boundary.
                 string requestJson = JsonSerializer.Serialize(new
                 {
                     id = "req-export-excel",
@@ -205,7 +263,7 @@ namespace AHUVerification.Tests
                         facts = facts,
                         sqItems = new List<SpecialQuote>(),
                         checklists = new List<ChecklistInstance>(),
-                        outputPath = tempXlsx,
+                        outputPath = "untrusted_renderer_path_ignored.xlsx",
                         isDraft = true,
                         generalComments = "Bridge automated test export"
                     }
@@ -215,8 +273,114 @@ namespace AHUVerification.Tests
 
                 Assert.Equal("req-export-excel", response.Id);
                 Assert.True(response.Success);
+                Assert.NotNull(response.Data);
+
+                string json = JsonSerializer.Serialize(response.Data);
+                Assert.Contains("\"exported\":true", json);
+                Assert.Contains("\"certificationAllowed\":false", json);
                 Assert.True(File.Exists(tempXlsx));
                 Assert.True(new FileInfo(tempXlsx).Length > 0);
+            }
+            finally
+            {
+                if (File.Exists(tempXlsx)) File.Delete(tempXlsx);
+            }
+        }
+
+        [Fact]
+        public void Handle_ExportExcelDeliverable_WithoutNativeSelector_CancelsAndDoesNotWriteRendererPath()
+        {
+            var handler = CreateAppHandler(); // No selector, no parent form
+            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_untrusted_{Guid.NewGuid():N}.xlsx");
+
+            try
+            {
+                var facts = new Dictionary<string, Fact>
+                {
+                    ["jobName"] = new Fact { Key = "jobName", Value = "Bridge Test Facility", Category = "General", Status = FactStatus.Known }
+                };
+
+                string requestJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-export-cancel",
+                    action = "exportExcelDeliverable",
+                    payload = new
+                    {
+                        facts = facts,
+                        sqItems = new List<SpecialQuote>(),
+                        checklists = new List<ChecklistInstance>(),
+                        outputPath = tempXlsx,
+                        isDraft = true
+                    }
+                });
+
+                var response = handler.Handle(requestJson);
+
+                Assert.Equal("req-export-cancel", response.Id);
+                Assert.True(response.Success);
+                Assert.NotNull(response.Data);
+
+                string json = JsonSerializer.Serialize(response.Data);
+                Assert.Contains("\"cancelled\":true", json);
+                Assert.False(File.Exists(tempXlsx));
+            }
+            finally
+            {
+                if (File.Exists(tempXlsx)) File.Delete(tempXlsx);
+            }
+        }
+
+        [Fact]
+        public void Handle_ExportExcelDeliverable_InvalidPathFromSelector_ReturnsFailure()
+        {
+            var handler = CreateAppHandler(() => "not_rooted_path.xlsx");
+            string requestJson = JsonSerializer.Serialize(new
+            {
+                id = "req-export-invalid",
+                action = "exportExcelDeliverable",
+                payload = new
+                {
+                    facts = new Dictionary<string, Fact>(),
+                    sqItems = new List<SpecialQuote>(),
+                    checklists = new List<ChecklistInstance>(),
+                    isDraft = true
+                }
+            });
+
+            var response = handler.Handle(requestJson);
+
+            Assert.Equal("req-export-invalid", response.Id);
+            Assert.False(response.Success);
+            Assert.Contains("Target path must be an absolute path ending in .xlsx", response.Error);
+        }
+
+        [Fact]
+        public void Handle_ExportExcelDeliverable_FinalExportWithoutTrustedSource_FailsClosed()
+        {
+            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_final_{Guid.NewGuid():N}.xlsx");
+            var handler = CreateAppHandler(() => tempXlsx);
+
+            try
+            {
+                string requestJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-export-final-nobound",
+                    action = "exportExcelDeliverable",
+                    payload = new
+                    {
+                        facts = new Dictionary<string, Fact>(),
+                        sqItems = new List<SpecialQuote>(),
+                        checklists = new List<ChecklistInstance>(),
+                        isDraft = false
+                    }
+                });
+
+                var response = handler.Handle(requestJson);
+
+                Assert.Equal("req-export-final-nobound", response.Id);
+                Assert.False(response.Success);
+                Assert.Contains("Final export requires the trusted raw Config.xml source", response.Error);
+                Assert.False(File.Exists(tempXlsx));
             }
             finally
             {
@@ -561,10 +725,11 @@ namespace AHUVerification.Tests
                         Id = "TEST-RULE-001",
                         SemanticKey = "testRule",
                         Scope = RuleScope.Unit,
-                        Category = "Testing",
+                        Category = "Base",
                         Order = 1,
                         Text = "Automated test rule",
-                        VerificationMode = "Automated"
+                        VerificationMode = "ManualCheckbox",
+                        RequiredFacts = new List<string>()
                     }
                 };
 
@@ -573,7 +738,21 @@ namespace AHUVerification.Tests
                     TemplateVersion = "14.1.0",
                     GeneralFields = new Dictionary<string, CellCoordinate>
                     {
-                        ["jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                        ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                    },
+                    SqRange = new SqRangeMapping { Sheet = "Verification List", StartRow = 50, EndRow = 71 },
+                    RuleCellMappings = new Dictionary<string, RuleCellMapping>
+                    {
+                        ["testRule"] = new RuleCellMapping
+                        {
+                            RuleId = "TEST-RULE-001",
+                            Row = 15,
+                            NaCell = "C15",
+                            DetailerCell = "D15",
+                            CheckerCell = "E15",
+                            CommentsCell = "F15",
+                            InitialsCell = "G15"
+                        }
                     }
                 };
 
@@ -592,10 +771,23 @@ namespace AHUVerification.Tests
                 var response = handler.Handle(requestJson);
 
                 Assert.Equal("req-re-publish-ok", response.Id);
-                Assert.True(response.Success);
+                Assert.True(response.Success, response.Error);
                 Assert.True(File.Exists(Path.Combine(tempPublishDir, "manifest.json")));
                 Assert.True(File.Exists(Path.Combine(tempPublishDir, "rules.json")));
                 Assert.True(File.Exists(Path.Combine(tempPublishDir, "template_map.json")));
+
+                // Verify publish -> reload behavior in RuleEditorBridgeHandler
+                var getPackRes = handler.Handle("{\"id\":\"req-re-reloaded\",\"action\":\"getRulePack\"}");
+                Assert.True(getPackRes.Success);
+                string packJson = JsonSerializer.Serialize(getPackRes.Data);
+                Assert.Contains("\"version\":\"14.1.0\"", packJson);
+                Assert.Contains("\"id\":\"TEST-RULE-001\"", packJson);
+
+                var appInfoRes = handler.Handle("{\"id\":\"req-re-info\",\"action\":\"getAppInfo\"}");
+                Assert.True(appInfoRes.Success);
+                string appInfoJson = JsonSerializer.Serialize(appInfoRes.Data);
+                Assert.Contains("\"rulePackVersion\":\"14.1.0\"", appInfoJson);
+                Assert.Contains("\"ruleCount\":1", appInfoJson);
             }
             finally
             {
@@ -603,6 +795,271 @@ namespace AHUVerification.Tests
                 {
                     try { Directory.Delete(tempPublishDir, true); } catch { }
                 }
+            }
+        }
+
+        [Fact]
+        public void RuleEditor_PublishRulePack_UnsupportedVerificationMode_FailsValidation()
+        {
+            string tempPublishDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_publish_invalid_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempPublishDir);
+
+            try
+            {
+                var handler = new RuleEditorBridgeHandler(tempPublishDir);
+                var rules = new List<RuleDefinition>
+                {
+                    new()
+                    {
+                        Id = "TEST-RULE-INVALID",
+                        SemanticKey = "testRuleInvalid",
+                        Scope = RuleScope.Unit,
+                        Category = "Base",
+                        Order = 1,
+                        Text = "Unsupported mode rule",
+                        VerificationMode = "AutoEvaluated",
+                        RequiredFacts = new List<string>()
+                    }
+                };
+
+                var templateMap = new TemplateMap
+                {
+                    TemplateVersion = "14.1.0",
+                    GeneralFields = new Dictionary<string, CellCoordinate>
+                    {
+                        ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                    },
+                    SqRange = new SqRangeMapping { Sheet = "Verification List", StartRow = 50, EndRow = 71 },
+                    RuleCellMappings = new Dictionary<string, RuleCellMapping>
+                    {
+                        ["testRuleInvalid"] = new RuleCellMapping
+                        {
+                            RuleId = "TEST-RULE-INVALID",
+                            Row = 15,
+                            NaCell = "C15",
+                            DetailerCell = "D15",
+                            CheckerCell = "E15",
+                            CommentsCell = "F15",
+                            InitialsCell = "G15"
+                        }
+                    }
+                };
+
+                string requestJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-re-publish-invalid",
+                    action = "publishRulePack",
+                    payload = new
+                    {
+                        version = "14.1.0",
+                        rules = rules,
+                        templateMap = templateMap
+                    }
+                });
+
+                var response = handler.Handle(requestJson);
+
+                Assert.Equal("req-re-publish-invalid", response.Id);
+                Assert.False(response.Success);
+                Assert.Contains("has unsupported verificationMode 'AutoEvaluated'", response.Error);
+                Assert.False(File.Exists(Path.Combine(tempPublishDir, "manifest.json")));
+            }
+            finally
+            {
+                if (Directory.Exists(tempPublishDir))
+                {
+                    try { Directory.Delete(tempPublishDir, true); } catch { }
+                }
+            }
+        }
+
+        [Fact]
+        public void RuleEditor_PublishRulePack_WithTargetPath_PublishesBothLocations()
+        {
+            string tempActiveDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_active_{Guid.NewGuid():N}");
+            string tempTargetDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_target_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempActiveDir);
+            Directory.CreateDirectory(tempTargetDir);
+
+            try
+            {
+                var handler = new RuleEditorBridgeHandler(tempActiveDir);
+                var rules = new List<RuleDefinition>
+                {
+                    new()
+                    {
+                        Id = "TEST-DUAL-001",
+                        SemanticKey = "testDual",
+                        Scope = RuleScope.Unit,
+                        Category = "Base",
+                        Order = 1,
+                        Text = "Dual publish rule",
+                        VerificationMode = "ManualCheckbox",
+                        RequiredFacts = new List<string>()
+                    }
+                };
+
+                var templateMap = new TemplateMap
+                {
+                    TemplateVersion = "14.1.0",
+                    GeneralFields = new Dictionary<string, CellCoordinate>
+                    {
+                        ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                    },
+                    SqRange = new SqRangeMapping { Sheet = "Verification List", StartRow = 50, EndRow = 71 },
+                    RuleCellMappings = new Dictionary<string, RuleCellMapping>
+                    {
+                        ["testDual"] = new RuleCellMapping
+                        {
+                            RuleId = "TEST-DUAL-001",
+                            Row = 15,
+                            NaCell = "C15",
+                            DetailerCell = "D15",
+                            CheckerCell = "E15",
+                            CommentsCell = "F15",
+                            InitialsCell = "G15"
+                        }
+                    }
+                };
+
+                string requestJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-re-publish-dual",
+                    action = "publishRulePack",
+                    payload = new
+                    {
+                        version = "14.1.0",
+                        rules = rules,
+                        templateMap = templateMap,
+                        targetPath = tempTargetDir
+                    }
+                });
+
+                var response = handler.Handle(requestJson);
+
+                Assert.Equal("req-re-publish-dual", response.Id);
+                Assert.True(response.Success, response.Error);
+
+                var manager = new RulePackManager();
+                var activeBundle = manager.LoadFromDirectory(tempActiveDir);
+                Assert.True(activeBundle.IsValid);
+                Assert.Equal("14.1.0", activeBundle.Manifest.Version);
+
+                var targetBundle = manager.LoadFromDirectory(tempTargetDir);
+                Assert.True(targetBundle.IsValid);
+                Assert.Equal("14.1.0", targetBundle.Manifest.Version);
+                Assert.Equal(activeBundle.Manifest.BundleSha256, targetBundle.Manifest.BundleSha256);
+            }
+            finally
+            {
+                if (Directory.Exists(tempActiveDir)) try { Directory.Delete(tempActiveDir, true); } catch { }
+                if (Directory.Exists(tempTargetDir)) try { Directory.Delete(tempTargetDir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void RuleEditor_PublishRulePack_RollbackOnTargetFailure_PreservesActivePack()
+        {
+            string tempActiveDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_rollback_{Guid.NewGuid():N}");
+            string conflictFile = Path.GetTempFileName();
+            Directory.CreateDirectory(tempActiveDir);
+
+            try
+            {
+                var handler = new RuleEditorBridgeHandler(tempActiveDir);
+                var initialRules = new List<RuleDefinition>
+                {
+                    new()
+                    {
+                        Id = "TEST-INIT-001",
+                        SemanticKey = "testInit",
+                        Scope = RuleScope.Unit,
+                        Category = "Base",
+                        Order = 1,
+                        Text = "Initial rule",
+                        VerificationMode = "ManualCheckbox",
+                        RequiredFacts = new List<string>()
+                    }
+                };
+
+                var initialMap = new TemplateMap
+                {
+                    TemplateVersion = "14.0.0",
+                    GeneralFields = new Dictionary<string, CellCoordinate>
+                    {
+                        ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                    },
+                    SqRange = new SqRangeMapping { Sheet = "Verification List", StartRow = 50, EndRow = 71 },
+                    RuleCellMappings = new Dictionary<string, RuleCellMapping>
+                    {
+                        ["testInit"] = new RuleCellMapping
+                        {
+                            RuleId = "TEST-INIT-001",
+                            Row = 15,
+                            NaCell = "C15",
+                            DetailerCell = "D15",
+                            CheckerCell = "E15",
+                            CommentsCell = "F15",
+                            InitialsCell = "G15"
+                        }
+                    }
+                };
+
+                // Step 1: Initial publish succeeds
+                var initRes = handler.Handle(JsonSerializer.Serialize(new
+                {
+                    id = "req-re-init",
+                    action = "publishRulePack",
+                    payload = new { version = "14.0.0", rules = initialRules, templateMap = initialMap }
+                }));
+                Assert.True(initRes.Success, initRes.Error);
+
+                // Step 2: Attempting publish with targetPath pointing to a file (not dir) fails during promotion
+                var failRes = handler.Handle(JsonSerializer.Serialize(new
+                {
+                    id = "req-re-fail-target",
+                    action = "publishRulePack",
+                    payload = new
+                    {
+                        version = "14.1.0",
+                        rules = initialRules,
+                        templateMap = initialMap,
+                        targetPath = conflictFile
+                    }
+                }));
+
+                Assert.Equal("req-re-fail-target", failRes.Id);
+                Assert.False(failRes.Success);
+                Assert.Contains("destination is a file", failRes.Error);
+
+                // Step 3: Active pack was rolled back and preserved intact
+                var manager = new RulePackManager();
+                var activeBundle = manager.LoadFromDirectory(tempActiveDir);
+                Assert.True(activeBundle.IsValid);
+                Assert.Equal("14.0.0", activeBundle.Manifest.Version);
+            }
+            finally
+            {
+                if (Directory.Exists(tempActiveDir)) try { Directory.Delete(tempActiveDir, true); } catch { }
+                if (File.Exists(conflictFile)) try { File.Delete(conflictFile); } catch { }
+            }
+        }
+
+        [Fact]
+        public void Handle_LaunchRuleEditor_CapturesProcessLaunchWithRulePackContext()
+        {
+            ProcessStartInfo? capturedPsi = null;
+            var handler = CreateAppHandler(processLauncher: psi => capturedPsi = psi);
+
+            var response = handler.Handle("{\"id\":\"req-launch-re\",\"action\":\"launchRuleEditor\"}");
+
+            Assert.Equal("req-launch-re", response.Id);
+            Assert.True(response.Success, response.Error);
+            Assert.NotNull(capturedPsi);
+            Assert.True(capturedPsi.UseShellExecute);
+            if (!string.IsNullOrEmpty(capturedPsi.Arguments))
+            {
+                Assert.Contains("--rule-pack", capturedPsi.Arguments);
             }
         }
 

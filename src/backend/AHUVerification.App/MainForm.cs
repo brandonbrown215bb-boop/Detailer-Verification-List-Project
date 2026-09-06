@@ -91,6 +91,12 @@ namespace AHUVerification.App
 
                 _bridgeHandler = new BridgeHandler(this, rulePackPath);
                 _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
+                _webView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
+                _webView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
+
+#if !DEBUG
+                _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+#endif
 
                 // Configure Virtual Host mapping for built frontend
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
@@ -120,8 +126,37 @@ namespace AHUVerification.App
             }
         }
 
+        public static bool IsAllowedOrigin(string? uri)
+        {
+            if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed)) return false;
+            if (string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(parsed.Host, "ahu-verification.local", StringComparison.OrdinalIgnoreCase)
+                && (parsed.IsDefaultPort || parsed.Port == 443)) return true;
+#if DEBUG
+            if (string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(parsed.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+                && parsed.Port == 5173) return true;
+#endif
+            return false;
+        }
+
+        private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            e.Cancel = !IsAllowedOrigin(e.Uri);
+        }
+
+        private void CoreWebView2_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+        }
+
         private async void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
+            if (!IsAllowedOrigin(e.Source))
+            {
+                return;
+            }
+
             string? message = null;
             try
             {

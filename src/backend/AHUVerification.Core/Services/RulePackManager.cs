@@ -17,6 +17,7 @@ namespace AHUVerification.Core.Services
         public List<RuleDefinition> Rules { get; set; } = new();
         public TemplateMap TemplateMap { get; set; } = new();
         public JsonElement ApprovedMappings { get; set; }
+        public JsonElement FactContract { get; set; }
         public string TemplatePath { get; set; } = "";
         public string RootPath { get; set; } = "";
         public bool IsValid { get; set; }
@@ -39,6 +40,7 @@ namespace AHUVerification.Core.Services
             "rules.json",
             "template_map.json",
             "approved_mappings.json",
+            "fact_contract.json",
             "template.xlsx"
         };
 
@@ -47,6 +49,27 @@ namespace AHUVerification.Core.Services
             PropertyNameCaseInsensitive = true,
             Converters = { new JsonStringEnumConverter() }
         };
+
+        public static DvlRulePackSnapshot CreateSnapshot(RulePackBundle bundle)
+        {
+            if (bundle == null || !bundle.IsValid)
+                throw new ArgumentException("A validated Rule Pack bundle is required.", nameof(bundle));
+            bundle.Manifest.Files.TryGetValue("template.xlsx", out var templateEntry);
+
+            return new DvlRulePackSnapshot
+            {
+                Version = bundle.Manifest.Version,
+                BundleSha256 = bundle.Manifest.BundleSha256,
+                Rules = bundle.Rules.ToList(),
+                TemplateMap = bundle.TemplateMap,
+                ApprovedMappings = bundle.ApprovedMappings.Clone(),
+                FactContract = bundle.FactContract.Clone(),
+                TemplateSha256 = templateEntry?.Sha256,
+                TemplateRetrievable = File.Exists(bundle.TemplatePath),
+                TemplateEmbedded = false,
+                Reproducibility = File.Exists(bundle.TemplatePath) ? "snapshot-without-template" : "unavailable"
+            };
+        }
 
         public RulePackBundle LoadFromDirectory(string directoryPath)
         {
@@ -57,6 +80,7 @@ namespace AHUVerification.Core.Services
             string rulesPath = Path.Combine(directoryPath, "rules.json");
             string templateMapPath = Path.Combine(directoryPath, "template_map.json");
             string approvedMappingsPath = Path.Combine(directoryPath, "approved_mappings.json");
+            string factContractPath = Path.Combine(directoryPath, "fact_contract.json");
             string templatePath = Path.Combine(directoryPath, "template.xlsx");
 
             if (!File.Exists(manifestPath))
@@ -76,12 +100,14 @@ namespace AHUVerification.Core.Services
             string rulesJson = File.ReadAllText(rulesPath, Encoding.UTF8);
             string templateMapJson = File.ReadAllText(templateMapPath, Encoding.UTF8);
             string approvedMappingsJson = File.ReadAllText(approvedMappingsPath, Encoding.UTF8);
+            string factContractJson = File.ReadAllText(factContractPath, Encoding.UTF8);
 
             var actualHashes = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["rules.json"] = ComputeCanonicalJsonSha256(rulesJson),
                 ["template_map.json"] = ComputeCanonicalJsonSha256(templateMapJson),
                 ["approved_mappings.json"] = ComputeCanonicalJsonSha256(approvedMappingsJson),
+                ["fact_contract.json"] = ComputeCanonicalJsonSha256(factContractJson),
                 ["template.xlsx"] = ComputeFileSha256(templatePath)
             };
 
@@ -101,8 +127,27 @@ namespace AHUVerification.Core.Services
             if (!string.Equals(bundleSha, manifest.BundleSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Rule pack bundle hash mismatch: expected {manifest.BundleSha256}, got {bundleSha}");
 
+            using var rulesDocument = JsonDocument.Parse(rulesJson);
+            using var templateMapDocument = JsonDocument.Parse(templateMapJson);
+            using var factContractDocument = JsonDocument.Parse(factContractJson);
+            FactContractValidator.Validate(factContractDocument.RootElement, rulesDocument.RootElement, templateMapDocument.RootElement);
+
             var rules = JsonSerializer.Deserialize<List<RuleDefinition>>(rulesJson, JsonOptions) ?? new();
+            foreach (var rule in rules)
+            {
+                rule.RequiredFacts = rule.RequiredFacts.Select(key => FactContractValidator.CanonicalizeKey(key, factContractDocument.RootElement)).ToList();
+                rule.Predicate = FactContractValidator.NormalizePredicate(rule.Predicate, factContractDocument.RootElement);
+            }
             var templateMap = JsonSerializer.Deserialize<TemplateMap>(templateMapJson, JsonOptions) ?? new();
+            foreach (var field in templateMap.GeneralFields.Keys.ToList())
+            {
+                var canonical = FactContractValidator.CanonicalizeKey(field, factContractDocument.RootElement);
+                if (!string.Equals(canonical, field, StringComparison.Ordinal))
+                {
+                    templateMap.GeneralFields[canonical] = templateMap.GeneralFields[field];
+                    templateMap.GeneralFields.Remove(field);
+                }
+            }
             var approvedMappings = JsonSerializer.Deserialize<JsonElement>(approvedMappingsJson, JsonOptions);
 
             return new RulePackBundle
@@ -111,6 +156,7 @@ namespace AHUVerification.Core.Services
                 Rules = rules,
                 TemplateMap = templateMap,
                 ApprovedMappings = approvedMappings.Clone(),
+                FactContract = factContractDocument.RootElement.Clone(),
                 TemplatePath = templatePath,
                 RootPath = directoryPath,
                 IsValid = true
@@ -263,15 +309,35 @@ namespace AHUVerification.Core.Services
             templateMapJson = templateMapJson.Replace("\r\n", "\n").Replace('\r', '\n');
             approvedMappingsJson = approvedMappingsJson.Replace("\r\n", "\n").Replace('\r', '\n');
 
+            string contractSourcePath = Path.Combine(Path.GetDirectoryName(templateXlsxSourcePath) ?? "", "fact_contract.json");
+            if (!File.Exists(contractSourcePath))
+            {
+                string repoRoot = PathUtils.FindRepoRoot();
+                string fallbackContract = Path.Combine(repoRoot, "resources", "rulepack", "fact_contract.json");
+                if (File.Exists(fallbackContract)) contractSourcePath = fallbackContract;
+            }
+            if (!File.Exists(contractSourcePath))
+                throw new FileNotFoundException("Versioned fact contract is required for a published rule pack.", contractSourcePath);
+            string factContractJson = File.ReadAllText(contractSourcePath, Encoding.UTF8);
+            using (var contractDoc = JsonDocument.Parse(factContractJson))
+            using (var rulesDoc = JsonDocument.Parse(rulesJson))
+            using (var mapDoc = JsonDocument.Parse(templateMapJson))
+            {
+                FactContractValidator.Validate(contractDoc.RootElement, rulesDoc.RootElement, mapDoc.RootElement);
+            }
+            factContractJson = factContractJson.Replace("\r\n", "\n").Replace('\r', '\n');
+
             string rulesPath = Path.Combine(destinationDirectory, "rules.json");
             string templateMapPath = Path.Combine(destinationDirectory, "template_map.json");
             string approvedMappingsPath = Path.Combine(destinationDirectory, "approved_mappings.json");
+            string factContractPath = Path.Combine(destinationDirectory, "fact_contract.json");
             string templateDestPath = Path.Combine(destinationDirectory, "template.xlsx");
             string manifestPath = Path.Combine(destinationDirectory, "manifest.json");
 
             File.WriteAllText(rulesPath, rulesJson, new UTF8Encoding(false));
             File.WriteAllText(templateMapPath, templateMapJson, new UTF8Encoding(false));
             File.WriteAllText(approvedMappingsPath, approvedMappingsJson, new UTF8Encoding(false));
+            File.WriteAllText(factContractPath, factContractJson, new UTF8Encoding(false));
 
             if (!string.Equals(Path.GetFullPath(templateXlsxSourcePath), Path.GetFullPath(templateDestPath), StringComparison.OrdinalIgnoreCase))
             {
@@ -286,6 +352,7 @@ namespace AHUVerification.Core.Services
                 ["rules.json"] = ComputeCanonicalJsonSha256(rulesJson),
                 ["template_map.json"] = ComputeCanonicalJsonSha256(templateMapJson),
                 ["approved_mappings.json"] = ComputeCanonicalJsonSha256(approvedMappingsJson),
+                ["fact_contract.json"] = ComputeCanonicalJsonSha256(factContractJson),
                 ["template.xlsx"] = ComputeFileSha256(templateDestPath)
             };
 
@@ -313,6 +380,10 @@ namespace AHUVerification.Core.Services
                     ["approved_mappings.json"] = new RulePackManifestFileEntry
                     {
                         Sha256 = actualHashes["approved_mappings.json"]
+                    },
+                    ["fact_contract.json"] = new RulePackManifestFileEntry
+                    {
+                        Sha256 = actualHashes["fact_contract.json"]
                     },
                     ["template.xlsx"] = new RulePackManifestFileEntry
                     {

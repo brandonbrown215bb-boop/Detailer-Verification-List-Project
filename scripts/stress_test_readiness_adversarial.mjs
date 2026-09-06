@@ -50,6 +50,7 @@ function makeFact(key, value, status = 'Known', confidence = 'Authoritative') {
 
 function makeCheck(instanceKey, ruleId, scopeTargetId, applicability = 'Applicable', status = 'Incomplete') {
   return {
+    allowNA: true, // Stress fixtures explicitly use rules permitting N/A.
     ruleId,
     semanticKey: ruleId,
     instanceKey,

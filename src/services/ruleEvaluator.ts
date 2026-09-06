@@ -1,4 +1,47 @@
-import type { NormalizedXmlGraph, Fact, RuleDefinition, ChecklistInstance, RuleApplicability, ASTPredicate } from '../types/index.ts';
+import type { NormalizedXmlGraph, Fact, RuleDefinition, ChecklistInstance, RuleApplicability, CheckStatus, ASTPredicate } from '../types/index.ts';
+import { canonicalFactKey } from './factContract.ts';
+
+type ChecklistWithFingerprint = ChecklistInstance & { semanticFingerprint?: string };
+
+function toFiniteNumber(value: unknown): number | undefined {
+  // JavaScript coerces null, empty strings, and false to zero. Those values
+  // are missing inputs in an engineering predicate and must remain blocked.
+  if (value === null || value === undefined || typeof value === 'boolean') return undefined;
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function stableJson(value: any): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function canonicalizePredicate(predicate: any): any {
+  if (!predicate || typeof predicate !== 'object') return predicate;
+  if (Array.isArray(predicate)) return predicate.map(canonicalizePredicate);
+  const result: any = {};
+  for (const key of Object.keys(predicate)) {
+    if (key === 'var' && typeof predicate[key] === 'string') {
+      result[key] = canonicalFactKey(predicate[key]);
+    } else {
+      result[key] = canonicalizePredicate(predicate[key]);
+    }
+  }
+  return result;
+}
+
+export function semanticFingerprint(rule: RuleDefinition): string {
+  return stableJson({
+    predicate: canonicalizePredicate(rule.predicate) || null,
+    requiredFacts: (rule.requiredFacts || []).map(canonicalFactKey).sort(),
+    scope: rule.scope,
+    verificationMode: rule.verificationMode,
+    instructions: rule.text,
+    allowNA: rule.allowNA
+  });
+}
 
 export function evaluateAstPredicate(
   predicate: ASTPredicate | undefined,
@@ -6,30 +49,31 @@ export function evaluateAstPredicate(
   requiredFacts: string[],
   factRegistry: Record<string, Fact>
 ): { result: boolean; needsInput: boolean; trace: string } {
-  if (!predicate) {
-    return { result: true, needsInput: false, trace: 'Standard check (Always applicable)' };
-  }
-
   // Check if any required fact is Unknown or RequiresConfirmation
   for (const fKey of requiredFacts) {
+    const canonicalKey = canonicalFactKey(fKey);
     // Check if the key in context maps to factRegistry
-    const mappedKey = fKey.startsWith('skid.') && context.__skidId
-      ? fKey.replace('skid.', `skid.${context.__skidId}.`)
-      : fKey;
+    const mappedKey = canonicalKey.startsWith('skid.') && context.__skidId
+      ? canonicalKey.replace('skid.', `skid.${context.__skidId}.`)
+      : canonicalKey;
 
-    const fact = factRegistry[mappedKey] || factRegistry[fKey];
-    if (!fact || fact.status === 'Unknown' || fact.confidence === 'RequiresConfirmation') {
+    const fact = factRegistry[mappedKey] || factRegistry[canonicalKey];
+    if (!fact || fact.value === null || fact.value === undefined || fact.status === 'Unknown' || fact.confidence === 'RequiresConfirmation') {
       return {
         result: false,
         needsInput: true,
-        trace: `Required fact '${fact?.label || fKey}' requires confirmation or is unknown (${fact?.status || 'Missing'})`
+        trace: `Required fact '${fact?.label || canonicalKey}' requires confirmation or is unknown (${fact?.status || 'Missing'})`
       };
     }
   }
 
+  if (!predicate) {
+    return { result: true, needsInput: false, trace: 'Standard check (Always applicable)' };
+  }
+
   function resolveValue(val: any): any {
     if (val && typeof val === 'object' && 'var' in val) {
-      const varName = val.var;
+      const varName = canonicalFactKey(val.var);
       return context[varName];
     }
     return val;
@@ -40,7 +84,10 @@ export function evaluateAstPredicate(
     const [left, right] = predicate['>='];
     const leftVal = resolveValue(left);
     const rightVal = resolveValue(right);
-    const res = Number(leftVal) >= Number(rightVal);
+    const leftNum = toFiniteNumber(leftVal);
+    const rightNum = toFiniteNumber(rightVal);
+    if (leftNum === undefined || rightNum === undefined) return { result: false, needsInput: true, trace: 'Numeric predicate requires a known finite value.' };
+    const res = leftNum >= rightNum;
     return {
       result: res,
       needsInput: false,
@@ -52,7 +99,10 @@ export function evaluateAstPredicate(
     const [left, right] = predicate['<='];
     const leftVal = resolveValue(left);
     const rightVal = resolveValue(right);
-    const res = Number(leftVal) <= Number(rightVal);
+    const leftNum = toFiniteNumber(leftVal);
+    const rightNum = toFiniteNumber(rightVal);
+    if (leftNum === undefined || rightNum === undefined) return { result: false, needsInput: true, trace: 'Numeric predicate requires a known finite value.' };
+    const res = leftNum <= rightNum;
     return {
       result: res,
       needsInput: false,
@@ -64,7 +114,10 @@ export function evaluateAstPredicate(
     const [left, right] = predicate['>'];
     const leftVal = resolveValue(left);
     const rightVal = resolveValue(right);
-    const res = Number(leftVal) > Number(rightVal);
+    const leftNum = toFiniteNumber(leftVal);
+    const rightNum = toFiniteNumber(rightVal);
+    if (leftNum === undefined || rightNum === undefined) return { result: false, needsInput: true, trace: 'Numeric predicate requires a known finite value.' };
+    const res = leftNum > rightNum;
     return {
       result: res,
       needsInput: false,
@@ -76,7 +129,10 @@ export function evaluateAstPredicate(
     const [left, right] = predicate['<'];
     const leftVal = resolveValue(left);
     const rightVal = resolveValue(right);
-    const res = Number(leftVal) < Number(rightVal);
+    const leftNum = toFiniteNumber(leftVal);
+    const rightNum = toFiniteNumber(rightVal);
+    if (leftNum === undefined || rightNum === undefined) return { result: false, needsInput: true, trace: 'Numeric predicate requires a known finite value.' };
+    const res = leftNum < rightNum;
     return {
       result: res,
       needsInput: false,
@@ -110,8 +166,11 @@ export function evaluateAstPredicate(
 
   if ('includes' in predicate) {
     const [left, right] = predicate['includes'];
-    const leftVal = String(resolveValue(left) || '');
-    const rightVal = String(resolveValue(right) || '');
+    const resolvedLeft = resolveValue(left);
+    const resolvedRight = resolveValue(right);
+    if (typeof resolvedLeft !== 'string' || typeof resolvedRight !== 'string') return { result: false, needsInput: true, trace: 'String predicate requires known string values.' };
+    const leftVal = resolvedLeft;
+    const rightVal = resolvedRight;
     const res = leftVal.toLowerCase().includes(rightVal.toLowerCase());
     return {
       result: res,
@@ -129,7 +188,8 @@ export function evaluateAstPredicate(
           .split(',')
           .map(s => s.trim())
           .filter(Boolean);
-    const res = rightList.some(item => String(item).trim().toLowerCase() === String(leftVal).trim().toLowerCase());
+    if (leftVal === null || leftVal === undefined) return { result: false, needsInput: true, trace: 'Membership predicate requires a known value.' };
+    const res = rightList.some(item => typeof item === typeof leftVal && String(item).trim().toLowerCase() === String(leftVal).trim().toLowerCase());
     return {
       result: res,
       needsInput: false,
@@ -182,7 +242,7 @@ export function evaluateAstPredicate(
     return { result: false, needsInput: false, trace: traces.join(' OR ') };
   }
 
-  return { result: true, needsInput: false, trace: 'Default true' };
+  return { result: false, needsInput: true, trace: 'Unsupported or malformed predicate.' };
 }
 
 export function generateChecklists(
@@ -206,6 +266,19 @@ export function generateChecklists(
 
   const activeRules = rules.filter(r => !r.isArchived);
 
+  const nextStatus = (rule: RuleDefinition, applicability: RuleApplicability, existing?: ChecklistWithFingerprint): CheckStatus => {
+    if (applicability === 'NotApplicable') return 'NA';
+    if (applicability === 'NeedsInput') return 'Incomplete';
+    const fingerprint = semanticFingerprint(rule);
+    return existing?.applicability === 'Applicable' && existing.semanticFingerprint === fingerprint
+      ? existing.status
+      : 'Incomplete';
+  };
+  const addFingerprint = (instance: ChecklistInstance, rule: RuleDefinition): ChecklistInstance => {
+    (instance as ChecklistWithFingerprint).semanticFingerprint = semanticFingerprint(rule);
+    return instance;
+  };
+
   for (const rule of activeRules) {
     if (rule.scope === 'Unit') {
       const instanceKey = `unit:${rule.id}`;
@@ -225,19 +298,20 @@ export function generateChecklists(
         status: factRegistry[k]?.status || 'Unknown'
       }));
 
-      instances.push({
+      instances.push(addFingerprint({
         ruleId: rule.id,
         semanticKey: rule.semanticKey,
         instanceKey,
         scopeTargetId: 'unit',
         applicability,
         applicabilityReason: evalResult.trace,
-        status: existing?.status || (applicability === 'NotApplicable' ? 'NA' : 'Incomplete'),
+        status: nextStatus(rule, applicability, existing as ChecklistWithFingerprint | undefined),
+        allowNA: rule.allowNA,
         detailerComment: existing?.detailerComment || '',
         checkerComment: existing?.checkerComment || '',
         updatedAt: existing?.updatedAt || new Date().toISOString(),
         factTraces
-      });
+      }, rule));
     } else if (rule.scope === 'Skid') {
       // Create an instance for EACH shipping skid
       for (const skid of graph.skids) {
@@ -249,7 +323,7 @@ export function generateChecklists(
           ...unitContext,
           __skidId: skid.id,
           'skid.hasSplit': factRegistry[`skid.${skid.id}.hasSplit`]?.value ?? (graph.skids.length > 1),
-          'skid.weight': factRegistry[`skid.${skid.id}.weight`]?.value ?? skid.calculatedWeight,
+          'skid.weight': factRegistry[`skid.${skid.id}.weight`]?.value,
           'skid.segmentCount': factRegistry[`skid.${skid.id}.segmentCount`]?.value ?? skid.segmentIds.length,
           'skid.hasDrainPan': factRegistry[`skid.${skid.id}.hasDrainPan`]?.value ?? false,
           'skid.hasFans': factRegistry[`skid.${skid.id}.hasFans`]?.value ?? false,
@@ -275,19 +349,20 @@ export function generateChecklists(
           };
         });
 
-        instances.push({
+        instances.push(addFingerprint({
           ruleId: rule.id,
           semanticKey: rule.semanticKey,
           instanceKey,
           scopeTargetId: skid.id,
           applicability,
           applicabilityReason: evalResult.trace,
-          status: existing?.status || (applicability === 'NotApplicable' ? 'NA' : 'Incomplete'),
+          status: nextStatus(rule, applicability, existing as ChecklistWithFingerprint | undefined),
+          allowNA: rule.allowNA,
           detailerComment: existing?.detailerComment || '',
           checkerComment: existing?.checkerComment || '',
           updatedAt: existing?.updatedAt || new Date().toISOString(),
           factTraces
-        });
+        }, rule));
       }
     }
   }

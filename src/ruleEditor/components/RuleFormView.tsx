@@ -7,7 +7,7 @@ import { Archive, Copy, Sparkles, BookOpen, FileSpreadsheet, ShieldAlert, CheckS
 interface RuleFormViewProps {
   rule: RuleDefinition;
   isNew?: boolean;
-  onUpdate: (updated: RuleDefinition) => void;
+  onUpdate: (updated: RuleDefinition, originalId?: string) => void;
   onClone: (rule: RuleDefinition) => void;
   onToggleArchive: (ruleId: string) => void;
 }
@@ -26,10 +26,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
     'Knockdown',
     'UTL',
     'Paperwork',
-    'MOM',
-    'Drain Pan',
-    'Coil Panels',
-    'Reconnects'
+    'MOM'
   ];
 
   const internalSubgroups = [
@@ -51,7 +48,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
       .slice(0, 4)
       .join('_');
     const autoKey = `${cleanCategory}_${words || 'CHECK'}`;
-    onUpdate({ ...rule, semanticKey: autoKey });
+    onUpdate({ ...rule, semanticKey: autoKey }, rule.id);
   };
 
   const isInternalCategory = rule.category === 'Internal' || rule.category === 'Internals';
@@ -71,7 +68,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 <input
                   type="text"
                   value={rule.id}
-                  onChange={e => onUpdate({ ...rule, id: e.target.value.toUpperCase() })}
+                  onChange={e => onUpdate({ ...rule, id: e.target.value.toUpperCase() }, rule.id)}
                   className="text-base font-bold text-slate-100 bg-slate-950 border border-slate-700 rounded px-2.5 py-0.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
                   placeholder="RULE-ID"
                 />
@@ -131,7 +128,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               </label>
               <select
                 value={rule.category}
-                onChange={e => onUpdate({ ...rule, category: e.target.value })}
+                onChange={e => onUpdate({ ...rule, category: e.target.value }, rule.id)}
                 className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {categories.map(cat => (
@@ -150,7 +147,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 </label>
                 <select
                   value={rule.subgroup || ''}
-                  onChange={e => onUpdate({ ...rule, subgroup: e.target.value || undefined })}
+                  onChange={e => onUpdate({ ...rule, subgroup: e.target.value || undefined }, rule.id)}
                   className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">(None / Global Internals)</option>
@@ -170,13 +167,11 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               </label>
               <select
                 value={rule.scope}
-                onChange={e => onUpdate({ ...rule, scope: e.target.value as RuleScope })}
+                onChange={e => onUpdate({ ...rule, scope: e.target.value as RuleScope }, rule.id)}
                 className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="Unit">Unit (Global)</option>
                 <option value="Skid">Skid (Per Shipping Section)</option>
-                <option value="Segment">Segment (Per AHU Segment)</option>
-                <option value="Component">Component (Per Fan/Coil/VFD)</option>
               </select>
             </div>
 
@@ -187,12 +182,10 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               </label>
               <select
                 value={rule.verificationMode}
-                onChange={e => onUpdate({ ...rule, verificationMode: e.target.value as any })}
+                onChange={e => onUpdate({ ...rule, verificationMode: e.target.value as any }, rule.id)}
                 className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="ManualCheckbox">Manual Checkbox</option>
-                <option value="MeasurementVerify">Measurement Verify</option>
-                <option value="AutoEvaluated">Auto Evaluated</option>
               </select>
             </div>
 
@@ -203,7 +196,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               </label>
               <select
                 value={rule.allowNA ? 'true' : 'false'}
-                onChange={e => onUpdate({ ...rule, allowNA: e.target.value === 'true' })}
+                onChange={e => onUpdate({ ...rule, allowNA: e.target.value === 'true' }, rule.id)}
                 className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="true">Allowed (Detailer can mark NA)</option>
@@ -229,7 +222,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
             <input
               type="text"
               value={rule.semanticKey}
-              onChange={e => onUpdate({ ...rule, semanticKey: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+              onChange={e => onUpdate({ ...rule, semanticKey: e.target.value.toUpperCase().replace(/\s+/g, '_') }, rule.id)}
               className="w-full text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="CATEGORY_FEATURE_NAME"
             />
@@ -243,7 +236,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
             <textarea
               rows={3}
               value={rule.text}
-              onChange={e => onUpdate({ ...rule, text: e.target.value })}
+              onChange={e => onUpdate({ ...rule, text: e.target.value }, rule.id)}
               className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed"
               placeholder="Enter clear, actionable verification instructions for the detailer..."
             />
@@ -258,7 +251,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
             <input
               type="text"
               value={rule.reference || ''}
-              onChange={e => onUpdate({ ...rule, reference: e.target.value })}
+              onChange={e => onUpdate({ ...rule, reference: e.target.value }, rule.id)}
               className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="e.g. ASSY Manual p.391-40206-003, Standard Assembly Spec Sec 4.2"
             />
@@ -275,7 +268,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 ...rule,
                 predicate,
                 requiredFacts
-              });
+              }, rule.id);
             }}
           />
         </div>

@@ -1,4 +1,12 @@
-import type { NormalizedXmlGraph, Fact, FactStatus, FactConfidence, OrderRevisionData } from '../types/index.ts';
+import type { NormalizedXmlGraph, Fact, FactStatus, FactConfidence, OrderRevisionData, FactSnapshot, FactAuditEntry, FactSourceState } from '../types/index.ts';
+import { assertRegisteredFactKey, canonicalFactKey, isFactValueCompatible, normalizeFactRegistryAliases } from './factContract.ts';
+import { classifyApprovedMaterial } from './materialMapping.ts';
+
+type FactWithAudit = Fact & {
+  originalSnapshot?: FactSnapshot;
+  auditHistory?: FactAuditEntry[];
+  calculatedValue?: unknown;
+};
 
 export function createFact<T>(
   key: string,
@@ -8,10 +16,21 @@ export function createFact<T>(
   status: FactStatus,
   confidence: FactConfidence,
   sourcePointer?: string,
-  promptNote?: string
+  promptNote?: string,
+  derivationName?: string
 ): Fact<T> {
-  return {
-    key,
+  const canonicalKey = assertRegisteredFactKey(key);
+  const sourceState: FactSourceState = status === 'ManuallyOverridden'
+    ? 'manual'
+    : status === 'Derived'
+      ? 'derived'
+      : status === 'Unknown'
+        ? 'absent'
+        : sourcePointer
+          ? 'present'
+          : 'absent';
+  const fact = {
+    key: canonicalKey,
     label,
     category,
     value,
@@ -19,9 +38,23 @@ export function createFact<T>(
     confidence,
     sourcePointer,
     sourceRawValue: value,
+    sourceState,
     promptNote,
-    overrideHistory: []
-  };
+    derivationName,
+    overrideHistory: [],
+    originalSnapshot: {
+      value,
+      status,
+      confidence,
+      sourceRawValue: value,
+      sourcePointer,
+      derivationName,
+      sourceState,
+      promptNote
+    },
+    auditHistory: []
+  } as FactWithAudit;
+  return fact as Fact<T>;
 }
 
 export function extractFactsFromGraph(
@@ -29,6 +62,8 @@ export function extractFactsFromGraph(
   orderRev?: OrderRevisionData | null
 ): Record<string, Fact> {
   const facts: Record<string, Fact> = {};
+  const missingFacts = new Set<string>((graph as any).missingFacts || []);
+  const sourceFieldStates = ((graph as any).sourceFieldStates || {}) as Record<string, FactSourceState>;
 
   // ==========================================
   // 1. Order & Identity Domain
@@ -38,9 +73,9 @@ export function extractFactsFromGraph(
     'unit.jobName',
     'Job Name',
     'Order & Identity',
-    hasJobName ? orderRev!.jobName.trim() : 'Medical Center Phase 3',
-    'Known',
-    'Authoritative',
+    hasJobName ? orderRev!.jobName.trim() : null,
+    hasJobName ? 'Known' : 'Unknown',
+    hasJobName ? 'Authoritative' : 'RequiresConfirmation',
     hasJobName ? '/root:OrderRevision/jobName' : undefined,
     hasJobName ? undefined : 'Enter Job Name from Order Packet'
   );
@@ -156,6 +191,7 @@ export function extractFactsFromGraph(
     'Derived',
     'Authoritative',
     '/root:AHU/unitBaseList/unitBase/upturnedLipHeight',
+    undefined,
     'LipHeight > 0'
   );
 
@@ -166,7 +202,9 @@ export function extractFactsFromGraph(
     !!graph.isTiered,
     'Derived',
     'Authoritative',
-    '/root:AHU/segmentList'
+    '/root:AHU/segmentList',
+    undefined,
+    'Upper Tier Segments Detected'
   );
 
   facts['unit.isStacked'] = createFact(
@@ -176,7 +214,9 @@ export function extractFactsFromGraph(
     !!graph.isStacked,
     'Derived',
     'Authoritative',
-    '/root:AHU/unitBaseList'
+    '/root:AHU/unitBaseList',
+    undefined,
+    'Upper Base Detected'
   );
 
   facts['unit.hasFloorDrains'] = createFact(
@@ -234,7 +274,9 @@ export function extractFactsFromGraph(
     !!graph.unitOptions.thermalBreak,
     'Derived',
     'Authoritative',
-    '/root:AHU/unitOptions/defaultConstructionOptions/housingStyle'
+    '/root:AHU/unitOptions/defaultConstructionOptions/housingStyle',
+    undefined,
+    'Housing Style Contains ThermalBreak'
   );
 
   facts['unit.knockdown'] = createFact(
@@ -341,7 +383,7 @@ export function extractFactsFromGraph(
     'casing.floorGaugeString',
     'Floor Gauge String',
     'Housing & Materials',
-    graph.unitOptions.materials.floorMaterialGaugeString || '16',
+    graph.unitOptions.materials.floorMaterialGaugeString || '',
     'Known',
     'Authoritative',
     '/root:AHU/unitOptions/defaultConstructionOptions/floorMaterialGauge'
@@ -569,15 +611,20 @@ export function extractFactsFromGraph(
       'Authoritative'
     );
 
-    facts[`skid.${skid.id}.weight`] = createFact(
+    const hasAuthoritativeWeight = typeof skid.calculatedWeight === 'number' && Number.isFinite(skid.calculatedWeight) && skid.calculatedWeight > 0;
+    const weightFact = createFact(
       `skid.${skid.id}.weight`,
       `${skid.name} Aggregate Weight`,
       skid.name,
-      skid.calculatedWeight,
-      'Derived',
-      'Authoritative',
-      `/root:AHU/shippingSkidList/shippingSkid[${skid.index}]`
+      hasAuthoritativeWeight ? skid.calculatedWeight : null,
+      hasAuthoritativeWeight ? 'Derived' : 'Unknown',
+      hasAuthoritativeWeight ? 'Authoritative' : 'RequiresConfirmation',
+      `/root:AHU/shippingSkidList/shippingSkid[${skid.index}]`,
+      hasAuthoritativeWeight ? undefined : 'Authoritative skid weight is required; missing or zero weight cannot clear readiness',
+      hasAuthoritativeWeight ? 'Sum of Segment Weights' : undefined
     );
+    (weightFact as FactWithAudit).calculatedValue = skid.calculatedWeight;
+    facts[`skid.${skid.id}.weight`] = weightFact;
 
     facts[`skid.${skid.id}.segmentCount`] = createFact(
       `skid.${skid.id}.segmentCount`,
@@ -652,6 +699,46 @@ export function extractFactsFromGraph(
     );
   });
 
+  // Parser metadata distinguishes an omitted/malformed source field from a legitimate
+  // false/zero/default value. Never turn a parser default into production certainty.
+  for (const key of ['casing.exteriorMaterial', 'casing.interiorMaterial', 'casing.floorMaterial']) {
+    const fact = facts[key] as FactWithAudit | undefined;
+    if (fact && fact.value !== null && classifyApprovedMaterial(String(fact.value)) === 'unknown') {
+      fact.confidence = 'RequiresConfirmation';
+    }
+  }
+  for (const rawKey of missingFacts) {
+    const key = canonicalFactKey(rawKey);
+    const fact = facts[key] as FactWithAudit | undefined;
+    if (!fact) continue;
+    const sourceState = sourceFieldStates[key] || 'absent';
+    const promptNote = fact.promptNote ?? (
+      sourceState === 'malformed'
+        ? 'Source value is malformed and requires confirmation.'
+        : sourceState === 'defaulted'
+          ? 'Source value used a parser default and requires confirmation.'
+          : 'Source value is missing and requires confirmation.'
+    );
+    fact.value = null;
+    fact.sourceRawValue = null;
+    fact.sourcePointer = undefined;
+    fact.derivationName = undefined;
+    fact.status = 'Unknown';
+    fact.confidence = 'RequiresConfirmation';
+    fact.sourceState = sourceState;
+    fact.promptNote = promptNote;
+    fact.originalSnapshot = {
+      value: null,
+      status: 'Unknown',
+      confidence: 'RequiresConfirmation',
+      sourceRawValue: null,
+      sourcePointer: undefined,
+      derivationName: undefined,
+      promptNote,
+      sourceState
+    };
+  }
+
   return facts;
 }
 
@@ -662,7 +749,11 @@ export function overrideFact<T>(
   author: string = 'Detailer',
   note?: string
 ): Record<string, Fact> {
-  const current = registry[key];
+  const canonicalKey = assertRegisteredFactKey(key);
+  if (!isFactValueCompatible(canonicalKey, newValue)) {
+    throw new Error(`Value '${newValue}' is incompatible with fact key '${key}'.`);
+  }
+  const current = registry[canonicalKey];
   if (!current) return registry;
 
   const history = [...(current.overrideHistory || [])];
@@ -675,12 +766,17 @@ export function overrideFact<T>(
 
   return {
     ...registry,
-    [key]: {
+    [canonicalKey]: {
       ...current,
       value: newValue,
       status: 'ManuallyOverridden',
       confidence: 'Authoritative',
-      overrideHistory: history
+      overrideHistory: history,
+      originalSnapshot: (current as FactWithAudit).originalSnapshot || snapshotFromFact(current),
+      auditHistory: [
+        ...((current as FactWithAudit).auditHistory || []),
+        { action: 'override', timestamp: new Date().toISOString(), by: author, note, snapshot: snapshotFromFact(current) }
+      ]
     }
   };
 }
@@ -689,16 +785,65 @@ export function revertFact(
   registry: Record<string, Fact>,
   key: string
 ): Record<string, Fact> {
-  const current = registry[key];
-  if (!current) return registry;
+  const canonicalKey = assertRegisteredFactKey(key);
+  const normalizedRegistry = normalizeFactRegistryAliases(registry);
+  const current = normalizedRegistry[canonicalKey] as FactWithAudit | undefined;
+  if (!current) throw new Error(`Cannot revert unregistered fact key '${key}'.`);
+  const original = current.originalSnapshot || snapshotFromFact(current);
 
   return {
-    ...registry,
-    [key]: {
+    ...normalizedRegistry,
+    [canonicalKey]: {
       ...current,
-      value: current.sourceRawValue,
-      status: current.sourcePointer ? 'Known' : 'Derived',
-      confidence: 'Authoritative'
+      value: original.value,
+      status: original.status,
+      confidence: original.confidence,
+      sourceRawValue: original.sourceRawValue,
+      sourcePointer: original.sourcePointer,
+      sourceState: original.sourceState,
+      derivationName: original.derivationName,
+      promptNote: original.promptNote,
+      auditHistory: [
+        ...(current.auditHistory || []),
+        { action: 'revert', timestamp: new Date().toISOString(), by: 'Detailer', snapshot: snapshotFromFact(current) }
+      ]
     }
   };
+}
+
+function snapshotFromFact(fact: Fact): FactSnapshot {
+  const extended = fact as FactWithAudit;
+  return {
+    value: fact.value,
+    status: fact.status,
+    confidence: fact.confidence,
+    sourceRawValue: fact.sourceRawValue,
+    sourcePointer: fact.sourcePointer,
+    sourceState: fact.sourceState,
+    derivationName: extended.derivationName,
+    promptNote: fact.promptNote
+  };
+}
+
+/** Safe migration boundary for older .dvl files that predate originalSnapshot. */
+export function normalizePersistedFactRegistry(registry: Record<string, Fact>): Record<string, Fact> {
+  const normalized = normalizeFactRegistryAliases(registry);
+  for (const fact of Object.values(normalized) as FactWithAudit[]) {
+    if (!fact.originalSnapshot) {
+      const sourceValue = fact.sourceRawValue ?? null;
+      const isMissing = sourceValue === null || sourceValue === undefined;
+      fact.originalSnapshot = {
+        value: sourceValue,
+        status: isMissing ? 'Unknown' : (fact.sourcePointer ? 'Known' : 'Derived'),
+        confidence: isMissing ? 'RequiresConfirmation' : 'Authoritative',
+        sourceRawValue: sourceValue,
+        sourcePointer: fact.sourcePointer,
+        sourceState: fact.sourceState,
+        derivationName: fact.derivationName,
+        promptNote: fact.promptNote
+      };
+    }
+    if (!fact.auditHistory) fact.auditHistory = [];
+  }
+  return normalized;
 }

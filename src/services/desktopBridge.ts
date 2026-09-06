@@ -1,7 +1,7 @@
 import type { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, UpzBundle } from '../types/index.ts';
-import { exportToExcel } from './excelExporter.ts';
 import { saveDvlToFile } from './projectStorage.ts';
 import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog.ts';
+import { EFFECTIVE_APPLICATION_VERSION } from './version.ts';
 
 declare global {
   interface Window {
@@ -43,6 +43,7 @@ export interface INativeBridge {
     bundle: UpzBundle;
   }>;
   saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }>;
+  verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any>;
   saveFileDialog(defaultName: string): Promise<string | null>;
   exportExcelDeliverable(
     facts: Record<string, Fact>,
@@ -52,7 +53,10 @@ export interface INativeBridge {
     graph?: NormalizedXmlGraph,
     generalComments?: string,
     defaultName?: string,
-    isDraft?: boolean
+    isDraft?: boolean,
+    configXml?: string,
+    orderRevXml?: string,
+    manifestXml?: string
   ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }>;
   openFile(filePath: string): Promise<void>;
   showInExplorer(filePath: string): Promise<void>;
@@ -197,6 +201,10 @@ export class WebView2DesktopBridge implements INativeBridge {
     return this.sendRequest('saveDvl', { filePath, projectJson: JSON.stringify(project, null, 2) });
   }
 
+  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any> {
+    return this.sendRequest('verifySource', { configXml, orderRevXml, manifestXml, manualOverrides, sqItems, existingChecklists });
+  }
+
   public async saveFileDialog(defaultName: string): Promise<string | null> {
     return this.sendRequest('saveFileDialog', {
       defaultName,
@@ -212,7 +220,10 @@ export class WebView2DesktopBridge implements INativeBridge {
     graph?: NormalizedXmlGraph,
     generalComments: string = '',
     defaultName?: string,
-    isDraft: boolean = false
+    isDraft: boolean = false,
+    configXml?: string,
+    orderRevXml?: string,
+    manifestXml?: string
   ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
     return this.sendRequest('exportExcelDeliverable', {
       facts,
@@ -222,7 +233,10 @@ export class WebView2DesktopBridge implements INativeBridge {
       graph,
       generalComments,
       defaultName,
-      isDraft
+      isDraft,
+      configXml,
+      orderRevXml,
+      manifestXml
     });
   }
 
@@ -322,7 +336,7 @@ export class BrowserPreviewBridge implements INativeBridge {
   public async getAppInfo(): Promise<{ appName: string; appVersion: string; rulePackVersion: string; ruleCount: number; isDesktopHost: boolean }> {
     return {
       appName: 'AHU Detailing Verification',
-      appVersion: '1.0.0 (Browser Preview)',
+      appVersion: `${EFFECTIVE_APPLICATION_VERSION} (Browser Preview)`,
       rulePackVersion: RULE_PACK_IDENTITY.version,
       ruleCount: RULES_CATALOG.length,
       isDesktopHost: false
@@ -356,6 +370,10 @@ export class BrowserPreviewBridge implements INativeBridge {
     return { saved: true, path: `${project.jobName}_${project.comNumber}.dvl` };
   }
 
+  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any> {
+    throw new Error('verifySource requires Microsoft Windows desktop host');
+  }
+
   public async saveFileDialog(_defaultName: string): Promise<string | null> {
     return null;
   }
@@ -368,9 +386,13 @@ export class BrowserPreviewBridge implements INativeBridge {
     graph?: NormalizedXmlGraph,
     _generalComments: string = '',
     defaultName?: string,
-    isDraft: boolean = false
+    isDraft: boolean = false,
+    _configXml?: string,
+    _orderRevXml?: string,
+    _manifestXml?: string
   ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
     try {
+      const { exportToExcel } = await import('./excelExporter.ts');
       exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
       return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
     } catch (err: any) {
@@ -442,7 +464,7 @@ export class BrowserPreviewBridge implements INativeBridge {
   }
 
   public async publishRulePack(_payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
-    return { success: true };
+    return { success: false, error: 'Publishing is only available when running in the desktop Rule Editor application.' };
   }
 
   public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
@@ -529,6 +551,10 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.saveDvl(filePath, project);
   }
 
+  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]) {
+    return this.activeBridge.verifySource(configXml, orderRevXml, manifestXml, manualOverrides, sqItems, existingChecklists);
+  }
+
   public async saveFileDialog(defaultName: string) {
     return this.activeBridge.saveFileDialog(defaultName);
   }
@@ -541,9 +567,12 @@ export class DesktopBridge implements INativeBridge {
     graph?: NormalizedXmlGraph,
     generalComments: string = '',
     defaultName?: string,
-    isDraft: boolean = false
+    isDraft: boolean = false,
+    configXml?: string,
+    orderRevXml?: string,
+    manifestXml?: string
   ) {
-    return this.activeBridge.exportExcelDeliverable(facts, sqItems, checklists, rules, graph, generalComments, defaultName, isDraft);
+    return this.activeBridge.exportExcelDeliverable(facts, sqItems, checklists, rules, graph, generalComments, defaultName, isDraft, configXml, orderRevXml, manifestXml);
   }
 
   public async openFile(filePath: string) {

@@ -27,15 +27,19 @@ namespace AHUVerification.App.Bridge
 
         private RulePackBundle? _activeRulePack;
         private readonly string _rulePackPath;
+        private readonly Func<string?>? _exportPathSelector;
+        private readonly Action<ProcessStartInfo> _processLauncher;
 
         public BridgeHandler(string rulePackPath) : this(null, rulePackPath)
         {
         }
 
-        public BridgeHandler(Form? parentForm, string rulePackPath)
+        public BridgeHandler(Form? parentForm, string rulePackPath, Func<string?>? exportPathSelector = null, Action<ProcessStartInfo>? processLauncher = null)
         {
             _parentForm = parentForm;
             _rulePackPath = rulePackPath;
+            _exportPathSelector = exportPathSelector;
+            _processLauncher = processLauncher ?? (psi => Process.Start(psi));
             LoadActiveRulePack();
         }
 
@@ -94,6 +98,7 @@ namespace AHUVerification.App.Bridge
                     "saveFileDialog" => ShowSaveFileDialog(req.Payload),
                     "extractUpz" => ExtractUpz(req.Payload),
                     "saveDvl" => SaveDvl(req.Payload),
+                    "verifySource" => VerifySource(req.Payload),
                     "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
                     "openFile" => OpenFile(req.Payload),
                     "showInExplorer" => ShowInExplorer(req.Payload),
@@ -121,7 +126,7 @@ namespace AHUVerification.App.Bridge
             return new
             {
                 appName = "AHU Detailing Verification",
-                appVersion = "1.0.0",
+                appVersion = ApplicationVersion.Current,
                 rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
                 isDesktopHost = true
@@ -252,8 +257,45 @@ namespace AHUVerification.App.Bridge
             return new { saved = true, path = Path.GetFullPath(targetPath) };
         }
 
+        private object VerifySource(JsonElement payload)
+        {
+            string configXml = BridgeValidation.RequireStringProperty(payload, "verifySource", "configXml");
+            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
+            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
+
+            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null)
+                throw new InvalidOperationException("Active rule pack bundle not loaded.");
+
+            var options = JsonDefaults.CreateFlexibleOptions();
+            Dictionary<string, Fact>? manualOverrides = null;
+            if (payload.TryGetProperty("manualOverrides", out var overridesEl) && overridesEl.ValueKind == JsonValueKind.Object)
+            {
+                manualOverrides = JsonSerializer.Deserialize<Dictionary<string, Fact>>(overridesEl.GetRawText(), options);
+            }
+
+            List<SpecialQuote>? sqItems = null;
+            if (payload.TryGetProperty("sqItems", out var sqEl) && sqEl.ValueKind == JsonValueKind.Array)
+            {
+                sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(sqEl.GetRawText(), options);
+            }
+
+            List<ChecklistInstance>? existingChecklists = null;
+            if (payload.TryGetProperty("existingChecklists", out var clEl) && clEl.ValueKind == JsonValueKind.Array)
+            {
+                existingChecklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(clEl.GetRawText(), options);
+            }
+
+            var hostService = new VerificationHostService();
+            return hostService.VerifySource(configXml, orderRevXml, manifestXml, _activeRulePack, manualOverrides, sqItems, existingChecklists);
+        }
+
         private object ExportExcelDeliverable(JsonElement payload)
         {
+            string configXml = BridgeValidation.GetStringPropertyOrDefault(payload, "configXml", "");
+            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
+            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
+
             var factsEl = BridgeValidation.RequireObjectProperty(payload, "exportExcelDeliverable", "facts");
             var sqEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "sqItems");
             var clEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "checklists");
@@ -261,37 +303,6 @@ namespace AHUVerification.App.Bridge
             if (_activeRulePack == null) LoadActiveRulePack();
             if (_activeRulePack == null)
                 throw new InvalidOperationException("Active rule pack bundle not loaded.");
-
-            string templatePath = _activeRulePack.TemplatePath;
-            if (!File.Exists(templatePath))
-            {
-                string fallback = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "rulepack", "template.xlsx");
-                if (File.Exists(fallback))
-                {
-                    templatePath = fallback;
-                }
-                else
-                {
-                    string repoFallback = Path.Combine(PathUtils.FindRepoRoot(), "resources", "rulepack", "template.xlsx");
-                    if (File.Exists(repoFallback))
-                    {
-                        templatePath = repoFallback;
-                    }
-                    else
-                    {
-                        string repoRootTemplate = Path.Combine(PathUtils.FindRepoRoot(), "Detailing Verification List.xlsx");
-                        if (File.Exists(repoRootTemplate))
-                        {
-                            templatePath = repoRootTemplate;
-                        }
-                    }
-                }
-            }
-
-            if (!File.Exists(templatePath))
-            {
-                throw new FileNotFoundException($"Excel template file 'template.xlsx' or 'Detailing Verification List.xlsx' could not be found in active rule pack or repository locations.", templatePath);
-            }
 
             var options = JsonDefaults.CreateFlexibleOptions();
             var facts = JsonSerializer.Deserialize<Dictionary<string, Fact>>(factsEl.GetRawText(), options) ?? new();
@@ -301,22 +312,15 @@ namespace AHUVerification.App.Bridge
             string defaultName = BridgeValidation.GetStringPropertyOrDefault(payload, "defaultName", "Detailing_Verification_List.xlsx");
             bool isDraft = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isDraft", false);
 
-            List<RuleDefinition> rules = _activeRulePack.Rules;
-            if (payload.TryGetProperty("rules", out var rEl) && rEl.ValueKind == JsonValueKind.Array)
+            if (!isDraft && string.IsNullOrWhiteSpace(configXml))
             {
-                var customRules = JsonSerializer.Deserialize<List<RuleDefinition>>(rEl.GetRawText(), options);
-                if (customRules != null && customRules.Count > 0)
-                {
-                    rules = customRules;
-                }
+                throw new InvalidOperationException("Final export requires the trusted raw Config.xml source");
             }
 
             string? chosenPath = null;
-            if (payload.TryGetProperty("outputPath", out var opEl) &&
-                opEl.ValueKind == JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(opEl.GetString()))
+            if (_exportPathSelector != null)
             {
-                chosenPath = opEl.GetString();
+                chosenPath = _exportPathSelector();
             }
             else if (_parentForm != null)
             {
@@ -341,30 +345,20 @@ namespace AHUVerification.App.Bridge
                 return new { cancelled = true };
             }
 
-            NormalizedXmlGraph? graph = null;
-            if (payload.TryGetProperty("graph", out var gEl) && gEl.ValueKind == JsonValueKind.Object)
+            if (!Path.IsPathRooted(chosenPath) || !chosenPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
             {
-                graph = JsonSerializer.Deserialize<NormalizedXmlGraph>(gEl.GetRawText(), options);
+                throw new InvalidOperationException("Target path must be an absolute path ending in .xlsx");
             }
 
-            _patcher.PatchTemplate(
-                templatePath,
-                chosenPath,
-                _activeRulePack.TemplateMap,
-                facts,
-                sqItems,
-                checklists,
-                rules,
-                generalComments,
-                isDraft,
-                graph
-            );
+            var hostService = new VerificationHostService();
+            hostService.RecomputeAndExport(configXml, orderRevXml, manifestXml, _activeRulePack, chosenPath, facts, sqItems, checklists, generalComments, isDraft);
 
             return new
             {
                 exported = true,
                 filePath = chosenPath,
-                fileName = Path.GetFileName(chosenPath)
+                fileName = Path.GetFileName(chosenPath),
+                certificationAllowed = !isDraft && !string.IsNullOrWhiteSpace(configXml)
             };
         }
 
@@ -373,7 +367,7 @@ namespace AHUVerification.App.Bridge
             string path = BridgeValidation.RequireStringProperty(payload, "openFile", "filePath");
             if (!File.Exists(path)) throw new FileNotFoundException("File not found to open.", path);
 
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            _processLauncher(new ProcessStartInfo(path) { UseShellExecute = true });
             return new { opened = true };
         }
 
@@ -384,7 +378,7 @@ namespace AHUVerification.App.Bridge
                 throw new FileNotFoundException("Target path not found.", path);
 
             string argument = $"/select,\"{path}\"";
-            Process.Start("explorer.exe", argument);
+            _processLauncher(new ProcessStartInfo("explorer.exe", argument) { UseShellExecute = true });
             return new { shown = true };
         }
 
@@ -458,23 +452,58 @@ namespace AHUVerification.App.Bridge
         {
             try
             {
-                string distEditor = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dist", "rule-editor.html");
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string currentPackPath = Path.GetFullPath(_activeRulePack?.RootPath ?? _rulePackPath);
+
+                // Check packaged or development paths for native RuleEditor.exe
+                string[] candidateExePaths =
+                {
+                    Path.Combine(baseDir, "RuleEditor.exe"),
+                    Path.Combine(baseDir, "..", "RuleEditor", "RuleEditor.exe"),
+                    Path.Combine(baseDir, "..", "..", "publish", "RuleEditor", "RuleEditor.exe")
+                };
+
+                string? foundExe = candidateExePaths.FirstOrDefault(File.Exists);
+
+#if DEBUG
+                if (foundExe == null)
+                {
+                    string repoRoot = PathUtils.FindRepoRoot();
+                    string devDebugExe = Path.Combine(repoRoot, "src", "backend", "AHUVerification.RuleEditor", "bin", "Debug", "net8.0-windows", "RuleEditor.exe");
+                    string devReleaseExe = Path.Combine(repoRoot, "src", "backend", "AHUVerification.RuleEditor", "bin", "Release", "net8.0-windows", "RuleEditor.exe");
+                    if (File.Exists(devDebugExe)) foundExe = devDebugExe;
+                    else if (File.Exists(devReleaseExe)) foundExe = devReleaseExe;
+                }
+#endif
+
+                if (foundExe != null)
+                {
+                    var startInfo = new ProcessStartInfo(foundExe)
+                    {
+                        UseShellExecute = true,
+                        Arguments = $"--rule-pack \"{currentPackPath}\""
+                    };
+                    _processLauncher(startInfo);
+                    return new { success = true, path = foundExe, rulePack = currentPackPath };
+                }
+
+                string distEditor = Path.Combine(baseDir, "dist", "rule-editor.html");
                 if (File.Exists(distEditor))
                 {
-                    Process.Start(new ProcessStartInfo(distEditor) { UseShellExecute = true });
+                    _processLauncher(new ProcessStartInfo(distEditor) { UseShellExecute = true });
                     return new { success = true, path = distEditor };
                 }
 
-                string repoRoot = PathUtils.FindRepoRoot();
-                string repoEditor = Path.Combine(repoRoot, "dist", "rule-editor.html");
+                string repoRootFallback = PathUtils.FindRepoRoot();
+                string repoEditor = Path.Combine(repoRootFallback, "dist", "rule-editor.html");
                 if (File.Exists(repoEditor))
                 {
-                    Process.Start(new ProcessStartInfo(repoEditor) { UseShellExecute = true });
+                    _processLauncher(new ProcessStartInfo(repoEditor) { UseShellExecute = true });
                     return new { success = true, path = repoEditor };
                 }
 
                 string devUrl = "http://localhost:5173/rule-editor.html";
-                Process.Start(new ProcessStartInfo(devUrl) { UseShellExecute = true });
+                _processLauncher(new ProcessStartInfo(devUrl) { UseShellExecute = true });
                 return new { success = true, url = devUrl };
             }
             catch (Exception ex)

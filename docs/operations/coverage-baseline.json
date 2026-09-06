@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "ahu-core-coverage-v1",
+  "targetAssembly": "AHUVerification.Core",
+  "collector": "coverlet.collector 6.0.4",
+  "capturedOn": "2026-09-05",
+  "method": "Release Cobertura report; each floor is rounded down from the observed module rate and must not decrease.",
+  "modules": [
+    {
+      "name": "NormalizedXmlParser",
+      "type": "AHUVerification.Core.Parsers.NormalizedXmlParser",
+      "minLineRate": 0.9594,
+      "minBranchRate": 0.7595
+    },
+    {
+      "name": "FactExtractor",
+      "type": "AHUVerification.Core.Services.FactExtractor",
+      "minLineRate": 0.9921,
+      "minBranchRate": 0.8727
+    },
+    {
+      "name": "AstRuleEvaluator",
+      "type": "AHUVerification.Core.Services.AstRuleEvaluator",
+      "minLineRate": 0.8306,
+      "minBranchRate": 0.7079
+    },
+    {
+      "name": "VerificationHostService",
+      "type": "AHUVerification.Core.Services.VerificationHostService",
+      "minLineRate": 0.8440,
+      "minBranchRate": 0.6568
+    },
+    {
+      "name": "DvlProjectManager",
+      "type": "AHUVerification.Core.Services.DvlProjectManager",
+      "minLineRate": 0.8571,
+      "minBranchRate": 0.6760
+    },
+    {
+      "name": "OpenXmlTemplatePatcher",
+      "type": "AHUVerification.Core.Services.OpenXmlTemplatePatcher",
+      "minLineRate": 0.9484,
+      "minBranchRate": 0.7966
+    },
+    {
+      "name": "RulePackManager",
+      "type": "AHUVerification.Core.Services.RulePackManager",
+      "minLineRate": 0.7794,
+      "minBranchRate": 0.5425
+    },
+    {
+      "name": "UpzBundleExtractor",
+      "type": "AHUVerification.Core.Services.UpzBundleExtractor",
+      "minLineRate": 0.6818,
+      "minBranchRate": 0.4482
+    }
+  ]
+}

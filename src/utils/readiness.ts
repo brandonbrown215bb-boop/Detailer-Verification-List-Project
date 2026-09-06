@@ -6,7 +6,8 @@ import type {
   ScopeReadiness,
   UnitReadiness,
   DomainFact,
-  ChecklistItem
+  ChecklistItem,
+  RuleDefinition
 } from '../types/index.ts';
 
 export type { ScopeReadiness, UnitReadiness, DomainFact, ChecklistItem };
@@ -38,15 +39,16 @@ export function isChecklistPassed(item: ChecklistInstance): boolean {
 /**
  * Predicate to determine if a checklist rule is applicable and completed (Passed or NA).
  */
-export function isChecklistCompleted(item: ChecklistInstance): boolean {
-  return item.applicability === 'Applicable' && (item.status === 'Passed' || item.status === 'NA');
+export function isChecklistCompleted(item: ChecklistInstance, rule?: RuleDefinition): boolean {
+  const allowNA = rule?.allowNA ?? item.allowNA ?? false;
+  return item.applicability === 'Applicable' && (item.status === 'Passed' || (item.status === 'NA' && allowNA));
 }
 
 /**
  * Predicate to determine if a checklist rule is applicable but not yet completed.
  */
-export function isChecklistIncomplete(item: ChecklistInstance): boolean {
-  return item.applicability === 'Applicable' && item.status !== 'Passed' && item.status !== 'NA';
+export function isChecklistIncomplete(item: ChecklistInstance, rule?: RuleDefinition): boolean {
+  return item.applicability === 'Applicable' && !isChecklistCompleted(item, rule);
 }
 
 /**
@@ -76,7 +78,8 @@ export function resolveFactForScope(
 export function computeScopeReadiness(
   factsOrChecklists: Record<string, Fact> | ChecklistInstance[],
   checklistsOrScope: ChecklistInstance[] | string,
-  scopeTargetId?: string
+  scopeTargetId?: string,
+  rules: RuleDefinition[] = []
 ): ScopeReadiness {
   let checklists: ChecklistInstance[] = [];
   let scopeId = '';
@@ -91,9 +94,11 @@ export function computeScopeReadiness(
 
   const scopeChecks = (checklists || []).filter(c => c.scopeTargetId === scopeId);
   const applicableChecks = scopeChecks.filter(c => c.applicability === 'Applicable');
+  const ruleById = new Map((rules || []).map(rule => [rule.id, rule]));
+  const allowsNA = (item: ChecklistInstance) => ruleById.get(item.ruleId)?.allowNA ?? item.allowNA ?? false;
   const passedRules = applicableChecks.filter(c => c.status === 'Passed');
-  const naRules = applicableChecks.filter(c => c.status === 'NA');
-  const incompleteRules = applicableChecks.filter(isChecklistIncomplete);
+  const naRules = applicableChecks.filter(c => c.status === 'NA' && allowsNA(c));
+  const incompleteRules = applicableChecks.filter(c => c.status !== 'Passed' && (c.status !== 'NA' || !allowsNA(c)));
   const blockedRules = scopeChecks.filter(isChecklistBlocked);
 
   const totalChecks = scopeChecks.length;
@@ -146,7 +151,8 @@ export function computeScopeReadiness(
  */
 export function computeUnitReadiness(
   facts: Record<string, Fact> = {},
-  checklists: ChecklistInstance[] = []
+  checklists: ChecklistInstance[] = [],
+  rules: RuleDefinition[] = []
 ): UnitReadiness {
   const factList = Object.values(facts || {});
   const unconfirmedFacts = factList.filter(isFactUnconfirmed);
@@ -158,11 +164,13 @@ export function computeUnitReadiness(
   const applicableChecks = (checklists || []).filter(c => c.applicability === 'Applicable');
   const totalApplicableChecksCount = applicableChecks.length;
 
+  const ruleById = new Map((rules || []).map(rule => [rule.id, rule]));
+  const allowsNA = (item: ChecklistInstance) => ruleById.get(item.ruleId)?.allowNA ?? item.allowNA ?? false;
   const passedRules = applicableChecks.filter(c => c.status === 'Passed');
-  const naRules = applicableChecks.filter(c => c.status === 'NA');
+  const naRules = applicableChecks.filter(c => c.status === 'NA' && allowsNA(c));
   const completedChecksCount = passedRules.length + naRules.length;
 
-  const incompleteRules = applicableChecks.filter(isChecklistIncomplete);
+  const incompleteRules = applicableChecks.filter(c => c.status !== 'Passed' && (c.status !== 'NA' || !allowsNA(c)));
   const incompleteChecksCount = incompleteRules.length;
 
   const totalChecksCount = (checklists || []).length;
@@ -180,7 +188,7 @@ export function computeUnitReadiness(
   const scopeIds = Array.from(new Set((checklists || []).map(c => c.scopeTargetId)));
   const scopeReadinessMap: Record<string, ScopeReadiness> = {};
   scopeIds.forEach(scopeId => {
-    scopeReadinessMap[scopeId] = computeScopeReadiness(facts, checklists, scopeId);
+    scopeReadinessMap[scopeId] = computeScopeReadiness(facts, checklists, scopeId, rules);
   });
 
   return {

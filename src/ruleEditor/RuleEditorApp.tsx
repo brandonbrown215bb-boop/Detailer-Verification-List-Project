@@ -6,6 +6,7 @@ import { RuleListView } from './components/RuleListView';
 import { RuleFormView } from './components/RuleFormView';
 import { PublishModal } from './components/PublishModal';
 import { desktopBridge } from '../services/desktopBridge';
+import { normalizeRuleDefinition, validateRulePackData } from '../services/factContract';
 
 // Baseline fallback rule pack imports for web / development
 import initialRules from '../../resources/rulepack/rules.json';
@@ -13,10 +14,23 @@ import initialTemplateMap from '../../resources/rulepack/template_map.json';
 import initialApprovedMappings from '../../resources/rulepack/approved_mappings.json';
 import initialManifest from '../../resources/rulepack/manifest.json';
 
+const EDITOR_SCOPES = new Set(['Unit', 'Skid']);
+const EDITOR_MODES = new Set(['ManualCheckbox']);
+const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+function validateEditorRuleSupport(ruleSet: RuleDefinition[]): void {
+  const unsupported = ruleSet.filter(rule => !EDITOR_SCOPES.has(rule.scope) || !EDITOR_MODES.has(rule.verificationMode));
+  if (unsupported.length > 0) {
+    const details = unsupported.map(rule => `${rule.id} (${rule.scope}/${rule.verificationMode})`).join(', ');
+    throw new Error(`Rule Editor cannot publish unsupported scope or verification mode: ${details}.`);
+  }
+}
+
 export const RuleEditorApp: React.FC = () => {
   const [baselineRules, setBaselineRules] = useState<RuleDefinition[]>(() => initialRules as RuleDefinition[]);
   const [rules, setRules] = useState<RuleDefinition[]>(() => initialRules as RuleDefinition[]);
   const [templateMap, setTemplateMap] = useState<TemplateMap>(() => initialTemplateMap as any);
+  const [approvedMappings, setApprovedMappings] = useState<any>(() => initialApprovedMappings as any);
   const [manifest, setManifest] = useState<RulePackManifest>(() => initialManifest as RulePackManifest);
 
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(() => rules[0]?.id || null);
@@ -36,6 +50,7 @@ export const RuleEditorApp: React.FC = () => {
           setBaselineRules(JSON.parse(JSON.stringify(pack.rules)));
           setRules(JSON.parse(JSON.stringify(pack.rules)));
           if (pack.templateMap) setTemplateMap(pack.templateMap);
+          if (pack.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(pack.approvedMappings)));
           if (pack.manifest) setManifest(pack.manifest);
           if (pack.rules[0]?.id) setSelectedRuleId(pack.rules[0].id);
         }
@@ -122,6 +137,20 @@ export const RuleEditorApp: React.FC = () => {
       }
     });
 
+    // A removed rule is a material change and must remain visible in the release diff.
+    baselineRules.forEach(base => {
+      if (!rules.some(rule => rule.id === base.id)) {
+        dirtyIds.add(base.id);
+        diffList.push({
+          ruleId: base.id,
+          semanticKey: base.semanticKey,
+          category: base.category,
+          changeType: 'deleted',
+          before: base
+        });
+      }
+    });
+
     return { dirtyRuleIds: dirtyIds, diffs: diffList };
   }, [rules, baselineMap]);
 
@@ -130,8 +159,19 @@ export const RuleEditorApp: React.FC = () => {
   }, [rules, selectedRuleId]);
 
   // Handler: Update current rule
-  const handleUpdateRule = (updated: RuleDefinition) => {
-    setRules(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+  const handleUpdateRule = (updated: RuleDefinition, originalId?: string) => {
+    if (originalId && updated.id !== originalId && rules.some(r => r.id === updated.id)) {
+      showNotification(`Rule ID ${updated.id} is already in use.`, 'error');
+      return;
+    }
+    if (rules.some(r => r.semanticKey === updated.semanticKey && r.id !== (originalId || updated.id))) {
+      showNotification(`Semantic Key ${updated.semanticKey} is already in use.`, 'error');
+      return;
+    }
+    setRules(prev => prev.map(r => (r.id === (originalId || updated.id) ? updated : r)));
+    if (originalId && updated.id !== originalId) {
+      setSelectedRuleId(updated.id);
+    }
   };
 
   // Handler: Add new rule
@@ -235,7 +275,12 @@ export const RuleEditorApp: React.FC = () => {
 
   // Handler: Export Draft JSON
   const handleExportJson = () => {
-    const dataStr = JSON.stringify(rules, null, 2);
+    const dataStr = JSON.stringify({
+      rules,
+      templateMap,
+      approvedMappings,
+      manifest
+    }, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -255,13 +300,21 @@ export const RuleEditorApp: React.FC = () => {
     reader.onload = evt => {
       try {
         const imported = JSON.parse(evt.target?.result as string);
-        if (Array.isArray(imported)) {
-          setRules(imported);
-          if (imported[0]?.id) setSelectedRuleId(imported[0].id);
-          showNotification(`Successfully imported ${imported.length} rules!`, 'success');
-        } else {
-          showNotification('Invalid JSON: expected array of rule definitions', 'error');
+        const importedRules = Array.isArray(imported) ? imported : imported?.rules;
+        if (!Array.isArray(importedRules)) throw new Error('expected an array of rule definitions or a rule-pack draft object');
+        const normalizedRules = importedRules.map((rule: RuleDefinition) => normalizeRuleDefinition(rule));
+        const importedMap = Array.isArray(imported) ? templateMap : imported.templateMap;
+        if (!importedMap || typeof importedMap !== 'object') throw new Error('templateMap is required for a canonical rule-pack draft');
+        validateRulePackData(normalizedRules, importedMap);
+        validateEditorRuleSupport(normalizedRules);
+        setRules(JSON.parse(JSON.stringify(normalizedRules)));
+        if (!Array.isArray(imported) && imported.approvedMappings) {
+          setApprovedMappings(JSON.parse(JSON.stringify(imported.approvedMappings)));
         }
+        if (!Array.isArray(imported) && imported.manifest) setManifest(imported.manifest);
+        if (!Array.isArray(imported)) setTemplateMap(JSON.parse(JSON.stringify(importedMap)));
+        if (normalizedRules[0]?.id) setSelectedRuleId(normalizedRules[0].id);
+        showNotification(`Successfully imported and validated ${normalizedRules.length} rules!`, 'success');
       } catch (err: any) {
         showNotification(`Failed to parse JSON: ${err.message}`, 'error');
       }
@@ -272,27 +325,45 @@ export const RuleEditorApp: React.FC = () => {
 
   // Handler: Publish release
   const handlePublish = async (newVersion: string, releaseNotes: string, targetPath?: string) => {
+    const normalizedVersion = newVersion.trim().replace(/^v/i, '');
+    if (!RELEASE_VERSION_PATTERN.test(normalizedVersion)) {
+      throw new Error(`Invalid release version '${newVersion}'. Use SemVer such as 1.2.3 or 1.2.3-rc1.`);
+    }
+    validateEditorRuleSupport(rules);
+
     // 1. Synchronize templateMap with rule cell mappings
     const updatedTemplateMap: TemplateMap = JSON.parse(JSON.stringify(templateMap));
+    const liveRuleKeys = new Set(rules.map(rule => rule.semanticKey));
+    for (const key of Object.keys(updatedTemplateMap.ruleCellMappings || {})) {
+      if (!liveRuleKeys.has(key)) delete updatedTemplateMap.ruleCellMappings[key];
+    }
     rules.forEach(r => {
       if (r.excelRow) {
-        updatedTemplateMap.ruleCellMappings[r.semanticKey] = {
-          ruleId: r.id,
-          row: r.excelRow,
-          naCell: `S${r.excelRow}`,
-          detailerCell: `T${r.excelRow}`,
-          checkerCell: `V${r.excelRow}`,
-          commentsCell: `Y${r.excelRow}`,
-          initialsCell: `Z${r.excelRow}`
-        };
+        const existing = updatedTemplateMap.ruleCellMappings[r.semanticKey];
+        if (existing) {
+          // Semantic keys are the stable Excel identity. An ID rename updates
+          // the identity carried by the mapping without moving its cells.
+          existing.ruleId = r.id;
+        } else {
+          updatedTemplateMap.ruleCellMappings[r.semanticKey] = {
+            ruleId: r.id,
+            row: r.excelRow,
+            naCell: `S${r.excelRow}`,
+            detailerCell: `T${r.excelRow}`,
+            checkerCell: `V${r.excelRow}`,
+            commentsCell: `Y${r.excelRow}`,
+            initialsCell: `Z${r.excelRow}`
+          };
+        }
       }
     });
+    validateRulePackData(rules, updatedTemplateMap);
 
     const payload = {
-      version: newVersion,
+      version: normalizedVersion,
       rules,
       templateMap: updatedTemplateMap,
-      approvedMappings: initialApprovedMappings,
+      approvedMappings,
       releaseNotes,
       targetPath
     };
@@ -303,18 +374,29 @@ export const RuleEditorApp: React.FC = () => {
       if (res && (res as any).success === false) {
         throw new Error((res as any).error || 'Desktop publish failed');
       }
+      // Read the pack back through the native bridge. This verifies the editor
+      // is showing the bundle that was actually promoted to the active path.
+      const reloaded = await desktopBridge.getRulePack();
+      if (!reloaded?.rules || !reloaded.templateMap || !reloaded.manifest) {
+        throw new Error('Native publish completed without a readable published Rule Pack.');
+      }
+      const reloadedRules = reloaded.rules.map((rule: RuleDefinition) => normalizeRuleDefinition(rule));
+      validateRulePackData(reloadedRules, reloaded.templateMap);
+      validateEditorRuleSupport(reloadedRules);
+      setRules(JSON.parse(JSON.stringify(reloadedRules)));
+      setBaselineRules(JSON.parse(JSON.stringify(reloadedRules)));
+      setTemplateMap(JSON.parse(JSON.stringify(reloaded.templateMap)));
+      if (reloaded.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(reloaded.approvedMappings)));
+      setManifest(reloaded.manifest);
+      if (reloadedRules[0]?.id) setSelectedRuleId(reloadedRules[0].id);
+    } else {
+      showNotification('Native Rule Pack publishing is unavailable in browser preview. Downloading a validated draft JSON instead.', 'info');
+      handleExportJson();
+      setIsPublishModalOpen(false);
+      return;
     }
 
-    // Update local state to treat current rules as newly published baseline
-    setBaselineRules(JSON.parse(JSON.stringify(rules)));
-    setTemplateMap(updatedTemplateMap);
-    setManifest((prev: RulePackManifest) => ({
-      ...prev,
-      version: newVersion,
-      generatedAt: new Date().toISOString()
-    }));
-
-    showNotification(`Successfully published Rule Pack v${newVersion}!`, 'success');
+    showNotification(`Successfully published and reloaded Rule Pack v${normalizedVersion}!`, 'success');
   };
 
   return (

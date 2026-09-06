@@ -72,41 +72,62 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return elements.filter(isFocusable);
 }
 
+/**
+ * ModalShell instances are rendered into one body-level portal. Keep a stack so
+ * nested dialogs only respond to keyboard events from the topmost dialog.
+ */
+const modalStack: HTMLElement[] = [];
+const inertBackgroundState = new Map<HTMLElement, {
+  count: number;
+  previousInert: string | null;
+  previousAriaHidden: string | null;
+}>();
+
 function applyInertToSiblings(modalElement: HTMLElement): () => void {
   if (typeof document === 'undefined') return () => {};
 
-  let topAncestor: HTMLElement = modalElement;
-  while (topAncestor.parentElement && topAncestor.parentElement !== document.body) {
-    topAncestor = topAncestor.parentElement;
-  }
+  // The portal itself stays interactive; every other body-level application
+  // surface is isolated. This also works when the app shell is nested below a
+  // provider or when multiple ModalShells are mounted at once.
+  const modalRoot = modalElement.parentElement;
+  const affectedElements: HTMLElement[] = [];
 
-  const affectedElements: Array<{ el: HTMLElement; prevInert: string | null; prevAriaHidden: string | null }> = [];
-  const root = document.getElementById('root') || document.body;
-
-  Array.from(root.children).forEach(child => {
+  Array.from(document.body.children).forEach(child => {
     const el = child as HTMLElement;
-    if (el !== modalElement && !el.contains(modalElement) && el !== topAncestor && !topAncestor.contains(el)) {
-      affectedElements.push({
-        el,
-        prevInert: el.getAttribute('inert'),
-        prevAriaHidden: el.getAttribute('aria-hidden')
-      });
+    if (el !== modalRoot && !el.contains(modalElement)) {
+      affectedElements.push(el);
+      const previous = inertBackgroundState.get(el);
+      if (previous) {
+        previous.count += 1;
+      } else {
+        inertBackgroundState.set(el, {
+          count: 1,
+          previousInert: el.getAttribute('inert'),
+          previousAriaHidden: el.getAttribute('aria-hidden')
+        });
+      }
       el.setAttribute('inert', '');
       el.setAttribute('aria-hidden', 'true');
     }
   });
 
   return () => {
-    affectedElements.forEach(({ el, prevInert, prevAriaHidden }) => {
-      if (prevInert !== null) {
-        el.setAttribute('inert', prevInert);
-      } else {
-        el.removeAttribute('inert');
-      }
-      if (prevAriaHidden !== null) {
-        el.setAttribute('aria-hidden', prevAriaHidden);
-      } else {
-        el.removeAttribute('aria-hidden');
+    affectedElements.forEach(el => {
+      const state = inertBackgroundState.get(el);
+      if (!state) return;
+      state.count -= 1;
+      if (state.count <= 0) {
+        if (state.previousInert !== null) {
+          el.setAttribute('inert', state.previousInert);
+        } else {
+          el.removeAttribute('inert');
+        }
+        if (state.previousAriaHidden !== null) {
+          el.setAttribute('aria-hidden', state.previousAriaHidden);
+        } else {
+          el.removeAttribute('aria-hidden');
+        }
+        inertBackgroundState.delete(el);
       }
     });
   };
@@ -180,11 +201,28 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     };
   }, [isOpen, options?.initialFocusRef, options?.selectOnFocus, options?.preventScroll]);
 
-  // Keydown & Tab focus trapping + Escape handling
+  // Register this dialog in the shared modal stack for nested-dialog safety.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+    modalStack.push(container);
+
+    return () => {
+      const index = modalStack.lastIndexOf(container);
+      if (index >= 0) modalStack.splice(index, 1);
+    };
+  }, [isOpen]);
+
+  // Keydown, Tab focus trapping, and Escape handling
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const container = containerRef.current;
+      if (!container || modalStack[modalStack.length - 1] !== container) return;
+
       if (e.key === 'Escape') {
         if (options?.onEscape) {
           e.preventDefault();
@@ -195,12 +233,11 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
       }
 
       if (e.key === 'Tab') {
-        if (!containerRef.current) return;
-        const focusable = getFocusableElements(containerRef.current);
+        const focusable = getFocusableElements(container);
 
         if (focusable.length === 0) {
           e.preventDefault();
-          containerRef.current.focus();
+          container.focus();
           return;
         }
 
@@ -209,12 +246,12 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
         const currentActive = document.activeElement;
 
         if (e.shiftKey) {
-          if (currentActive === firstElement || !containerRef.current.contains(currentActive)) {
+          if (currentActive === firstElement || !container.contains(currentActive)) {
             e.preventDefault();
             lastElement.focus();
           }
         } else {
-          if (currentActive === lastElement || !containerRef.current.contains(currentActive)) {
+          if (currentActive === lastElement || !container.contains(currentActive)) {
             e.preventDefault();
             firstElement.focus();
           }

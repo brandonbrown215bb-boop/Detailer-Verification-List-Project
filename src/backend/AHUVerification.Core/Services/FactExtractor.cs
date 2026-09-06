@@ -18,6 +18,14 @@ namespace AHUVerification.Core.Services
             string? promptNote = null,
             string? derivationName = null)
         {
+            string sourceState = status == FactStatus.ManuallyOverridden
+                ? "manual"
+                : status == FactStatus.Derived
+                    ? "derived"
+                    : status == FactStatus.Unknown
+                        ? "absent"
+                        : (sourcePointer != null ? "present" : "absent");
+
             return new Fact
             {
                 Key = key,
@@ -28,9 +36,22 @@ namespace AHUVerification.Core.Services
                 Confidence = confidence,
                 SourcePointer = sourcePointer,
                 SourceRawValue = value,
+                SourceState = sourceState,
                 PromptNote = promptNote,
                 DerivationName = derivationName,
-                OverrideHistory = new List<FactOverrideEntry>()
+                OverrideHistory = new List<FactOverrideEntry>(),
+                OriginalSnapshot = new FactSnapshot
+                {
+                    Value = value,
+                    Status = status,
+                    Confidence = confidence,
+                    SourceRawValue = value,
+                    SourcePointer = sourcePointer,
+                    DerivationName = derivationName,
+                    PromptNote = promptNote,
+                    SourceState = sourceState
+                },
+                AuditHistory = new List<FactAuditEntry>()
             };
         }
 
@@ -48,9 +69,9 @@ namespace AHUVerification.Core.Services
                 "unit.jobName",
                 "Job Name",
                 "Order & Identity",
-                hasJobName ? orderRev!.JobName : "Medical Center Phase 3",
-                FactStatus.Known,
-                FactConfidence.Authoritative,
+                hasJobName ? orderRev!.JobName : null,
+                hasJobName ? FactStatus.Known : FactStatus.Unknown,
+                hasJobName ? FactConfidence.Authoritative : FactConfidence.RequiresConfirmation,
                 hasJobName ? "/root:OrderRevision/jobName" : null,
                 hasJobName ? null : "Enter Job Name from Order Packet"
             );
@@ -699,16 +720,20 @@ namespace AHUVerification.Core.Services
                     FactConfidence.Authoritative
                 );
 
-                facts[$"skid.{skid.Id}.weight"] = CreateFact(
+                bool hasAuthoritativeWeight = skid.CalculatedWeight > 0;
+                var weightFact = CreateFact(
                     $"skid.{skid.Id}.weight",
                     $"{skid.Name} Aggregate Weight",
                     skid.Name,
-                    skid.CalculatedWeight,
-                    FactStatus.Derived,
-                    FactConfidence.Authoritative,
+                    hasAuthoritativeWeight ? skid.CalculatedWeight : null,
+                    hasAuthoritativeWeight ? FactStatus.Derived : FactStatus.Unknown,
+                    hasAuthoritativeWeight ? FactConfidence.Authoritative : FactConfidence.RequiresConfirmation,
                     $"/root:AHU/shippingSkidList/shippingSkid[{skid.Index}]",
-                    derivationName: "Sum of Segment Weights"
+                    derivationName: hasAuthoritativeWeight ? "Sum of Segment Weights" : null,
+                    promptNote: hasAuthoritativeWeight ? null : "Authoritative skid weight is required; missing or zero weight cannot clear readiness"
                 );
+                weightFact.CalculatedValue = skid.CalculatedWeight;
+                facts[$"skid.{skid.Id}.weight"] = weightFact;
 
                 facts[$"skid.{skid.Id}.segmentCount"] = CreateFact(
                     $"skid.{skid.Id}.segmentCount",
@@ -783,12 +808,64 @@ namespace AHUVerification.Core.Services
                 );
             }
 
+            // The normalized graph intentionally keeps compatibility-shaped
+            // values for consumers that render the structural model. Facts
+            // must not expose those values as authored data when the source was
+            // absent or malformed.
+            foreach (string rawKey in graph.MissingFacts.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string key = FactContractValidator.CanonicalizeKey(rawKey);
+                if (!facts.TryGetValue(key, out var missingFact)) continue;
+                missingFact.Value = null;
+                missingFact.SourceRawValue = null;
+                missingFact.SourcePointer = null;
+                missingFact.DerivationName = null;
+                string sourceState = graph.SourceFieldStates.TryGetValue(key, out var state)
+                    && state is "absent" or "malformed" or "defaulted"
+                    ? state
+                    : "absent";
+                missingFact.SourceState = sourceState;
+                missingFact.Status = FactStatus.Unknown;
+                missingFact.Confidence = FactConfidence.RequiresConfirmation;
+                missingFact.PromptNote ??= sourceState switch
+                {
+                    "malformed" => "Source value is malformed and requires confirmation.",
+                    "defaulted" => "Source value used a parser default and requires confirmation.",
+                    _ => "Source value is missing and requires confirmation."
+                };
+                missingFact.OriginalSnapshot = new FactSnapshot
+                {
+                    Value = null,
+                    Status = FactStatus.Unknown,
+                    Confidence = FactConfidence.RequiresConfirmation,
+                    SourceRawValue = null,
+                    SourcePointer = null,
+                    DerivationName = null,
+                    PromptNote = missingFact.PromptNote,
+                    SourceState = sourceState
+                };
+            }
+
             return facts;
         }
 
         public void OverrideFact(Dictionary<string, Fact> registry, string key, object? newValue, string author = "Detailer", string? note = null)
         {
-            if (!registry.TryGetValue(key, out var current)) return;
+            string canonicalKey = FactContractValidator.CanonicalizeKey(key);
+            if (!registry.TryGetValue(canonicalKey, out var current))
+                throw new KeyNotFoundException($"Cannot override unregistered fact '{key}'.");
+
+            current.OriginalSnapshot ??= new FactSnapshot
+            {
+                Value = current.Value,
+                Status = current.Status,
+                Confidence = current.Confidence,
+                SourceRawValue = current.SourceRawValue,
+                SourcePointer = current.SourcePointer,
+                DerivationName = current.DerivationName,
+                PromptNote = current.PromptNote,
+                SourceState = current.SourceState
+            };
 
             current.OverrideHistory.Add(new FactOverrideEntry
             {
@@ -798,18 +875,65 @@ namespace AHUVerification.Core.Services
                 Note = note
             });
 
+            var auditSnapshot = new FactSnapshot
+            {
+                Value = current.Value,
+                Status = current.Status,
+                Confidence = current.Confidence,
+                SourceRawValue = current.SourceRawValue,
+                SourcePointer = current.SourcePointer,
+                DerivationName = current.DerivationName,
+                PromptNote = current.PromptNote,
+                SourceState = current.SourceState
+            };
+
             current.Value = newValue;
             current.Status = FactStatus.ManuallyOverridden;
             current.Confidence = FactConfidence.Authoritative;
+            current.SourceState = "manual";
+            current.AuditHistory.Add(new FactAuditEntry
+            {
+                Action = "override",
+                By = author,
+                Note = note,
+                Snapshot = auditSnapshot
+            });
         }
 
         public void RevertFact(Dictionary<string, Fact> registry, string key)
         {
-            if (!registry.TryGetValue(key, out var current)) return;
+            string canonicalKey = FactContractValidator.CanonicalizeKey(key);
+            if (!registry.TryGetValue(canonicalKey, out var current))
+                throw new KeyNotFoundException($"Cannot revert unregistered fact '{key}'.");
+            if (current.OriginalSnapshot == null)
+                throw new InvalidOperationException($"Fact '{key}' does not have an original provenance snapshot; it cannot be safely reverted.");
 
-            current.Value = current.SourceRawValue;
-            current.Status = !string.IsNullOrEmpty(current.SourcePointer) ? FactStatus.Known : FactStatus.Derived;
-            current.Confidence = FactConfidence.Authoritative;
+            var snapshot = current.OriginalSnapshot;
+            var auditSnapshot = new FactSnapshot
+            {
+                Value = current.Value,
+                Status = current.Status,
+                Confidence = current.Confidence,
+                SourceRawValue = current.SourceRawValue,
+                SourcePointer = current.SourcePointer,
+                DerivationName = current.DerivationName,
+                PromptNote = current.PromptNote,
+                SourceState = current.SourceState
+            };
+            current.Value = snapshot.Value;
+            current.Status = snapshot.Status;
+            current.Confidence = snapshot.Confidence;
+            current.SourceRawValue = snapshot.SourceRawValue;
+            current.SourcePointer = snapshot.SourcePointer;
+            current.DerivationName = snapshot.DerivationName;
+            current.PromptNote = snapshot.PromptNote;
+            current.SourceState = snapshot.SourceState;
+            current.AuditHistory.Add(new FactAuditEntry
+            {
+                Action = "revert",
+                By = "Detailer",
+                Snapshot = auditSnapshot
+            });
         }
     }
 }

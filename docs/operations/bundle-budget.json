@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "policy": "Entry totals include local JS, CSS, and modulepreload assets referenced by each built HTML entry. CI fails when either total exceeds the checked-in ceiling.",
+  "entries": {
+    "index.html": {
+      "baselineUncompressedBytes": 1252597,
+      "baselineGzipBytes": 264278,
+      "maxUncompressedBytes": 1400000,
+      "maxGzipBytes": 450000
+    },
+    "rule-editor.html": {
+      "baselineUncompressedBytes": 708651,
+      "baselineGzipBytes": 207335,
+      "maxUncompressedBytes": 800000,
+      "maxGzipBytes": 300000
+    }
+  }
+}

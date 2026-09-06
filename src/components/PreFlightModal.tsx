@@ -22,6 +22,8 @@ interface PreFlightModalProps {
   onNavigateToRule: (scopeTargetId: string, ruleId: string) => void;
   onOpenResolutionCenter: () => void;
   readiness?: UnitReadiness;
+  /** Complete-state and active Rule Pack integrity must be valid for certification. */
+  canExportFinal?: boolean;
 }
 
 export const PreFlightModal: React.FC<PreFlightModalProps> = ({
@@ -35,7 +37,8 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
   onExportDvl,
   onNavigateToRule,
   onOpenResolutionCenter,
-  readiness
+  readiness,
+  canExportFinal = true
 }) => {
   if (!isOpen) return null;
 
@@ -47,10 +50,11 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
     incompleteChecksCount,
     blockedChecksCount,
     unconfirmedFactsCount,
-    isReadyForFinal,
+    isReadyForFinal: readinessAllowsFinal,
     incompleteRules,
     blockedRules
   } = unitReadiness;
+  const isReadyForFinal = readinessAllowsFinal && canExportFinal;
 
   return (
     <ModalShell
@@ -65,28 +69,28 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
         {/* Readiness Summary Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-center">
-            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Applicable Checks</div>
+            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">Applicable Checks</div>
             <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
               {totalApplicableChecksCount}
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-center">
-            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Verified Checks</div>
-            <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">Verified Checks</div>
+            <div className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
               {completedChecksCount}
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-center">
-            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Pending Checks</div>
-            <div className={`text-xl font-bold font-mono mt-1 ${incompleteChecksCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
+            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">Pending Checks</div>
+            <div className={`text-xl font-bold font-mono mt-1 ${incompleteChecksCount > 0 ? 'text-amber-800 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'}`}>
               {incompleteChecksCount}
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-center">
-            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">SQs Populated</div>
+            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">SQs Populated</div>
             <div className="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1">
               {sqItems.length} / 22
             </div>
@@ -196,7 +200,7 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
                 onClose();
                 onOpenResolutionCenter();
               }}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
+              className="px-3 py-1.5 rounded-lg bg-amber-800 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
             >
               Resolve Items
             </button>
@@ -209,7 +213,7 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
             <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               Official Excel Deliverable
             </h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Patches 'Detailing Verification List.xlsx' preserving all formulas and cell coordinates.
             </p>
           </div>
@@ -231,7 +235,7 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
                 onExportExcel(!isReadyForFinal);
                 onClose();
               }}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-lg shadow-emerald-700/30 transition-all"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>{isReadyForFinal ? 'Export Final .xlsx' : 'Export Draft .xlsx'}</span>

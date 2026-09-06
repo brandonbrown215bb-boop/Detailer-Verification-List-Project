@@ -68,7 +68,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+            className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold transition-colors"
           >
             Done & Return to Workspace
           </button>
@@ -97,7 +97,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                 </div>
                 <button
                   onClick={onBatchResolveDefaults}
-                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
+                  className="px-3.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
                 >
                   Approve Defaults
                 </button>
@@ -161,6 +161,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                             <div className="flex items-center gap-2 w-full">
                               <input
                                 type="text"
+                                aria-label="COM Number"
                                 placeholder="Enter COM# (e.g. COM-123456)..."
                                 defaultValue={fact.value ? String(fact.value) : ''}
                                 onKeyDown={(e) => {
@@ -189,7 +190,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               </button>
                               <button
                                 onClick={() => onUpdateFact('unit.isSeismic', true, 'Detailer', 'Confirmed Seismic Spec')}
-                                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-medium transition-colors"
                               >
                                 Seismic Certified
                               </button>
@@ -206,7 +207,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               </button>
                               <button
                                 onClick={() => onUpdateFact('unit.noa', true, 'Detailer', 'NOA Certified')}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium transition-colors"
                               >
                                 NOA Certified
                               </button>
@@ -223,7 +224,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               </button>
                               <button
                                 onClick={() => onUpdateFact('unit.knockdown', true, 'Detailer', 'Knockdown Construction')}
-                                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium transition-colors"
                               >
                                 Knockdown (Yes)
                               </button>
@@ -240,7 +241,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               </button>
                               <button
                                 onClick={() => onUpdateFact('unit.utl', 'Yes (2.0" Lip)', 'Detailer', 'Upturned Lip Detected')}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium transition-colors"
                               >
                                 Yes (2.0" Lip)
                               </button>
@@ -252,7 +253,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               {fact.value !== null && fact.value !== undefined && Number(fact.value) > 0 ? (
                                 <button
                                   onClick={() => onUpdateFact(fact.key, Number(fact.value), 'Detailer', 'Approved Calculated Weight')}
-                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
                                 >
                                   <Scale className="w-3.5 h-3.5" />
                                   <span>Approve Calculated ({Number(fact.value).toLocaleString()} lbs)</span>
@@ -262,6 +263,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               <div className="flex items-center gap-2">
                                 <input
                                   type="number"
+                                  aria-label={`Custom weight in pounds for ${fact.label}`}
                                   placeholder="Custom weight lbs..."
                                   value={customInputs[fact.key] ?? ''}
                                   onChange={(e) => handleCustomInputChange(fact.key, e.target.value)}
@@ -282,7 +284,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                                       onUpdateFact(fact.key, val, 'Detailer', 'Authoritative Weight');
                                     }
                                   }}
-                                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                                  className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold transition-colors"
                                 >
                                   Confirm Weight
                                 </button>
@@ -294,6 +296,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                             <div className="flex items-center gap-2 w-full">
                               <input
                                 type="text"
+                                aria-label={`Value for ${fact.label}`}
                                 placeholder={`Enter ${fact.label}...`}
                                 defaultValue={fact.value ? String(fact.value) : ''}
                                 onKeyDown={(e) => {
@@ -315,7 +318,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                                     onUpdateFact(fact.key, input.value.trim(), 'Detailer', 'Manually confirmed fact');
                                   }
                                 }}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shrink-0"
+                                className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold transition-colors shrink-0"
                               >
                                 Confirm
                               </button>
@@ -373,7 +376,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
                               onClose();
                               onNavigateToRule(item.scopeTargetId, item.ruleId);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors flex items-center gap-1 shrink-0"
+                            className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold transition-colors flex items-center gap-1 shrink-0"
                           >
                             <span>Jump</span>
                             <ArrowRight className="w-3 h-3" />

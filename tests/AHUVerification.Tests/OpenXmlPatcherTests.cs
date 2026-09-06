@@ -27,6 +27,7 @@ namespace AHUVerification.Tests
             var facts = extractor.ExtractFacts(graph);
             extractor.OverrideFact(facts, "unit.detailer", "Tanner Dean", "Test", "Test");
             extractor.OverrideFact(facts, "unit.comNumber", "COM-842910", "Test", "Test");
+            extractor.OverrideFact(facts, "unit.jobName", "Medical Center Phase 3", "Test", "Test");
 
             var rulePackManager = new RulePackManager();
             var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
@@ -42,6 +43,13 @@ namespace AHUVerification.Tests
             {
                 c.Status = CheckStatus.Passed;
                 c.DetailerComment = "Verified in CAD model.";
+            }
+
+            var needsInputCheck = applicableChecks.Skip(5).FirstOrDefault();
+            if (needsInputCheck != null)
+            {
+                needsInputCheck.Applicability = RuleApplicability.NeedsInput;
+                needsInputCheck.Status = CheckStatus.NeedsInput;
             }
 
             var sqItems = new List<SpecialQuote>
@@ -136,7 +144,8 @@ namespace AHUVerification.Tests
                     var vlRows = vlWsPart.Worksheet.Descendants<Row>().Where(r => r.RowIndex != null && r.RowIndex.Value >= 26).ToList();
                     Assert.NotEmpty(vlRows);
 
-                    var allEmittedTexts = vlRows.SelectMany(r => r.Elements<Cell>()).Select(c => {
+                    var allEmittedTexts = vlRows.SelectMany(r => r.Elements<Cell>()).Select(c =>
+                    {
                         string txt = c.CellValue?.Text ?? "";
                         if (c.DataType != null && c.DataType.Value == CellValues.SharedString && int.TryParse(txt, out int idx) && idx < sst.Count)
                             return sst[idx];
@@ -146,24 +155,19 @@ namespace AHUVerification.Tests
                     // Check for Skid / General headers
                     Assert.Contains(allEmittedTexts, t => t.Contains("VERIFICATIONS"));
 
-                    // Verify NO N/A check text is emitted for rules that are non-applicable everywhere (e.g. UTL / Knockdown)
-                    var strictlyNaRuleIds = checklists
-                        .GroupBy(c => c.RuleId)
-                        .Where(g => g.All(i => i.Applicability == RuleApplicability.NotApplicable))
-                        .Select(g => g.Key)
-                        .ToHashSet();
-
+                    // Issue #12 workbook contract: every checklist instance is
+                    // retained, including NeedsInput and NotApplicable. The
+                    // status marker is explicit so export cannot silently drop
+                    // an item or present it as a passed verification.
                     var emittedRuleIds = vlRows
                         .Select(r => GetCellValue($"B{r.RowIndex?.Value}"))
                         .Where(id => !string.IsNullOrEmpty(id) && id.Contains("-"))
                         .ToList();
 
-                    Assert.Equal(applicableChecks.Count, emittedRuleIds.Count);
-
-                    foreach (var emittedId in emittedRuleIds)
-                    {
-                        Assert.DoesNotContain(emittedId, strictlyNaRuleIds);
-                    }
+                    var expectedRuleCount = checklists.Count(c => bundle.Rules.Any(r => r.Id == c.RuleId || r.SemanticKey == c.SemanticKey));
+                    Assert.Equal(expectedRuleCount, emittedRuleIds.Count);
+                    Assert.Contains(allEmittedTexts, t => t == "Needs Input");
+                    Assert.Contains(allEmittedTexts, t => t == "Not Applicable");
                 }
             }
             finally

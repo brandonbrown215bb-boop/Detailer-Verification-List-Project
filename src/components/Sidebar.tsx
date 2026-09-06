@@ -74,11 +74,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="min-w-0 flex-1">
               <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5 whitespace-nowrap">
                 York AHU
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-mono font-bold">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-mono font-bold">
                   Verification
                 </span>
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-mono truncate">
                 {graph.unitOptions.brandOption} • {graph.unitOptions.unitType}
               </p>
             </div>
@@ -114,15 +114,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               style={{ width: `${overallPercent}%` }}
             />
           </div>
-          <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-400">
             <span>{completedChecksCount} / {totalApplicableChecksCount} Verified</span>
             {blockedChecksCount > 0 ? (
-              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${blockedChecksCount} rules blocked by missing facts`}>
+              <span className="text-amber-800 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${blockedChecksCount} rules blocked by missing facts`}>
                 <AlertTriangle className="w-2.5 h-2.5" />
                 {blockedChecksCount} input needed
               </span>
             ) : unconfirmedFactsCount > 0 ? (
-              <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${unconfirmedFactsCount} project facts require confirmation`}>
+              <span className="text-amber-800 dark:text-amber-400 font-bold flex items-center gap-0.5" title={`${unconfirmedFactsCount} project facts require confirmation`}>
                 <AlertTriangle className="w-2.5 h-2.5" />
                 {unconfirmedFactsCount} facts pending
               </span>
@@ -151,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Unit Section */}
         <div>
           {!isCollapsed && (
-            <div className="px-3 mb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="px-3 mb-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               Unit Configuration
             </div>
           )}
@@ -199,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   {unitNeedsInput > 0 && (
-                    <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-700 dark:text-amber-300 font-mono font-bold whitespace-nowrap">
+                    <span className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-800 dark:text-amber-300 font-mono font-bold whitespace-nowrap">
                       <AlertTriangle className="w-2.5 h-2.5" />
                       {unitNeedsInput}
                     </span>
@@ -220,9 +220,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Shipping Skids Section */}
         <div>
           {!isCollapsed && (
-            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="px-3 mb-2 flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               <span>Shipping Skids ({graph.skids.length})</span>
-              <span className="text-[10px] font-mono text-slate-400 lowercase">
+              <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 lowercase">
                 {graph.segments.length} segments
               </span>
             </div>
@@ -281,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <span
                               title={`${needsInput} checks need fact confirmation`}
                               className={`flex items-center gap-0.5 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold whitespace-nowrap ${
-                                isSelected ? 'bg-amber-400/30 text-amber-100' : 'bg-amber-500/25 text-amber-700 dark:text-amber-300'
+                                isSelected ? 'bg-amber-400/30 text-amber-100' : 'bg-amber-500/25 text-amber-800 dark:text-amber-300'
                               }`}
                             >
                               <AlertTriangle className="w-2.5 h-2.5" />
@@ -296,7 +296,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </div>
 
                       {/* Skid Subtitle */}
-                      <div className="flex items-center justify-between text-[11px] opacity-80 mt-1.5 font-mono">
+                      <div className={`flex items-center justify-between text-[11px] mt-1.5 font-mono ${
+                        isSelected ? 'text-blue-100' : 'text-slate-600 dark:text-slate-400'
+                      }`}>
                         <span className="truncate">{skid.segmentIds.length} Segments • {skid.baseIds.length} Bases</span>
                       </div>
 
@@ -325,11 +327,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Layers className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 Special Quotes (SQs)
               </span>
-              <span className="font-mono text-[11px] font-bold text-amber-600 dark:text-amber-300">
+              <span className="font-mono text-[11px] font-bold text-amber-800 dark:text-amber-300">
                 {sqItems.length} Active
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+            <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-tight">
               Project special quotes and detailing deviations mapped to deliverable.
             </p>
           </div>
@@ -339,7 +341,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col items-center gap-1"
           >
             <Layers className="w-4 h-4 text-amber-500" />
-            <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-300">
+            <span className="text-[10px] font-mono font-bold text-amber-800 dark:text-amber-300">
               {sqItems.length}
             </span>
           </div>
@@ -348,7 +350,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer XML Metadata */}
       {!isCollapsed && (
-        <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1.5">
+        <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/60 text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5">
           <div className="flex items-center justify-between font-mono">
             <span>Schema Ver:</span>
             <span className="text-slate-700 dark:text-slate-300 font-semibold">{graph.documentVersion}</span>

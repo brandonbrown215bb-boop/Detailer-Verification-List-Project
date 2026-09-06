@@ -5,6 +5,7 @@ using System.Linq;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Validation;
 using AHUVerification.Core.Models;
 
 namespace AHUVerification.Core.Services
@@ -14,6 +15,23 @@ namespace AHUVerification.Core.Services
         private static readonly string[] AllCategorySheets = {
             "Base", "Drain Pan", "Housing", "Paperwork", "Internal", "Coil Panels", "Reconnects", "MOM"
         };
+
+        public static void ValidateGeneratedWorkbook(string workbookPath)
+        {
+            if (!File.Exists(workbookPath))
+                throw new FileNotFoundException("Generated workbook was not written.", workbookPath);
+
+            using var document = SpreadsheetDocument.Open(workbookPath, false);
+            var errors = new OpenXmlValidator()
+                .Validate(document)
+                .Where(error => !error.Description.Contains("shapeId", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (errors.Count > 0)
+            {
+                string details = string.Join("; ", errors.Take(5).Select(error => error.Description));
+                throw new InvalidOperationException($"Generated workbook failed OpenXML validation ({errors.Count} errors): {details}");
+            }
+        }
 
         public void PatchTemplate(
             string templateFilePath,
@@ -67,402 +85,411 @@ namespace AHUVerification.Core.Services
             {
                 var wbPart = doc.WorkbookPart ?? throw new InvalidOperationException("Invalid workbook part.");
 
-            // 1. Shared String Table handling
-            var sstPart = wbPart.SharedStringTablePart;
-            if (sstPart == null)
-            {
-                sstPart = wbPart.AddNewPart<SharedStringTablePart>();
-                sstPart.SharedStringTable = new SharedStringTable();
-            }
-
-            var sst = sstPart.SharedStringTable;
-            var stringMap = new Dictionary<string, int>();
-            int sstCount = 0;
-            foreach (var item in sst.Elements<SharedStringItem>())
-            {
-                string text = item.InnerText;
-                if (!stringMap.ContainsKey(text))
+                // 1. Shared String Table handling
+                var sstPart = wbPart.SharedStringTablePart;
+                if (sstPart == null)
                 {
-                    stringMap[text] = sstCount;
+                    sstPart = wbPart.AddNewPart<SharedStringTablePart>();
+                    sstPart.SharedStringTable = new SharedStringTable();
                 }
-                sstCount++;
-            }
 
-            int InsertSharedString(string text)
-            {
-                if (stringMap.TryGetValue(text, out int idx))
+                var sst = sstPart.SharedStringTable;
+                var stringMap = new Dictionary<string, int>();
+                int sstCount = 0;
+                foreach (var item in sst.Elements<SharedStringItem>())
                 {
-                    return idx;
-                }
-                sst.AppendChild(new SharedStringItem(new Text(text)));
-                int newIdx = sstCount++;
-                stringMap[text] = newIdx;
-                return newIdx;
-            }
-
-            // 2. Identify active category scratchpad sheets based on applicable checklist rules
-            var applicableChecklists = checklists
-                .Where(c => c.Applicability == RuleApplicability.Applicable)
-                .ToList();
-
-            var activeCategorySheets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var inst in applicableChecklists)
-            {
-                var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
-                if (rule != null)
-                {
-                    string catSheet = GetCategorySheetName(rule);
-                    activeCategorySheets.Add(catSheet);
-                }
-            }
-
-            // 3. Remove inactive category scratchpad sheets from workbook
-            var sheetsElement = wbPart.Workbook.Sheets;
-            if (sheetsElement != null)
-            {
-                var sheetsList = sheetsElement.Elements<Sheet>().ToList();
-                foreach (var catName in AllCategorySheets)
-                {
-                    if (!activeCategorySheets.Contains(catName))
+                    string text = item.InnerText;
+                    if (!stringMap.ContainsKey(text))
                     {
-                        var targetSheet = sheetsList.FirstOrDefault(s => string.Equals(s.Name?.Value, catName, StringComparison.OrdinalIgnoreCase));
-                        if (targetSheet != null && targetSheet.Id != null)
+                        stringMap[text] = sstCount;
+                    }
+                    sstCount++;
+                }
+
+                int InsertSharedString(string text)
+                {
+                    if (stringMap.TryGetValue(text, out int idx))
+                    {
+                        return idx;
+                    }
+                    sst.AppendChild(new SharedStringItem(new Text(text)));
+                    int newIdx = sstCount++;
+                    stringMap[text] = newIdx;
+                    return newIdx;
+                }
+
+                // 2. Identify active category scratchpad sheets based on applicable checklist rules
+                var applicableChecklists = checklists
+                    .Where(c => c.Applicability == RuleApplicability.Applicable)
+                    .ToList();
+
+                var activeCategorySheets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var inst in applicableChecklists)
+                {
+                    var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
+                    if (rule != null)
+                    {
+                        string catSheet = GetCategorySheetName(rule);
+                        activeCategorySheets.Add(catSheet);
+                    }
+                }
+
+                // 3. Remove inactive category scratchpad sheets from workbook
+                var sheetsElement = wbPart.Workbook.Sheets;
+                if (sheetsElement != null)
+                {
+                    var sheetsList = sheetsElement.Elements<Sheet>().ToList();
+                    foreach (var catName in AllCategorySheets)
+                    {
+                        if (!activeCategorySheets.Contains(catName))
                         {
-                            var part = wbPart.GetPartById(targetSheet.Id!);
-                            targetSheet.Remove();
-                            wbPart.DeletePart(part);
+                            var targetSheet = sheetsList.FirstOrDefault(s => string.Equals(s.Name?.Value, catName, StringComparison.OrdinalIgnoreCase));
+                            if (targetSheet != null && targetSheet.Id != null)
+                            {
+                                var part = wbPart.GetPartById(targetSheet.Id!);
+                                targetSheet.Remove();
+                                wbPart.DeletePart(part);
+                            }
                         }
                     }
                 }
-            }
 
-            // 4. Protect and adapt formulas on 'Check Information' sheet
-            AdaptCheckInformationFormulas(wbPart, activeCategorySheets);
+                // 4. Protect and adapt formulas on 'Check Information' sheet
+                AdaptCheckInformationFormulas(wbPart, activeCategorySheets);
 
-            // 5. Locate Verification List sheet
-            var vlSheet = wbPart.Workbook.Sheets?.Elements<Sheet>().FirstOrDefault(s => s.Name?.Value == "Verification List");
-            if (vlSheet == null || vlSheet.Id == null)
-                throw new InvalidOperationException("Verification List worksheet not found in template.");
+                // 5. Locate Verification List sheet
+                var vlSheet = wbPart.Workbook.Sheets?.Elements<Sheet>().FirstOrDefault(s => s.Name?.Value == "Verification List");
+                if (vlSheet == null || vlSheet.Id == null)
+                    throw new InvalidOperationException("Verification List worksheet not found in template.");
 
-            var wsPart = (WorksheetPart)wbPart.GetPartById(vlSheet.Id!);
-            var ws = wsPart.Worksheet;
-            var sheetData = ws.GetFirstChild<SheetData>() ?? ws.AppendChild(new SheetData());
+                var wsPart = (WorksheetPart)wbPart.GetPartById(vlSheet.Id!);
+                var ws = wsPart.Worksheet;
+                var sheetData = ws.GetFirstChild<SheetData>() ?? ws.AppendChild(new SheetData());
 
-            void SetCellValue(string cellReference, string value, bool isNumeric = false)
-            {
-                if (string.IsNullOrEmpty(cellReference)) return;
-
-                string rowStr = new string(cellReference.Where(char.IsDigit).ToArray());
-                if (!uint.TryParse(rowStr, out uint rowIndex)) return;
-
-                var row = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value == rowIndex);
-                if (row == null)
+                void SetCellValue(string cellReference, string value, bool isNumeric = false)
                 {
-                    row = new Row { RowIndex = rowIndex };
-                    var nextRow = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value > rowIndex);
-                    if (nextRow != null)
-                        sheetData.InsertBefore(row, nextRow);
-                    else
-                        sheetData.AppendChild(row);
-                }
+                    if (string.IsNullOrEmpty(cellReference)) return;
 
-                var cell = row.Elements<Cell>().FirstOrDefault(c => c.CellReference != null && c.CellReference.Value == cellReference);
-                if (cell == null)
-                {
-                    cell = new Cell { CellReference = cellReference };
-                    row.AppendChild(cell);
-                }
+                    string rowStr = new string(cellReference.Where(char.IsDigit).ToArray());
+                    if (!uint.TryParse(rowStr, out uint rowIndex)) return;
 
-                if (isNumeric && double.TryParse(value, out double numVal))
-                {
-                    cell.CellValue = new CellValue(numVal.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    cell.DataType = CellValues.Number;
-                }
-                else
-                {
-                    int idx = InsertSharedString(value);
-                    cell.CellValue = new CellValue(idx.ToString());
-                    cell.DataType = new EnumValue<CellValues>(CellValues.SharedString);
-                }
-            }
-
-            // 6. Patch General Specification Fields (rows 3..22)
-            foreach (var kv in templateMap.GeneralFields)
-            {
-                string factKey = kv.Key;
-                var coord = kv.Value;
-                if (coord.Sheet == "Verification List")
-                {
-                    string val = "";
-                    if (factKey == "generalComments")
+                    var row = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value == rowIndex);
+                    if (row == null)
                     {
-                        val = generalComments;
-                    }
-                    else if (factKey == "unit.date")
-                    {
-                        val = facts.TryGetValue("unit.date", out var dateFact) && !string.IsNullOrWhiteSpace(dateFact.Value?.ToString())
-                            ? dateFact.Value.ToString()!
-                            : DateTime.Now.ToString("yyyy-MM-dd");
-                    }
-                    else if (facts.TryGetValue(factKey, out var fact))
-                    {
-                        if (fact.Value is bool b)
-                        {
-                            val = b ? "Yes" : "No";
-                        }
-                        else if (fact.Value is System.Text.Json.JsonElement je && (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False))
-                        {
-                            val = je.GetBoolean() ? "Yes" : "No";
-                        }
-                        else if (bool.TryParse(fact.Value?.ToString(), out bool bParsed))
-                        {
-                            val = bParsed ? "Yes" : "No";
-                        }
+                        row = new Row { RowIndex = rowIndex };
+                        var nextRow = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value > rowIndex);
+                        if (nextRow != null)
+                            sheetData.InsertBefore(row, nextRow);
                         else
+                            sheetData.AppendChild(row);
+                    }
+
+                    var cell = row.Elements<Cell>().FirstOrDefault(c => c.CellReference != null && c.CellReference.Value == cellReference);
+                    if (cell == null)
+                    {
+                        cell = new Cell { CellReference = cellReference };
+                        row.AppendChild(cell);
+                    }
+
+                    if (isNumeric && double.TryParse(value, out double numVal))
+                    {
+                        cell.CellValue = new CellValue(numVal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        cell.DataType = CellValues.Number;
+                    }
+                    else
+                    {
+                        int idx = InsertSharedString(value);
+                        cell.CellValue = new CellValue(idx.ToString());
+                        cell.DataType = new EnumValue<CellValues>(CellValues.SharedString);
+                    }
+                }
+
+                // 6. Patch General Specification Fields (rows 3..22)
+                foreach (var kv in templateMap.GeneralFields)
+                {
+                    string factKey = kv.Key;
+                    var coord = kv.Value;
+                    if (coord.Sheet == "Verification List")
+                    {
+                        string val = "";
+                        if (factKey == "generalComments")
                         {
-                            val = fact.Value?.ToString() ?? "";
+                            val = generalComments;
+                        }
+                        else if (factKey == "unit.date")
+                        {
+                            val = facts.TryGetValue("unit.date", out var dateFact) && !string.IsNullOrWhiteSpace(dateFact.Value?.ToString())
+                                ? dateFact.Value.ToString()!
+                                : DateTime.Now.ToString("yyyy-MM-dd");
+                        }
+                        else if (facts.TryGetValue(factKey, out var fact))
+                        {
+                            if (fact.Value is bool b)
+                            {
+                                val = b ? "Yes" : "No";
+                            }
+                            else if (fact.Value is System.Text.Json.JsonElement je && (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False))
+                            {
+                                val = je.GetBoolean() ? "Yes" : "No";
+                            }
+                            else if (bool.TryParse(fact.Value?.ToString(), out bool bParsed))
+                            {
+                                val = bParsed ? "Yes" : "No";
+                            }
+                            else
+                            {
+                                val = fact.Value?.ToString() ?? "";
+                            }
+                        }
+                        SetCellValue(coord.Cell, val);
+                    }
+                }
+
+                // 7. Patch Special Quotes (rows 4..25)
+                var sqRange = templateMap.SqRange;
+                for (int slot = 1; slot <= 22; slot++)
+                {
+                    int rowNum = sqRange.StartRow + slot - 1;
+                    var sq = sqItems.FirstOrDefault(s => s.Slot == slot);
+                    string slotCell = $"{sqRange.SlotCol}{rowNum}";
+                    string textCell = $"{sqRange.TextCol}{rowNum}";
+
+                    SetCellValue(slotCell, slot.ToString(), true);
+                    SetCellValue(textCell, sq?.Text ?? "");
+                }
+
+                // 8. Clean static template rows >= 26 and rebuild dynamically
+                var existingRows = sheetData.Elements<Row>().ToList();
+                uint currentImplicitRow = 1;
+                foreach (var r in existingRows)
+                {
+                    if (r.RowIndex != null)
+                    {
+                        currentImplicitRow = r.RowIndex.Value;
+                    }
+                    if (currentImplicitRow >= 26)
+                    {
+                        r.Remove();
+                    }
+                    currentImplicitRow++;
+                }
+
+                // Preserve merge cells for header area (< 26) and clear old dynamic merges
+                var mergeCellsElement = ws.Elements<MergeCells>().FirstOrDefault();
+                var retainedMerges = new List<string>();
+                if (mergeCellsElement != null)
+                {
+                    foreach (var mc in mergeCellsElement.Elements<MergeCell>())
+                    {
+                        string refVal = mc.Reference?.Value ?? "";
+                        if (IsHeaderMerge(refVal))
+                        {
+                            retainedMerges.Add(refVal);
                         }
                     }
-                    SetCellValue(coord.Cell, val);
+                    mergeCellsElement.Remove();
                 }
-            }
 
-            // 7. Patch Special Quotes (rows 4..25)
-            var sqRange = templateMap.SqRange;
-            for (int slot = 1; slot <= 22; slot++)
-            {
-                int rowNum = sqRange.StartRow + slot - 1;
-                var sq = sqItems.FirstOrDefault(s => s.Slot == slot);
-                string slotCell = $"{sqRange.SlotCol}{rowNum}";
-                string textCell = $"{sqRange.TextCol}{rowNum}";
+                var dynamicMerges = new List<string>(retainedMerges);
+                string detailerName = facts.TryGetValue("unit.detailer", out var dFact) ? (dFact.Value?.ToString() ?? "TD") : "TD";
+                string initials = detailerName.Length >= 2 ? detailerName.Substring(0, 2).ToUpperInvariant() : detailerName.ToUpperInvariant();
 
-                SetCellValue(slotCell, slot.ToString(), true);
-                SetCellValue(textCell, sq?.Text ?? "");
-            }
+                uint currentRow = 26;
+                bool zebraState = false;
 
-            // 8. Clean static template rows >= 26 and rebuild dynamically
-            var existingRows = sheetData.Elements<Row>().Where(r => r.RowIndex != null && r.RowIndex.Value >= 26).ToList();
-            foreach (var r in existingRows)
-            {
-                r.Remove();
-            }
+                // Shared string pre-inserts for repeated headers
+                int strNa = InsertSharedString("N/A");
+                int strDetailerCheck = InsertSharedString("Detailer Check off");
+                int strCheckerCheck = InsertSharedString("Checker Check off");
 
-            // Preserve merge cells for header area (< 26) and clear old dynamic merges
-            var mergeCellsElement = ws.Elements<MergeCells>().FirstOrDefault();
-            var retainedMerges = new List<string>();
-            if (mergeCellsElement != null)
-            {
-                foreach (var mc in mergeCellsElement.Elements<MergeCell>())
+                var exportChecklists = checklists.ToList();
+                // --- SECTION 1: GENERAL UNIT VERIFICATIONS ---
+                var unitChecks = exportChecklists.Where(c => c.ScopeTargetId == "unit").ToList();
+                if (unitChecks.Any())
                 {
-                    string refVal = mc.Reference?.Value ?? "";
-                    if (IsHeaderMerge(refVal))
-                    {
-                        retainedMerges.Add(refVal);
-                    }
-                }
-                mergeCellsElement.Remove();
-            }
-
-            var dynamicMerges = new List<string>(retainedMerges);
-            string detailerName = facts.TryGetValue("unit.detailer", out var dFact) ? (dFact.Value?.ToString() ?? "TD") : "TD";
-            string initials = detailerName.Length >= 2 ? detailerName.Substring(0, 2).ToUpperInvariant() : detailerName.ToUpperInvariant();
-
-            uint currentRow = 26;
-            bool zebraState = false;
-
-            // Shared string pre-inserts for repeated headers
-            int strNa = InsertSharedString("N/A");
-            int strDetailerCheck = InsertSharedString("Detailer Check off");
-            int strCheckerCheck = InsertSharedString("Checker Check off");
-
-            // --- SECTION 1: GENERAL UNIT VERIFICATIONS ---
-            var unitChecks = applicableChecklists.Where(c => c.ScopeTargetId == "unit").ToList();
-            if (unitChecks.Any())
-            {
-                // Main Section Header
-                var secRow = CreateSectionHeaderRow(currentRow, "=== GENERAL UNIT VERIFICATIONS ===", InsertSharedString("=== GENERAL UNIT VERIFICATIONS ==="));
-                sheetData.AppendChild(secRow);
-                dynamicMerges.Add($"B{currentRow}:W{currentRow}");
-                currentRow++;
-
-                // Group by category
-                var unitCatGroups = unitChecks
-                    .GroupBy(c => {
-                        var rule = rules.FirstOrDefault(r => r.Id == c.RuleId || r.SemanticKey == c.SemanticKey);
-                        return rule?.Category ?? "General";
-                    })
-                    .OrderBy(g => g.Key);
-
-                foreach (var catGroup in unitCatGroups)
-                {
-                    string catTitle = $"[Category: {catGroup.Key}]";
-                    var subRow = CreateCategorySubheaderRow(currentRow, catTitle, InsertSharedString(catTitle), strNa, strDetailerCheck, strCheckerCheck);
-                    sheetData.AppendChild(subRow);
-                    dynamicMerges.Add($"B{currentRow}:R{currentRow}");
-                    dynamicMerges.Add($"T{currentRow}:U{currentRow}");
-                    dynamicMerges.Add($"V{currentRow}:W{currentRow}");
+                    // Main Section Header
+                    var secRow = CreateSectionHeaderRow(currentRow, "=== GENERAL UNIT VERIFICATIONS ===", InsertSharedString("=== GENERAL UNIT VERIFICATIONS ==="));
+                    sheetData.AppendChild(secRow);
+                    dynamicMerges.Add($"B{currentRow}:W{currentRow}");
                     currentRow++;
 
-                    foreach (var inst in catGroup)
+                    // Group by category
+                    var unitCatGroups = unitChecks
+                        .GroupBy(c =>
+                        {
+                            var rule = rules.FirstOrDefault(r => r.Id == c.RuleId || r.SemanticKey == c.SemanticKey);
+                            return rule?.Category ?? "General";
+                        })
+                        .OrderBy(g => g.Key);
+
+                    foreach (var catGroup in unitCatGroups)
                     {
-                        var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
-                        if (rule == null) continue;
-
-                        bool isPassed = inst.Status == CheckStatus.Passed;
-                        var checkRow = CreateCheckRow(
-                            currentRow,
-                            rule.Id,
-                            rule.Text,
-                            isPassed,
-                            inst.DetailerComment,
-                            initials,
-                            zebraState,
-                            InsertSharedString
-                        );
-
-                        sheetData.AppendChild(checkRow);
-                        dynamicMerges.Add($"C{currentRow}:R{currentRow}");
+                        string catTitle = $"[Category: {catGroup.Key}]";
+                        var subRow = CreateCategorySubheaderRow(currentRow, catTitle, InsertSharedString(catTitle), strNa, strDetailerCheck, strCheckerCheck);
+                        sheetData.AppendChild(subRow);
+                        dynamicMerges.Add($"B{currentRow}:R{currentRow}");
                         dynamicMerges.Add($"T{currentRow}:U{currentRow}");
                         dynamicMerges.Add($"V{currentRow}:W{currentRow}");
-
-                        zebraState = !zebraState;
                         currentRow++;
+
+                        foreach (var inst in catGroup)
+                        {
+                            var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
+                            if (rule == null) continue;
+
+                            var checkRow = CreateCheckRow(
+                                currentRow,
+                                rule.Id,
+                                rule.Text,
+                                inst,
+                                initials,
+                                zebraState,
+                                InsertSharedString
+                            );
+
+                            sheetData.AppendChild(checkRow);
+                            dynamicMerges.Add($"C{currentRow}:R{currentRow}");
+                            dynamicMerges.Add($"T{currentRow}:U{currentRow}");
+                            dynamicMerges.Add($"V{currentRow}:W{currentRow}");
+
+                            zebraState = !zebraState;
+                            currentRow++;
+                        }
                     }
                 }
-            }
 
-            // --- SECTION 2..N: SHIPPING SKIDS VERIFICATIONS ---
-            var skidTargetIds = applicableChecklists
-                .Where(c => c.ScopeTargetId != "unit")
-                .Select(c => c.ScopeTargetId)
-                .Distinct()
-                .OrderBy(id => id)
-                .ToList();
+                // --- SECTION 2..N: SHIPPING SKIDS VERIFICATIONS ---
+                var skidTargetIds = exportChecklists
+                    .Where(c => c.ScopeTargetId != "unit")
+                    .Select(c => c.ScopeTargetId)
+                    .Distinct()
+                    .OrderBy(id => id)
+                    .ToList();
 
-            foreach (var skidId in skidTargetIds)
-            {
-                var skidChecks = applicableChecklists.Where(c => c.ScopeTargetId == skidId).ToList();
-                if (!skidChecks.Any()) continue;
-
-                // Determine friendly skid name
-                string skidName = skidId;
-                if (graph?.Skids != null)
+                foreach (var skidId in skidTargetIds)
                 {
-                    var matchingSkid = graph.Skids.FirstOrDefault(s => s.Id == skidId);
-                    if (matchingSkid != null)
+                    var skidChecks = exportChecklists.Where(c => c.ScopeTargetId == skidId).ToList();
+                    if (!skidChecks.Any()) continue;
+
+                    // Determine friendly skid name
+                    string skidName = skidId;
+                    if (graph?.Skids != null)
                     {
-                        skidName = matchingSkid.Name;
+                        var matchingSkid = graph.Skids.FirstOrDefault(s => s.Id == skidId);
+                        if (matchingSkid != null)
+                        {
+                            skidName = matchingSkid.Name;
+                        }
                     }
-                }
 
-                // Skid Main Header
-                string skidHeader = $"=== {skidName.ToUpperInvariant()} VERIFICATIONS ===";
-                var secRow = CreateSectionHeaderRow(currentRow, skidHeader, InsertSharedString(skidHeader));
-                sheetData.AppendChild(secRow);
-                dynamicMerges.Add($"B{currentRow}:W{currentRow}");
-                currentRow++;
-
-                // Group by Category & Subgroup
-                var skidCatGroups = skidChecks
-                    .GroupBy(c => {
-                        var rule = rules.FirstOrDefault(r => r.Id == c.RuleId || r.SemanticKey == c.SemanticKey);
-                        return new {
-                            Category = rule?.Category ?? "Base",
-                            Subgroup = rule?.Subgroup ?? "General"
-                        };
-                    })
-                    .OrderBy(g => g.Key.Category)
-                    .ThenBy(g => g.Key.Subgroup);
-
-                foreach (var catGroup in skidCatGroups)
-                {
-                    string subTitle = catGroup.Key.Category == "Internals"
-                        ? $"[Internals: {catGroup.Key.Subgroup}]"
-                        : $"[Category: {catGroup.Key.Category}]";
-
-                    var subRow = CreateCategorySubheaderRow(currentRow, subTitle, InsertSharedString(subTitle), strNa, strDetailerCheck, strCheckerCheck);
-                    sheetData.AppendChild(subRow);
-                    dynamicMerges.Add($"B{currentRow}:R{currentRow}");
-                    dynamicMerges.Add($"T{currentRow}:U{currentRow}");
-                    dynamicMerges.Add($"V{currentRow}:W{currentRow}");
+                    // Skid Main Header
+                    string skidHeader = $"=== {skidName.ToUpperInvariant()} VERIFICATIONS ===";
+                    var secRow = CreateSectionHeaderRow(currentRow, skidHeader, InsertSharedString(skidHeader));
+                    sheetData.AppendChild(secRow);
+                    dynamicMerges.Add($"B{currentRow}:W{currentRow}");
                     currentRow++;
 
-                    foreach (var inst in catGroup)
+                    // Group by Category & Subgroup
+                    var skidCatGroups = skidChecks
+                        .GroupBy(c =>
+                        {
+                            var rule = rules.FirstOrDefault(r => r.Id == c.RuleId || r.SemanticKey == c.SemanticKey);
+                            return new
+                            {
+                                Category = rule?.Category ?? "Base",
+                                Subgroup = rule?.Subgroup ?? "General"
+                            };
+                        })
+                        .OrderBy(g => g.Key.Category)
+                        .ThenBy(g => g.Key.Subgroup);
+
+                    foreach (var catGroup in skidCatGroups)
                     {
-                        var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
-                        if (rule == null) continue;
+                        string subTitle = catGroup.Key.Category == "Internals"
+                            ? $"[Internals: {catGroup.Key.Subgroup}]"
+                            : $"[Category: {catGroup.Key.Category}]";
 
-                        bool isPassed = inst.Status == CheckStatus.Passed;
-                        var checkRow = CreateCheckRow(
-                            currentRow,
-                            rule.Id,
-                            rule.Text,
-                            isPassed,
-                            inst.DetailerComment,
-                            initials,
-                            zebraState,
-                            InsertSharedString
-                        );
-
-                        sheetData.AppendChild(checkRow);
-                        dynamicMerges.Add($"C{currentRow}:R{currentRow}");
+                        var subRow = CreateCategorySubheaderRow(currentRow, subTitle, InsertSharedString(subTitle), strNa, strDetailerCheck, strCheckerCheck);
+                        sheetData.AppendChild(subRow);
+                        dynamicMerges.Add($"B{currentRow}:R{currentRow}");
                         dynamicMerges.Add($"T{currentRow}:U{currentRow}");
                         dynamicMerges.Add($"V{currentRow}:W{currentRow}");
-
-                        zebraState = !zebraState;
                         currentRow++;
+
+                        foreach (var inst in catGroup)
+                        {
+                            var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
+                            if (rule == null) continue;
+
+                            var checkRow = CreateCheckRow(
+                                currentRow,
+                                rule.Id,
+                                rule.Text,
+                                inst,
+                                initials,
+                                zebraState,
+                                InsertSharedString
+                            );
+
+                            sheetData.AppendChild(checkRow);
+                            dynamicMerges.Add($"C{currentRow}:R{currentRow}");
+                            dynamicMerges.Add($"T{currentRow}:U{currentRow}");
+                            dynamicMerges.Add($"V{currentRow}:W{currentRow}");
+
+                            zebraState = !zebraState;
+                            currentRow++;
+                        }
                     }
                 }
-            }
 
-            // 9. Re-append MergeCells element in schema-valid order
-            if (dynamicMerges.Any())
-            {
-                var newMergeCells = new MergeCells { Count = (uint)dynamicMerges.Count };
-                foreach (var m in dynamicMerges)
+                // 9. Re-append MergeCells element in schema-valid order
+                if (dynamicMerges.Any())
                 {
-                    newMergeCells.AppendChild(new MergeCell { Reference = m });
+                    var newMergeCells = new MergeCells { Count = (uint)dynamicMerges.Count };
+                    foreach (var m in dynamicMerges)
+                    {
+                        newMergeCells.AppendChild(new MergeCell { Reference = m });
+                    }
+
+                    // Insert MergeCells in valid schema position (after SheetData, before ConditionalFormatting/DataValidations/PageMargins/etc.)
+                    var nextElement = ws.Elements<PhoneticProperties>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<ConditionalFormatting>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<DataValidations>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<Hyperlinks>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<PrintOptions>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<PageMargins>().FirstOrDefault() as OpenXmlElement
+                        ?? ws.Elements<PageSetup>().FirstOrDefault() as OpenXmlElement;
+
+                    if (nextElement != null)
+                    {
+                        ws.InsertBefore(newMergeCells, nextElement);
+                    }
+                    else
+                    {
+                        ws.AppendChild(newMergeCells);
+                    }
                 }
 
-                // Insert MergeCells in valid schema position (after SheetData, before ConditionalFormatting/DataValidations/PageMargins/etc.)
-                var nextElement = ws.Elements<PhoneticProperties>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<ConditionalFormatting>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<DataValidations>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<Hyperlinks>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<PrintOptions>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<PageMargins>().FirstOrDefault() as OpenXmlElement
-                    ?? ws.Elements<PageSetup>().FirstOrDefault() as OpenXmlElement;
-
-                if (nextElement != null)
+                // 10. Remove CalculationChainPart if present so Excel rebuilds formulas freshly
+                if (wbPart.CalculationChainPart != null)
                 {
-                    ws.InsertBefore(newMergeCells, nextElement);
+                    wbPart.DeletePart(wbPart.CalculationChainPart);
                 }
-                else
+
+                // 11. Update sst count attributes if present
+                if (sst.Count != null)
                 {
-                    ws.AppendChild(newMergeCells);
+                    sst.Count = (uint)sstCount;
                 }
-            }
+                if (sst.UniqueCount != null)
+                {
+                    sst.UniqueCount = (uint)stringMap.Count;
+                }
 
-            // 10. Remove CalculationChainPart if present so Excel rebuilds formulas freshly
-            if (wbPart.CalculationChainPart != null)
-            {
-                wbPart.DeletePart(wbPart.CalculationChainPart);
-            }
-
-            // 11. Update sst count attributes if present
-            if (sst.Count != null)
-            {
-                sst.Count = (uint)sstCount;
-            }
-            if (sst.UniqueCount != null)
-            {
-                sst.UniqueCount = (uint)stringMap.Count;
-            }
-
-            // Save shared strings, worksheet, and workbook
-            sst.Save();
-            ws.Save();
-            wbPart.Workbook.Save();
+                // Save shared strings, worksheet, and workbook
+                sst.Save();
+                ws.Save();
+                wbPart.Workbook.Save();
             }
         }
 
@@ -625,8 +652,7 @@ namespace AHUVerification.Core.Services
             uint rowIndex,
             string ruleId,
             string text,
-            bool isPassed,
-            string comments,
+            ChecklistInstance inst,
             string initials,
             bool isEvenZebra,
             Func<string, int> insertSharedString)
@@ -649,15 +675,34 @@ namespace AHUVerification.Core.Services
             }
             row.AppendChild(new Cell { CellReference = $"R{rowIndex}", StyleIndex = rEndStyle });
 
-            row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle });
+            string naVal = "";
+            if (inst.Applicability == RuleApplicability.NeedsInput) naVal = "Needs Input";
+            else if (inst.Applicability == RuleApplicability.NotApplicable) naVal = "Not Applicable";
+            else if (inst.Status == CheckStatus.NA) naVal = "N/A";
 
-            string detailerVal = isPassed ? "Yes" : "0";
+            if (!string.IsNullOrEmpty(naVal))
+            {
+                row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(naVal).ToString()) });
+            }
+            else
+            {
+                row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle });
+            }
+
+            string detailerVal = "0";
+            if (inst.Applicability == RuleApplicability.NeedsInput) detailerVal = "Needs Input";
+            else if (inst.Applicability == RuleApplicability.NotApplicable) detailerVal = "Not Applicable";
+            else if (inst.Status == CheckStatus.NA) detailerVal = "N/A";
+            else if (inst.Status == CheckStatus.Passed) detailerVal = "Yes";
+            else if (inst.Status == CheckStatus.Flagged) detailerVal = "Flagged";
+
             row.AppendChild(new Cell { CellReference = $"T{rowIndex}", StyleIndex = tStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(detailerVal).ToString()) });
             row.AppendChild(new Cell { CellReference = $"U{rowIndex}", StyleIndex = tStyle });
 
             row.AppendChild(new Cell { CellReference = $"V{rowIndex}", StyleIndex = tStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString("0").ToString()) });
             row.AppendChild(new Cell { CellReference = $"W{rowIndex}", StyleIndex = wEndStyle });
 
+            string comments = inst.DetailerComment;
             if (!string.IsNullOrEmpty(comments))
             {
                 row.AppendChild(new Cell { CellReference = $"Y{rowIndex}", StyleIndex = 19U, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(comments).ToString()) });

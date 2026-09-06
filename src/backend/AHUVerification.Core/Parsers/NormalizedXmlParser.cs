@@ -58,11 +58,14 @@ namespace AHUVerification.Core.Parsers
             XElement root = doc.Root ?? throw new InvalidOperationException("XML has no root element.");
 
             var graph = new NormalizedXmlGraph();
+            var missingFacts = new HashSet<string>(StringComparer.Ordinal);
 
             // Root elements
             graph.UnitMOMID = GetChildText(root, "unit_MOMID", "{00000000-0000-0000-0000-000000000000}");
             graph.UnitWeight = GetChildDouble(root, "unitWeight", 0);
             graph.TotalStaticPressure = GetChildDouble(root, "totalStaticPressure", 0);
+            if (!HasValidNumericChild(root, "unitWeight")) missingFacts.Add("unit.totalWeight");
+            if (!HasValidNumericChild(root, "totalStaticPressure")) missingFacts.Add("unit.totalStaticPressure");
 
             graph.Dimensions = new UnitDimensions
             {
@@ -99,35 +102,58 @@ namespace AHUVerification.Core.Parsers
             var unitOptNode = FindElement(root, "unitOptions");
             if (unitOptNode != null)
             {
-                graph.UnitOptions.UnitType = GetChildText(unitOptNode, "unitType", "Outdoor");
+                graph.UnitOptions.UnitType = GetChildText(unitOptNode, "unitType", "");
                 graph.UnitOptions.BrandOption = GetChildText(unitOptNode, "brandOption", "YORKCustom");
                 graph.UnitOptions.UnitConstructionType = GetChildText(unitOptNode, "unitConstructionType", "Standard");
                 graph.UnitOptions.ShippingProtection = GetChildText(unitOptNode, "shippingProtection", "ShrinkWrap");
                 graph.UnitOptions.IsSeismic = graph.UnitOptions.UnitConstructionType.Equals("IBC", StringComparison.OrdinalIgnoreCase) ||
                                               graph.UnitOptions.UnitConstructionType.Equals("OSHPD", StringComparison.OrdinalIgnoreCase);
                 graph.UnitOptions.Noa = graph.UnitOptions.UnitConstructionType.Equals("NOA", StringComparison.OrdinalIgnoreCase);
+                graph.UnitOptions.NoaRating = graph.UnitOptions.Noa ? "NOA" : "N/A";
+                if (!new[] { "Standard", "IBC", "OSHPD", "NOA" }.Contains(graph.UnitOptions.UnitConstructionType, StringComparer.OrdinalIgnoreCase))
+                {
+                    missingFacts.Add("unit.isSeismic");
+                    missingFacts.Add("unit.noa");
+                }
                 graph.UnitOptions.Washdown = GetChildBool(unitOptNode, "washdown", false);
                 graph.UnitOptions.Knockdown = GetChildBool(unitOptNode, "knockdown", false);
                 graph.UnitOptions.PrimaryAccessSide = GetChildText(unitOptNode, "primaryAccessSide", "Left");
-                graph.UnitOptions.DefaultUnitBaseHeight = GetChildDouble(unitOptNode, "defaultUnitBaseHeight", 10);
+                graph.UnitOptions.DefaultUnitBaseHeight = GetChildDouble(unitOptNode, "defaultUnitBaseHeight", 0);
+
+                if (!HasChildValue(unitOptNode, "unitType")) missingFacts.Add("unit.unitType");
+                if (!HasChildValue(unitOptNode, "unitConstructionType"))
+                {
+                    missingFacts.Add("unit.isSeismic");
+                    missingFacts.Add("unit.noa");
+                    missingFacts.Add("unit.shellType");
+                    missingFacts.Add("unit.thermalBreak");
+                }
+                if (!HasValidNumericChild(unitOptNode, "defaultUnitBaseHeight")) missingFacts.Add("unit.baseHeight");
+                if (!HasChildValue(unitOptNode, "knockdown")) missingFacts.Add("unit.knockdown");
 
                 var constOptNode = FindElement(unitOptNode, "defaultConstructionOptions");
                 if (constOptNode != null)
                 {
-                    graph.UnitOptions.Materials.ExteriorMaterialType = GetChildText(constOptNode, "exteriorMaterialType", "STL GALV PPC");
-                    graph.UnitOptions.Materials.ExteriorMaterialGauge = GetChildInt(constOptNode, "exteriorMaterialGauge", 18);
-                    graph.UnitOptions.Materials.InteriorMaterialType = GetChildText(constOptNode, "interiorMaterialType", "STL GALV");
-                    graph.UnitOptions.Materials.InteriorMaterialGauge = GetChildInt(constOptNode, "interiorMaterialGauge", 22);
-                    graph.UnitOptions.Materials.FloorMaterialType = GetChildText(constOptNode, "floorMaterialType", "STL GALV");
-                    
-                    string floorGaugeRaw = GetChildText(constOptNode, "floorMaterialGauge", "16");
-                    graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
-                    graph.UnitOptions.Materials.FloorMaterialGauge = int.TryParse(floorGaugeRaw, out int fgInt) ? fgInt : 16;
+                    graph.UnitOptions.Materials.ExteriorMaterialType = GetChildText(constOptNode, "exteriorMaterialType", "");
+                    graph.UnitOptions.Materials.ExteriorMaterialGauge = GetChildInt(constOptNode, "exteriorMaterialGauge", 0);
+                    graph.UnitOptions.Materials.InteriorMaterialType = GetChildText(constOptNode, "interiorMaterialType", "");
+                    graph.UnitOptions.Materials.InteriorMaterialGauge = GetChildInt(constOptNode, "interiorMaterialGauge", 0);
+                    graph.UnitOptions.Materials.FloorMaterialType = GetChildText(constOptNode, "floorMaterialType", "");
 
-                    string rawStyle = GetChildText(constOptNode, "housingStyle", "ThermalBreak");
+                    string floorGaugeRaw = GetChildText(constOptNode, "floorMaterialGauge", "");
+                    graph.UnitOptions.Materials.FloorMaterialGaugeString = floorGaugeRaw;
+                    graph.UnitOptions.Materials.FloorMaterialGauge = double.TryParse(floorGaugeRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out double fgVal) ? (int)Math.Round(fgVal) : 0;
+
+                    string rawStyle = GetChildText(constOptNode, "housingStyle", "");
                     graph.UnitOptions.Materials.HousingStyle = rawStyle;
-                    graph.UnitOptions.ThermalBreak = rawStyle.Contains("ThermalBreak", StringComparison.OrdinalIgnoreCase) || !rawStyle.Equals("Standard", StringComparison.OrdinalIgnoreCase);
-                    graph.UnitOptions.Materials.InsulationType = GetChildText(constOptNode, "insulationType", "Foam");
+                    string normalizedStyle = rawStyle.ToLowerInvariant().Replace(" ", "").Replace("_", "").Replace("-", "");
+                    graph.UnitOptions.ThermalBreak = normalizedStyle.Contains("thermalbreak", StringComparison.Ordinal) || !normalizedStyle.Equals("standard", StringComparison.Ordinal);
+                    if (string.IsNullOrEmpty(rawStyle) || (!normalizedStyle.Contains("thermalbreak", StringComparison.Ordinal) && !normalizedStyle.Equals("standard", StringComparison.Ordinal)))
+                    {
+                        missingFacts.Add("unit.shellType");
+                        missingFacts.Add("unit.thermalBreak");
+                    }
+                    graph.UnitOptions.Materials.InsulationType = GetChildText(constOptNode, "insulationType", "");
 
                     graph.UnitOptions.Materials.ExteriorPaintType = GetChildText(constOptNode, "exteriorPaintType", "None");
                     graph.UnitOptions.Materials.InteriorPaintType = GetChildText(constOptNode, "interiorPaintType", "None");
@@ -139,7 +165,56 @@ namespace AHUVerification.Core.Parsers
                     graph.UnitOptions.Materials.HousingThicknessBottom = GetChildDouble(constOptNode, "housingThicknessBottom", 0.0);
                     graph.UnitOptions.Materials.HousingThicknessLeft = GetChildDouble(constOptNode, "housingThicknessLeft", 2.0);
                     graph.UnitOptions.Materials.HousingThicknessRight = GetChildDouble(constOptNode, "housingThicknessRight", 2.0);
+
+                    foreach (var key in new[] { "casing.exteriorMaterial", "casing.interiorMaterial", "casing.floorMaterial", "casing.insulationType" })
+                    {
+                        string source = key switch
+                        {
+                            "casing.exteriorMaterial" => "exteriorMaterialType",
+                            "casing.interiorMaterial" => "interiorMaterialType",
+                            "casing.floorMaterial" => "floorMaterialType",
+                            _ => "insulationType"
+                        };
+                        if (!HasChildValue(constOptNode, source)) missingFacts.Add(key);
+                    }
+                    foreach (var key in new[] { "casing.exteriorGauge", "casing.interiorGauge", "casing.floorGauge", "casing.thicknessFront", "casing.thicknessTop" })
+                    {
+                        string source = key switch
+                        {
+                            "casing.exteriorGauge" => "exteriorMaterialGauge",
+                            "casing.interiorGauge" => "interiorMaterialGauge",
+                            "casing.floorGauge" => "floorMaterialGauge",
+                            "casing.thicknessFront" => "housingThicknessFront",
+                            _ => "housingThicknessTop"
+                        };
+                        if (!HasValidNumericChild(constOptNode, source)) missingFacts.Add(key);
+                    }
+                    if (!HasChildValue(constOptNode, "housingStyle"))
+                    {
+                        missingFacts.Add("unit.shellType");
+                        missingFacts.Add("unit.thermalBreak");
+                    }
                 }
+                else
+                {
+                    missingFacts.UnionWith(new[]
+                    {
+                        "unit.shellType", "unit.thermalBreak", "casing.exteriorMaterial",
+                        "casing.exteriorGauge", "casing.interiorMaterial", "casing.interiorGauge",
+                        "casing.floorMaterial", "casing.floorGauge", "casing.insulationType",
+                        "casing.thicknessFront", "casing.thicknessTop"
+                    });
+                }
+            }
+            else
+            {
+                missingFacts.UnionWith(new[]
+                {
+                    "unit.unitType", "unit.baseHeight", "unit.knockdown", "unit.isSeismic", "unit.noa",
+                    "unit.shellType", "unit.thermalBreak", "casing.exteriorMaterial", "casing.exteriorGauge",
+                    "casing.interiorMaterial", "casing.interiorGauge", "casing.floorMaterial", "casing.floorGauge",
+                    "casing.insulationType", "casing.thicknessFront", "casing.thicknessTop"
+                });
             }
 
             // Roof Options
@@ -150,7 +225,7 @@ namespace AHUVerification.Core.Parsers
                 graph.RoofOptions.RoofSlope = GetChildDouble(roofNode, "roofSlope", 0.25);
                 string highSide = GetChildText(roofNode, "roofSlopeHighSide", "Internal");
                 graph.RoofOptions.RoofSlopeHighSide = highSide;
-                
+
                 if (highSide.Equals("Internal", StringComparison.OrdinalIgnoreCase) || highSide.Equals("Center", StringComparison.OrdinalIgnoreCase))
                     graph.RoofOptions.RoofPeak = "Internal (Center)";
                 else if (highSide.Equals("Left", StringComparison.OrdinalIgnoreCase))
@@ -161,6 +236,14 @@ namespace AHUVerification.Core.Parsers
                     graph.RoofOptions.RoofPeak = graph.RoofOptions.HasSlopedRoof ? "Internal (Center)" : "Flat";
 
                 graph.RoofOptions.RoofPeakZDim = GetChildDouble(roofNode, "roofPeakZDim", 97);
+                if (!HasChildValue(roofNode, "hasSlopedRoof")) missingFacts.Add("roof.hasSlopedRoof");
+                if (!HasValidNumericChild(roofNode, "roofSlope")) missingFacts.Add("roof.roofSlope");
+                if (!HasChildValue(roofNode, "roofSlopeHighSide")) missingFacts.Add("roof.roofPeak");
+                if (!HasValidNumericChild(roofNode, "roofPeakZDim")) missingFacts.Add("roof.roofPeakZDim");
+            }
+            else
+            {
+                missingFacts.UnionWith(new[] { "roof.hasSlopedRoof", "roof.roofPeak", "roof.roofSlope", "roof.roofPeakZDim" });
             }
 
             // Curb Options
@@ -168,7 +251,9 @@ namespace AHUVerification.Core.Parsers
             if (curbNode != null)
             {
                 graph.CurbOptions.HasCurbRest = GetChildBool(curbNode, "hasCurbRest", true);
+                if (!HasChildValue(curbNode, "hasCurbRest")) missingFacts.Add("unit.curbrest");
             }
+            else missingFacts.Add("unit.curbrest");
 
             // Testing Options
             var testNode = FindElement(root, "testingOptions");
@@ -178,12 +263,19 @@ namespace AHUVerification.Core.Parsers
                 graph.TestingOptions.LeakageTest = GetChildText(testNode, "leakageTest", "None");
                 graph.TestingOptions.FanVibrationTest = GetChildText(testNode, "fanVibrationTest", "None");
                 graph.TestingOptions.RequireCustomerWitness = GetChildBool(testNode, "requireCustomerWitness", false);
+                if (!HasChildValue(testNode, "deflectionTest")) missingFacts.Add("unit.deflectionTest");
             }
+            else missingFacts.Add("unit.deflectionTest");
 
             // Unit Bases
             double maxLipHeight = 0;
             var baseList = FindElement(root, "unitBaseList");
             var baseNodes = baseList != null ? FindElements(baseList, "unitBase") : FindDescendants(root, "unitBase");
+            if (baseNodes.Count == 0)
+            {
+                missingFacts.Add("unit.lipHeight");
+                missingFacts.Add("unit.hasUTL");
+            }
             int baseIdx = 1;
             foreach (var b in baseNodes)
             {
@@ -451,8 +543,8 @@ namespace AHUVerification.Core.Parsers
             if (openingListNode != null)
             {
                 int opIdx = 1;
-                bool isFloorAl = graph.UnitOptions.Materials.FloorMaterialType.Contains("AL", StringComparison.OrdinalIgnoreCase);
-                double defaultDrainHoleDia = isFloorAl ? 3.125 : 1.50;
+                double? defaultDrainHoleDia = ApprovedFloorDrainHoleDiameter(graph.UnitOptions.Materials.FloorMaterialType);
+                if (defaultDrainHoleDia == null) missingFacts.Add("casing.floorMaterial");
 
                 foreach (var opEl in openingListNode.Elements())
                 {
@@ -528,11 +620,12 @@ namespace AHUVerification.Core.Parsers
                             Type = fdEl != null ? GetChildText(fdEl, "floorDrainType", "Standard") : "Standard",
                             PipingMaterial = fdEl != null ? GetChildText(fdEl, "pipingMaterial", "StainlessSteel") : "StainlessSteel",
                             ConnectionDiameter = fdEl != null ? GetChildDouble(fdEl, "connectionDiameter", 1.25) : 1.25,
-                            HoleDiameter = defaultDrainHoleDia,
+                            HoleDiameter = defaultDrainHoleDia ?? 0,
                             ConnectionSide = fdEl != null ? GetChildText(fdEl, "connectionSide", "Left") : "Left",
                             Geometry = opGeom
                         };
                         graph.FloorDrains.Add(fd);
+                        if (defaultDrainHoleDia == null) missingFacts.Add($"floorDrain.{fd.Id}.holeDiameter");
                         if (segMap.TryGetValue(segId, out var seg))
                         {
                             seg.FloorDrains.Add(fd);
@@ -578,6 +671,10 @@ namespace AHUVerification.Core.Parsers
 
                     opIdx++;
                 }
+            }
+            else
+            {
+                missingFacts.UnionWith(new[] { "opening.totalCount", "door.totalCount", "damper.totalCount", "floorDrain.totalCount", "unit.hasFloorDrains" });
             }
 
             // Set unit-level aggregations
@@ -663,7 +760,44 @@ namespace AHUVerification.Core.Parsers
                 mcIdx++;
             }
 
+            graph.MissingFacts = missingFacts.OrderBy(x => x, StringComparer.Ordinal).ToList();
+            graph.SourceFieldStates = missingFacts.ToDictionary(key => key, _ => "absent", StringComparer.OrdinalIgnoreCase);
             return graph;
+        }
+
+        private static bool HasChildValue(XElement? parent, string localName)
+        {
+            return parent != null && FindElement(parent, localName) is XElement element && !string.IsNullOrWhiteSpace(element.Value);
+        }
+
+        private static bool HasValidNumericChild(XElement? parent, string localName)
+        {
+            if (!HasChildValue(parent, localName)) return false;
+            return double.TryParse(GetChildText(parent!, localName), NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
+                && double.IsFinite(value);
+        }
+
+        private static double? ApprovedFloorDrainHoleDiameter(string? rawMaterial)
+        {
+            if (string.IsNullOrWhiteSpace(rawMaterial)) return null;
+            var tokens = rawMaterial.Trim().ToUpperInvariant().Replace('_', ' ').Replace('-', ' ')
+                .Split(new[] { ' ', '\t', '\r', '\n', '/', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            bool IsGauge(string token) => token.All(char.IsDigit) || (token.EndsWith("GA", StringComparison.Ordinal) && token[..^2].All(char.IsDigit));
+            bool Allowed(HashSet<string> allowed) => tokens.All(token => allowed.Contains(token) || IsGauge(token));
+            var aluminum = new HashSet<string>(new[] { "AL", "ALUM", "ALUMINUM", "TREAD", "DIAMOND", "PLATE", "PPC" }, StringComparer.Ordinal);
+            var stainless = new HashSet<string>(new[] { "SS", "SS304", "STAINLESS", "STEEL", "304", "316" }, StringComparer.Ordinal);
+            var galvanized = new HashSet<string>(new[] { "STL", "GALV", "PPC" }, StringComparer.Ordinal);
+            if (tokens.Any(t => t is "AL" or "ALUM" or "ALUMINUM") && Allowed(aluminum))
+                return 3.125;
+            if (tokens.Any(t => t is "SS" or "SS304" or "STAINLESS") && Allowed(stainless))
+                return 1.50;
+            if (tokens.Contains("STL") && tokens.Contains("GALV") && Allowed(galvanized)) return 1.50;
+            return null;
+        }
+
+        private static string NormalizeCode(string value)
+        {
+            return new string((value ?? "").Trim().ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
         }
 
         private static Dimensions ParseDimensions(XElement? geom)
@@ -713,7 +847,8 @@ namespace AHUVerification.Core.Parsers
         private static string GetChildText(XElement parent, string localName, string? defaultVal = "")
         {
             var el = FindElement(parent, localName);
-            return el?.Value?.Trim() ?? defaultVal ?? "";
+            string? val = el?.Value?.Trim();
+            return !string.IsNullOrEmpty(val) ? val : (defaultVal ?? "");
         }
 
         private static double GetChildDouble(XElement parent, string localName, double defaultVal = 0)
@@ -725,7 +860,7 @@ namespace AHUVerification.Core.Parsers
         private static int GetChildInt(XElement parent, string localName, int defaultVal = 0)
         {
             string txt = GetChildText(parent, localName);
-            return int.TryParse(txt, NumberStyles.Any, CultureInfo.InvariantCulture, out int val) ? val : defaultVal;
+            return double.TryParse(txt, NumberStyles.Any, CultureInfo.InvariantCulture, out double val) ? (int)Math.Round(val) : defaultVal;
         }
 
         private static bool GetChildBool(XElement parent, string localName, bool defaultVal = false)

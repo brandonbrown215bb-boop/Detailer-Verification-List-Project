@@ -1,4 +1,5 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
@@ -44,15 +45,36 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   const titleId = `modal-title-${cleanId}`;
   const descId = subtitle ? `modal-desc-${cleanId}` : undefined;
 
-  const containerRef = useFocusTrap<HTMLDivElement>(isOpen, {
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const existingRoot = document.getElementById('modal-root');
+    const root = existingRoot || document.createElement('div');
+    if (!existingRoot) {
+      root.id = 'modal-root';
+      document.body.appendChild(root);
+    }
+    setPortalRoot(root);
+
+    return () => {
+      // Keep a shared root while another ModalShell is mounted or open.
+      if (!existingRoot && root.childElementCount === 0) root.remove();
+    };
+  }, []);
+
+  // The portal root is created in an effect, so defer trap activation until
+  // the dialog is actually mounted. This makes first-open focus deterministic.
+  const modalActive = isOpen && portalRoot !== null;
+  const containerRef = useFocusTrap<HTMLDivElement>(modalActive, {
     onEscape: onClose,
     initialFocusRef,
     returnFocusRef
   });
 
-  if (!isOpen) return null;
+  if (!isOpen || !portalRoot) return null;
 
-  return (
+  return createPortal((
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
@@ -111,5 +133,5 @@ export const ModalShell: React.FC<ModalShellProps> = ({
         )}
       </div>
     </div>
-  );
+  ), portalRoot);
 };

@@ -1,132 +1,182 @@
-name: Production Release & Installer Packaging
+name: Production Release and Installer Packaging
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.0.0 or v1.0.0)'
+        description: 'Release version (for example 1.0.0 or 1.0.0-rc1)'
         required: true
-        default: '1.0.0'
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: production-release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   NUGET_XMLDOC_MODE: skip
+  VPK_VERSION: 1.2.0
 
 jobs:
-  build-and-release:
-    name: Build, Package & Publish Release
+  verification:
+    name: Full verification (Node, .NET, Playwright, publish smoke)
+    uses: ./.github/workflows/codex-verification.yml
+    with:
+      publish_artifacts: true
+    secrets: inherit
+
+  package:
+    name: Package and publish release
+    needs: verification
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Determine Release Version
-        id: semver
-        shell: pwsh
-        run: |
-          $rawVer = if ($env:GITHUB_REF_TYPE -eq 'tag') {
-            $env:GITHUB_REF_NAME
-          } else {
-            "${{ github.event.inputs.version }}"
-          }
-          $cleanVer = $rawVer.TrimStart('v')
-          Write-Host "Configuring build for release version: $cleanVer"
-          "version=$cleanVer" >> $env:GITHUB_OUTPUT
-          "tag=v$cleanVer" >> $env:GITHUB_OUTPUT
-
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '22'
+          node-version: '22.18.0'
           cache: npm
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.408'
 
-      - name: Install dependencies and build frontend
+      - name: Determine and validate release version
+        id: version
         shell: pwsh
         run: |
-          npm ci --no-audit --no-fund
-          npm run build
+          $raw = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { '${{ inputs.version }}' }
+          $clean = $raw.Trim() -replace '^[vV]', ''
+          if ($clean -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
+            throw "Release version '$clean' is not valid SemVer."
+          }
+          "version=$clean" >> $env:GITHUB_OUTPUT
+          "tag=v$clean" >> $env:GITHUB_OUTPUT
+          "VITE_APP_VERSION=$clean" >> $env:GITHUB_ENV
 
-      - name: Validate Rule Pack integrity
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build and verify frontend package
+        shell: pwsh
+        run: |
+          npm run build
+          node scripts/verify_version.mjs --expected '${{ steps.version.outputs.version }}' --check-dist
+          node scripts/verify_dist_assets.mjs
+          node scripts/verify_bundle_budget.mjs
+
+      - name: Assert deterministic Rule Pack output
         shell: pwsh
         run: |
           node scripts/build_rulepack.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dirty = git status --porcelain -- resources/rulepack
+          if ($dirty) {
+            Write-Host $dirty
+            throw 'Rule Pack generation changed tracked files; commit the canonical output before tagging a release.'
+          }
 
-      - name: Run Backend Tests
-        run: dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release
+      - name: Publish AHU Verification app
+        run: dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -o publish/AHUVerification /p:Version=${{ steps.version.outputs.version }}
 
-      - name: Publish Detailer App (Self-Contained win-x64)
-        run: dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -o publish/AHUVerification /p:Version=${{ steps.semver.outputs.version }}
+      - name: Publish Rule Editor
+        run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained true -o publish/RuleEditor /p:Version=${{ steps.version.outputs.version }}
 
-      - name: Validate Packaged Native Assets
+      - name: Validate packaged assets
         shell: pwsh
         run: |
           $required = @(
             'publish/AHUVerification/AHUVerification.App.exe',
             'publish/AHUVerification/dist/index.html',
+            'publish/AHUVerification/dist/rule-editor.html',
+            'publish/AHUVerification/version.json',
             'publish/AHUVerification/resources/rulepack/manifest.json',
+            'publish/AHUVerification/resources/rulepack/rules.json',
+            'publish/AHUVerification/resources/rulepack/template_map.json',
+            'publish/AHUVerification/resources/rulepack/approved_mappings.json',
+            'publish/AHUVerification/resources/rulepack/fact_contract.json',
+            'publish/AHUVerification/resources/rulepack/template.xlsx',
             'publish/AHUVerification/resources/bin/unpack32.exe',
-            'publish/AHUVerification/resources/bin/ywunpack.dll'
+            'publish/AHUVerification/resources/bin/ywunpack.dll',
+            'publish/RuleEditor/RuleEditor.exe',
+            'publish/RuleEditor/dist/rule-editor.html',
+            'publish/RuleEditor/version.json',
+            'publish/RuleEditor/resources/rulepack/manifest.json',
+            'publish/RuleEditor/resources/rulepack/rules.json',
+            'publish/RuleEditor/resources/rulepack/template_map.json',
+            'publish/RuleEditor/resources/rulepack/approved_mappings.json',
+            'publish/RuleEditor/resources/rulepack/fact_contract.json',
+            'publish/RuleEditor/resources/rulepack/template.xlsx'
           )
-          foreach ($p in $required) {
-            if (-not (Test-Path $p)) {
-              Write-Error "Missing required release asset: $p"
-              exit 1
-            }
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required publish asset is missing: $path" }
           }
+          node scripts/verify_version.mjs --expected '${{ steps.version.outputs.version }}' --publish-dir publish/AHUVerification --publish-dir publish/RuleEditor
 
-      - name: Install Velopack CLI Tool
+      - name: Install pinned Velopack CLI
         shell: pwsh
         run: |
-          dotnet tool install -g vpk
+          dotnet tool install --global vpk --version $env:VPK_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tool = dotnet tool list --global | Select-String '^\s*vpk\s+'
+          if (-not $tool -or $tool.ToString() -notmatch '\bvpk\s+1\.2\.0\s+vpk\s*$') { throw "Expected global vpk $env:VPK_VERSION was not found." }
 
-      - name: Download Previous Release for Delta Generation
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "${{ secrets.GITHUB_TOKEN }}" -o Releases
-
-      - name: Package Velopack 1-Click Installer
+      - name: Package Velopack installer
         shell: pwsh
         run: |
-          vpk pack --packId AHUVerification --packVersion ${{ steps.semver.outputs.version }} --packDir publish/AHUVerification --mainExe AHUVerification.App.exe -o Releases
+          $existing = @(Get-ChildItem -LiteralPath Releases -Force -ErrorAction SilentlyContinue)
+          if ($existing.Count -ne 0) { throw 'Releases directory must be empty before packaging; refusing to reuse stale artifacts.' }
+          New-Item -ItemType Directory -Path Releases -Force | Out-Null
+          vpk pack --packId AHUVerification --packVersion '${{ steps.version.outputs.version }}' --packDir publish/AHUVerification --mainExe AHUVerification.App.exe -o Releases
+          if ($LASTEXITCODE -ne 0) { throw 'Velopack packaging failed.' }
+          $setup = @(Get-ChildItem -LiteralPath Releases -Filter '*-Setup.exe' -File)
+          if ($setup.Count -ne 1) { throw "Expected exactly one Velopack Setup.exe, found $($setup.Count)." }
+          $required = @('Releases/RELEASES', 'Releases/assets.win.json', 'Releases/releases.win.json')
+          $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) })
+          if (@(Get-ChildItem -LiteralPath Releases -Filter '*.nupkg' -File).Count -lt 1) { throw 'Velopack did not produce a .nupkg package.' }
+          if ($missing.Count -ne 0) { throw "Missing Velopack output: $($missing -join ', ')" }
 
-      - name: Publish Rule Editor Studio (Self-Contained win-x64)
-        run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained true -o publish/RuleEditor /p:Version=${{ steps.semver.outputs.version }}
+      - name: Archive Rule Editor
+        shell: pwsh
+        run: Compress-Archive -Path publish/RuleEditor/* -DestinationPath "Releases/RuleEditor-${{ steps.version.outputs.version }}-win-x64.zip" -Force
 
-      - name: Archive Rule Editor Admin Package
+      - name: Generate dependency SBOMs
         shell: pwsh
         run: |
-          Compress-Archive -Path publish/RuleEditor/* -DestinationPath "RuleEditor-${{ steps.semver.outputs.version }}-win-x64.zip" -Force
+          dotnet list src/backend/AHUVerification.App/AHUVerification.App.csproj package --include-transitive --format json | Set-Content -LiteralPath Releases/sbom-dotnet.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm sbom --sbom-format cyclonedx | Set-Content -LiteralPath Releases/sbom-node.cdx.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Generate release checksums
+        shell: pwsh
+        run: |
+          node scripts/write_release_checksums.mjs Releases
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107630ec6cbb1f3cce8 # v2.3.2
         with:
-          tag_name: ${{ steps.semver.outputs.tag }}
-          name: AHU Verification Desktop ${{ steps.semver.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: AHU Verification Desktop ${{ steps.version.outputs.tag }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           files: |
-            Releases/*-Setup.exe
-            Releases/*-delta.nupkg
-            Releases/releases.win.json
-            RuleEditor-${{ steps.semver.outputs.version }}-win-x64.zip
-
+            Releases/*

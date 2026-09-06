@@ -56,8 +56,8 @@ async function main() {
   console.log('[Suite 1/4] Fact Registry Reducers & Provenance History...');
 
   runTest('1.1 createFact initializes baseline state with empty history', () => {
-    const fact = createFact('unit.weight', 'Unit Weight', 'Physical', 4500, 'Derived', 'Authoritative', '/root:AHU/weight');
-    assert.strictEqual(fact.key, 'unit.weight');
+    const fact = createFact('unit.totalWeight', 'Unit Weight', 'Physical', 4500, 'Derived', 'Authoritative', '/root:AHU/weight');
+    assert.strictEqual(fact.key, 'unit.totalWeight');
     assert.strictEqual(fact.value, 4500);
     assert.strictEqual(fact.sourceRawValue, 4500);
     assert.strictEqual(fact.status, 'Derived');
@@ -67,17 +67,17 @@ async function main() {
 
   runTest('1.2 overrideFact produces immutable updated registry with audit history', () => {
     const initialRegistry = {
-      'unit.weight': createFact('unit.weight', 'Unit Weight', 'Physical', 4500, 'Derived', 'RequiresConfirmation')
+      'unit.totalWeight': createFact('unit.totalWeight', 'Unit Weight', 'Physical', 4500, 'Derived', 'RequiresConfirmation')
     };
 
-    const updatedRegistry = overrideFact(initialRegistry, 'unit.weight', 5200, 'Senior Detailer', 'Field scale verification');
+    const updatedRegistry = overrideFact(initialRegistry, 'unit.totalWeight', 5200, 'Senior Detailer', 'Field scale verification');
 
     // Immutability: original is unchanged
-    assert.strictEqual(initialRegistry['unit.weight'].value, 4500);
-    assert.strictEqual(initialRegistry['unit.weight'].overrideHistory.length, 0);
+    assert.strictEqual(initialRegistry['unit.totalWeight'].value, 4500);
+    assert.strictEqual(initialRegistry['unit.totalWeight'].overrideHistory.length, 0);
 
     // Updated record has new value and history entry
-    const updatedFact = updatedRegistry['unit.weight'];
+    const updatedFact = updatedRegistry['unit.totalWeight'];
     assert.strictEqual(updatedFact.value, 5200);
     assert.strictEqual(updatedFact.status, 'ManuallyOverridden');
     assert.strictEqual(updatedFact.confidence, 'Authoritative');
@@ -107,21 +107,32 @@ async function main() {
 
   runTest('1.4 revertFact restores sourceRawValue and original status', () => {
     const initialRegistry = {
-      'unit.weight': createFact('unit.weight', 'Unit Weight', 'Physical', 4500, 'Known', 'Authoritative', '/root:AHU/weight')
+      'unit.totalWeight': createFact('unit.totalWeight', 'Unit Weight', 'Physical', 4500, 'Known', 'Authoritative', '/root:AHU/weight')
     };
 
-    const overridden = overrideFact(initialRegistry, 'unit.weight', 9999, 'Detailer');
-    assert.strictEqual(overridden['unit.weight'].value, 9999);
+    const overridden = overrideFact(initialRegistry, 'unit.totalWeight', 9999, 'Detailer');
+    assert.strictEqual(overridden['unit.totalWeight'].value, 9999);
 
-    const reverted = revertFact(overridden, 'unit.weight');
-    assert.strictEqual(reverted['unit.weight'].value, 4500);
-    assert.strictEqual(reverted['unit.weight'].status, 'Known');
+    const reverted = revertFact(overridden, 'unit.totalWeight');
+    assert.strictEqual(reverted['unit.totalWeight'].value, 4500);
+    assert.strictEqual(reverted['unit.totalWeight'].status, 'Known');
   });
 
-  runTest('1.5 overrideFact on non-existent key returns registry safely unchanged', () => {
+  runTest('1.5 overrideFact rejects an unregistered key loudly', () => {
     const initialRegistry = { 'unit.tag': createFact('unit.tag', 'Tag', 'Order', 'AHU-1', 'Known', 'Authoritative') };
-    const res = overrideFact(initialRegistry, 'non.existent.key', 123);
-    assert.strictEqual(res, initialRegistry);
+    assert.throws(() => overrideFact(initialRegistry, 'non.existent.key', 123), /not registered in fact contract/);
+  });
+
+  runTest('1.6 numeric predicates do not coerce missing or boolean values to zero', () => {
+    const predicate = { '>=': [{ var: 'unit.totalWeight' }, 0] };
+    const missing = evaluateAstPredicate(predicate, { 'unit.totalWeight': null }, ['unit.totalWeight'], {
+      'unit.totalWeight': createFact('unit.totalWeight', 'Unit Weight', 'Physical', null, 'Unknown', 'RequiresConfirmation')
+    });
+    assert.strictEqual(missing.needsInput, true);
+    const booleanValue = evaluateAstPredicate(predicate, { 'unit.totalWeight': false }, [], {
+      'unit.totalWeight': createFact('unit.totalWeight', 'Unit Weight', 'Physical', false, 'Known', 'Authoritative')
+    });
+    assert.strictEqual(booleanValue.needsInput, true);
   });
 
   // ---------------------------------------------------------------------------
@@ -291,8 +302,8 @@ async function main() {
       'unit.detailer': createFact('unit.detailer', 'Detailer', 'Order', 'John Doe', 'Known', 'Authoritative')
     };
 
-    const project = await createDvlProject(graph, facts, [], [], rawXml, 'Test comments');
-    assert.strictEqual(project.formatVersion, '1.0');
+    const project = await createDvlProject(graph, facts, [], [], rawXml, 'Test comments', {}, { activeRules: RULES_CATALOG });
+    assert.strictEqual(project.formatVersion, '2.0');
     assert.strictEqual(project.jobName, 'Test Job');
     assert.strictEqual(project.comNumber, 'COM-777');
     assert.strictEqual(project.author, 'John Doe');

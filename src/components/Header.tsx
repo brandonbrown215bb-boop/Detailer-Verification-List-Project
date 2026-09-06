@@ -179,13 +179,13 @@ export const Header: React.FC<HeaderProps> = ({
       <button
         onClick={onOpenSearch}
         title="Search rules, specifications, skids, special quotes (Ctrl+K)"
-        className="hidden md:flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all w-36 lg:w-48 xl:w-56 justify-between group shrink-0"
+        className="hidden md:flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all w-36 lg:w-48 xl:w-56 justify-between group shrink-0"
       >
         <span className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors shrink-0" />
+          <Search className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 transition-colors shrink-0" />
           <span className="truncate text-[11px]">Search...</span>
         </span>
-        <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
+        <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[9px] sm:text-[10px] text-slate-600 dark:text-slate-400 shrink-0">
           Ctrl+K
         </kbd>
       </button>

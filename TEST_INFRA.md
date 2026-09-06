@@ -1,43 +1,42 @@
-# E2E Test Infra: Detailer Verification List Project
+# Verification infrastructure
 
-## Test Philosophy
-- Opaque-box and requirement-driven test verification derived directly from `ORIGINAL_REQUEST.md`.
-- Comprehensive multi-tier test pyramid:
-  - **Tier 1: Feature Coverage (Isolation)**: Direct verification of core functions (XML parsing, AST evaluation, rule pack hashing, bridge serialization, readiness computation).
-  - **Tier 2: Boundary & Corner Cases**: Empty inputs, malformed XML, missing properties, invalid schemas, zero/negative values, extreme file sizes, timeout conditions.
-  - **Tier 3: Cross-Feature Combinations**: Ingestion -> Fact Extraction -> Rule Evaluation -> Override -> Deliverable Generation -> Clean Worktree.
-  - **Tier 4: Real-World Application Workloads**: Full end-to-end user workflows (e2e smoke tests, manual unit creation, search dialog, modal accessibility, rule editor condition conversion).
-  - **Tier 5: Adversarial Hardening**: Stress testing fact resolution matrices, edge cases in formula zeroing, schema fuzzing.
+Run commands from the repository root. Use the Node version specified by `package.json` and the .NET 8 SDK. `AHUVerification.sln` contains Core, both Windows hosts, and the test project.
 
-## Feature Inventory & Test Mapping
-| # | Feature | Source (requirement) | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
-|---|---------|---------------------|:------:|:------:|:------:|:------:|
-| 1 | .gitignore & Worktree Cleanliness | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
-| 2 | Rulepack Generator Idempotence | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
-| 3 | Package.json Toolchain | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
-| 4 | Single-Path XML Parser & Defaults | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
-| 5 | ThermalBreak Logic Alignment | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
-| 6 | Browser Preview Decoupling | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
-| 7 | Frontend Unit Test Pyramid | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
-| 8 | Rendered Component & Axe Tests | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
-| 9 | Local Automation Scripts Parity | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
-| 10 | Typed Bridge Schema Validation | ORIGINAL_REQUEST §R4 | 5 | 5 | ✓ | ✓ |
-| 11 | Bridge Error & ID Preservation | ORIGINAL_REQUEST §R4 | 5 | 5 | ✓ | ✓ |
-| 12 | Fixture Isolation & Sanitization | ORIGINAL_REQUEST §R5 | 5 | 5 | ✓ | ✓ |
-| 13 | Documentation & Manifest Parity | ORIGINAL_REQUEST §R5 | 5 | 5 | ✓ | ✓ |
+## What each check proves
 
-## Test Architecture
-- **Backend Test Runner**: `dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release`
-- **Frontend Test Runner**: `npm test` (running all node unit/property test suites in `scripts/`)
-- **E2E & Accessibility Runner**: `npx playwright test`
-- **Verification Scripts**: `node scripts/test_ast_converter.mjs`, `node scripts/test_readiness.mjs`, `node scripts/stress_test_readiness_adversarial.mjs`, `node scripts/test_modal_accessibility.mjs`, `node scripts/test_ingestion_feedback.mjs`, `node scripts/test_copy_linter.mjs`, `node scripts/test_responsive_contrast.mjs`
-- **Pass/Fail Semantics**: All test suites must exit with code `0`. Worktree must remain strictly clean (`git status --porcelain` is empty).
+| Check | Classification | Evidence and limits |
+| --- | --- | --- |
+| `npm run build` | Compilation and bundling | TypeScript compatibility and both Vite entries; does not establish runtime behavior. |
+| Node readiness, reducer, AST, and contract tests | Unit/regression | Execute domain functions against fixed and adversarial inputs. |
+| Node copy, layout, and source-pattern checks | Structural lint | Inspect source text or color mathematics; do not prove rendered accessibility, IPC, or end-to-end behavior. |
+| `dotnet test AHUVerification.sln` | Unit and service integration | Real C# parsing, fact extraction, evaluation, DVL persistence, Rule Pack validation, and OpenXML workbook assertions. Windows is required for host-referencing tests. |
+| `CanonicalParityAcceptanceTests` | Cross-runtime integration | Launch Node and compare production TypeScript canonical payloads/fingerprints with production C#. Missing Node/dependencies fail the test. |
+| `GoldenProductionPathTests` | Native service integration | UPZ extraction through host processing, persistence, and workbook generation. Calling services directly is not a WebView2 user journey. |
+| `npx playwright test` | Rendered browser integration | Keyboard, focus, axe, and browser-preview behavior. Release verification must serve built output. Browser preview cannot certify desktop exports. |
+| Publish asset checks | Packaging validation | Required files and local asset references are present. File presence does not prove application startup or installation. |
+| `npm run test:coverage` | Measured Core regression gate | Runs the full C# suite with coverlet and enforces the named line/branch floors in [`docs/operations/coverage-baseline.json`](docs/operations/coverage-baseline.json). It does not waive failing tests or certify the native desktop lifecycle. |
 
-## Real-World Application Scenarios (Tier 4)
-| # | Scenario | Features Exercised | Complexity |
-|---|----------|--------------------|------------|
-| 1 | Clean CI Verification Loop | F1, F2, F3, F9 | High |
-| 2 | XML Ingest to Fact Extraction to Deliverable Export | F4, F5, F6, F10, F11 | High |
-| 3 | Accessible Modal Dialog Navigation (Escape, Tab Trap, Axe) | F8, F7 | Medium |
-| 4 | OmniSearch & Keyboard Shortcut Activation | F8, F7 | Medium |
-| 5 | Manual Unit Synthesis & Custom Inspection | F4, F6, F7 | High |
+Tests must fail when a required assertion, fixture, or native tool is absent. A zero exit code without discovered/executed tests is not evidence. Avoid optional assertions that silently skip a required control or workflow.
+
+## Local verification
+
+```powershell
+npm run build
+npm test
+node scripts/test_fact_contract.mjs
+node scripts/test_dvl_canonical.mjs
+npm run test:coverage
+npx playwright test
+npm run test:dist
+npm run test:bundle
+```
+
+After Rule Pack edits, run `node scripts/build_rulepack.mjs` and inspect its changes. A second generation must produce identical bytes. CI additionally requires committed generated output; an intentionally dirty local remediation tree is not a clean-checkout test.
+
+`npm run test:coverage` runs the Release C# suite with `coverlet.collector 6.0.4`, writes Cobertura/TRX output under ignored `TestResults/coverage-core/`, and enforces the observed floors in [`docs/operations/coverage-baseline.json`](docs/operations/coverage-baseline.json). The baseline names the critical Core pipeline classes rather than asserting a whole-repository percentage. Lowering a floor requires a reviewed contract change; coverage never replaces negative-case assertions.
+
+## Release acceptance
+
+Use `build-all.bat`, `run-tests.bat`, and the documented local packaging command after integration. Keep installation, first launch, offline packaged assets, native Rule Editor launch, real WebView2 IPC/export, and uninstall evidence distinct from browser and service tests. Record any unexecuted target-host checks explicitly in the current handoff; passing unit tests do not waive them.
+
+Generated reports, screenshots, coverage files, publish output, and temporary test data belong in ignored output directories. Durable fixtures belong under `tests/fixtures`; retained root UPZ examples are existing native integration inputs and require a separate provenance/sanitization decision before public redistribution.

@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo ======================================================================
@@ -7,117 +7,152 @@ echo  AHU Detailing Verification - Production Release Publisher
 echo ======================================================================
 echo.
 
-call "%~dp0scripts\init_env.bat"
-if %ERRORLEVEL% NEQ 0 (
-    pause
-    exit /b %ERRORLEVEL%
-)
-
-REM 1. Determine Release Version
+REM Automation must supply the release version explicitly. The workflow may derive
+REM it from a tag, but this local publisher must never silently choose a version.
 set "VERSION=%~1"
-if "!VERSION!"=="" (
-    set /p "VERSION=Enter release version (e.g. 1.0.0 or 1.1.0): "
+if not defined VERSION (
+    echo [ERROR] An explicit release version is required.
+    echo         Usage: publish-release.bat 1.2.3
+    exit /b 2
 )
 
-REM Strip leading 'v' or 'V' if present
 if /i "!VERSION:~0,1!"=="v" set "VERSION=!VERSION:~1!"
-
-if "!VERSION!"=="" (
-    echo [ERROR] Release version cannot be empty.
-    pause
-    exit /b 1
-)
-
-REM Validate SemVer format
 powershell -NoProfile -Command "if ('!VERSION!' -match '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') { exit 0 } else { exit 1 }"
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Invalid version '!VERSION!'. Expected SemVer format like '1.0.0' or '1.2.0-rc1'.
-    pause
+if errorlevel 1 (
+    echo [ERROR] Invalid release version '!VERSION!'. Expected SemVer such as 1.2.3 or 1.2.3-rc1.
+    exit /b 2
+)
+
+where vpk >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Velopack CLI vpk 1.2.0 is required before release work begins. Install the pinned tool with: dotnet tool install --global vpk --version 1.2.0
     exit /b 1
 )
-echo [INFO] Configuring release build for version: !VERSION!
-
-REM 2. Build Production Frontend Assets
-echo.
-echo [1/4] Building production frontend into dist\...
-if not exist "node_modules" (
-    echo [INFO] Installing npm packages...
-    call npm install --no-audit --no-fund
-    if %ERRORLEVEL% NEQ 0 (
-        echo [ERROR] Failed to install npm dependencies.
-        pause
-        exit /b %ERRORLEVEL%
-    )
+for /f "tokens=2" %%I in ('dotnet tool list --global ^| findstr /r /c:"^vpk " 2^>nul') do if not defined VPK_VER set "VPK_VER=%%I"
+if not "!VPK_VER!"=="1.2.0" (
+    echo [ERROR] Velopack CLI 1.2.0 is required; found !VPK_VER!.
+    echo         Install the pinned tool with: dotnet tool install --global vpk --version 1.2.0
+    exit /b 1
 )
+
+call "%~dp0scripts\init_env.bat"
+if errorlevel 1 exit /b 1
+
+echo [INFO] Configuring release build for version !VERSION!
+node scripts/verify_version.mjs --expected "!VERSION!"
+if errorlevel 1 (
+    echo [ERROR] Release version does not match the authoritative version metadata.
+    exit /b 1
+)
+
+echo.
+echo [1/10] Installing locked frontend dependencies...
+call npm ci --no-audit --no-fund
+if errorlevel 1 (
+    echo [ERROR] npm ci failed.
+    exit /b 1
+)
+
+echo.
+echo [2/10] Building production frontend into dist\...
+set "VITE_APP_VERSION=!VERSION!"
 call npm run build
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo [ERROR] Frontend build failed.
-    pause
-    exit /b %ERRORLEVEL%
+    exit /b 1
 )
+node scripts/verify_version.mjs --expected "!VERSION!"
+if errorlevel 1 exit /b 1
+node scripts/verify_dist_assets.mjs
+if errorlevel 1 exit /b 1
+node scripts/verify_bundle_budget.mjs
+if errorlevel 1 exit /b 1
 
-REM 3. Verify Rule Pack
 echo.
-echo [2/4] Verifying and hashing Rule Pack Manifest...
+echo [3/10] Verifying deterministic Rule Pack output...
 node scripts/build_rulepack.mjs
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Rule pack verification failed.
-    pause
-    exit /b %ERRORLEVEL%
+if errorlevel 1 (
+    echo [ERROR] Rule Pack generation failed.
+    exit /b 1
+)
+git diff --exit-code -- resources/rulepack
+if errorlevel 1 (
+    echo [ERROR] Rule Pack generation changed tracked files. Commit the canonical manifest before packaging.
+    exit /b 1
 )
 
-REM 4. Publish Main Desktop Application
 echo.
-echo [3/5] Publishing AHU Verification Desktop Application (Self-Contained win-x64)...
+echo [4/10] Running locked frontend verification suite...
+call npm test
+if errorlevel 1 (
+    echo [ERROR] Frontend verification suite failed.
+    exit /b 1
+)
+
+echo.
+echo [5/10] Running .NET verification suite and Core coverage gate...
+call npm run test:coverage
+if errorlevel 1 (
+    echo [ERROR] .NET verification suite or Core coverage gate failed.
+    exit /b 1
+)
+
+echo.
+echo [6/10] Publishing AHU Verification Desktop Application (self-contained win-x64)...
 dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -o publish\AHUVerification /p:Version=!VERSION!
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo [ERROR] Publishing AHUVerification.App failed.
-    pause
-    exit /b %ERRORLEVEL%
+    exit /b 1
 )
 
-REM 5. Publish Rule Editor Studio
 echo.
-echo [4/5] Publishing Rule ^& Logic Editor Studio (Self-Contained win-x64)...
+echo [7/10] Publishing Rule ^& Logic Editor Studio (self-contained win-x64)...
 dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained true -o publish\RuleEditor /p:Version=!VERSION!
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo [ERROR] Publishing RuleEditor failed.
-    pause
-    exit /b %ERRORLEVEL%
+    exit /b 1
 )
 
-REM 6. Package Velopack 1-Click Installer
 echo.
-echo [5/5] Packaging Velopack 1-Click Installer...
-where vpk >nul 2>&1
-if %ERRORLEVEL% NEQ 0 goto :no_vpk
+echo [8/10] Validating packaged entry pages and native assets...
+powershell -NoProfile -Command "$required = @('publish/AHUVerification/AHUVerification.App.exe','publish/AHUVerification/dist/index.html','publish/AHUVerification/dist/rule-editor.html','publish/AHUVerification/version.json','publish/AHUVerification/resources/rulepack/manifest.json','publish/AHUVerification/resources/rulepack/rules.json','publish/AHUVerification/resources/rulepack/template_map.json','publish/AHUVerification/resources/rulepack/approved_mappings.json','publish/AHUVerification/resources/rulepack/fact_contract.json','publish/AHUVerification/resources/rulepack/template.xlsx','publish/AHUVerification/resources/bin/unpack32.exe','publish/AHUVerification/resources/bin/ywunpack.dll','publish/RuleEditor/RuleEditor.exe','publish/RuleEditor/dist/rule-editor.html','publish/RuleEditor/version.json','publish/RuleEditor/resources/rulepack/manifest.json','publish/RuleEditor/resources/rulepack/rules.json','publish/RuleEditor/resources/rulepack/template_map.json','publish/RuleEditor/resources/rulepack/approved_mappings.json','publish/RuleEditor/resources/rulepack/fact_contract.json','publish/RuleEditor/resources/rulepack/template.xlsx'); foreach ($path in $required) { if (-not (Test-Path -LiteralPath $path)) { Write-Error ('Missing required publish asset: ' + $path); exit 1 } }"
+if errorlevel 1 exit /b 1
 
-if not exist "Releases" mkdir Releases
-call vpk pack --packId AHUVerification --packVersion !VERSION! --packDir publish\AHUVerification --mainExe AHUVerification.App.exe -o Releases
-if !ERRORLEVEL! NEQ 0 (
-    echo [WARNING] Velopack packaging encountered an issue. Raw publish folder is still available.
+echo.
+echo [9/10] Packaging Velopack installer with vpk 1.2.0...
+if exist "Releases" (
+    powershell -NoProfile -Command "$entries = @(Get-ChildItem -LiteralPath 'Releases' -Force -ErrorAction SilentlyContinue); if ($entries.Count -ne 0) { Write-Error 'Releases directory must be empty before packaging; refusing to reuse stale artifacts.'; exit 1 }"
+    if errorlevel 1 exit /b 1
 ) else (
-    echo [OK] 1-Click Installer created in Releases\
+    mkdir "Releases"
+    if errorlevel 1 exit /b 1
 )
-goto :vpk_done
+call vpk pack --packId AHUVerification --packVersion !VERSION! --packDir publish\AHUVerification --mainExe AHUVerification.App.exe -o Releases
+if errorlevel 1 (
+    echo [ERROR] Velopack packaging failed.
+    exit /b 1
+)
+powershell -NoProfile -Command "$setup = @(Get-ChildItem -LiteralPath 'Releases' -Filter '*-Setup.exe' -File); $required = @('Releases/RELEASES','Releases/assets.win.json','Releases/releases.win.json'); $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) }); $packages = @(Get-ChildItem -LiteralPath 'Releases' -Filter '*.nupkg' -File); if ($setup.Count -ne 1) { Write-Error ('Expected exactly one Setup.exe, found ' + $setup.Count); exit 1 }; if ($packages.Count -lt 1) { Write-Error 'Velopack did not produce a .nupkg package.'; exit 1 }; if ($missing.Count -gt 0) { Write-Error ('Missing Velopack output: ' + ($missing -join ', ')); exit 1 }"
+if errorlevel 1 exit /b 1
+powershell -NoProfile -Command "Compress-Archive -Path 'publish/RuleEditor/*' -DestinationPath ('Releases/RuleEditor-!VERSION!-win-x64.zip') -Force"
+if errorlevel 1 exit /b 1
 
-:no_vpk
-echo [INFO] Velopack CLI (vpk) not found in PATH.
-echo [INFO] To generate 1-click Setup.exe locally, run: dotnet tool install -g vpk
-
-:vpk_done
+echo.
+echo [10/10] Writing checksums and dependency SBOMs...
+dotnet list src/backend/AHUVerification.App/AHUVerification.App.csproj package --include-transitive --format json > "Releases\sbom-dotnet.json"
+if errorlevel 1 exit /b 1
+call npm sbom --sbom-format cyclonedx > "Releases\sbom-node.cdx.json"
+if errorlevel 1 exit /b 1
+node scripts/write_release_checksums.mjs Releases
+if errorlevel 1 exit /b 1
 
 echo.
 echo ======================================================================
-echo  [SUCCESS] Production release packages (v!VERSION!) published successfully!
-echo.
-echo  Published Artifacts:
-echo    - Main App Folder:    publish\AHUVerification\AHUVerification.App.exe
-echo    - Rule Editor Folder: publish\RuleEditor\RuleEditor.exe
-if exist "Releases\AHUVerification-win-Setup.exe" (
-echo    - 1-Click Installer:  Releases\AHUVerification-win-Setup.exe
-) else if exist "Releases\AHUVerification-Setup.exe" (
-echo    - 1-Click Installer:  Releases\AHUVerification-Setup.exe
-)
+echo  [SUCCESS] Production release packages (v!VERSION!) created successfully.
+echo  Main App Folder:    publish\AHUVerification\AHUVerification.App.exe
+echo  Rule Editor Folder: publish\RuleEditor\RuleEditor.exe
+echo  Velopack Output:    Releases\
+echo  Checksums:          Releases\SHA256SUMS.txt
+echo  SBOMs:              Releases\sbom-dotnet.json and sbom-node.cdx.json
 echo ======================================================================
-pause
+exit /b 0

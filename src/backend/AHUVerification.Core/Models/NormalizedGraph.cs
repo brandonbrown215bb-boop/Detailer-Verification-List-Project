@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using AHUVerification.Core.Utils;
 
 namespace AHUVerification.Core.Models
 {
@@ -28,31 +29,31 @@ namespace AHUVerification.Core.Models
     public class MaterialOptions
     {
         [JsonPropertyName("exteriorMaterialType")]
-        public string ExteriorMaterialType { get; set; } = "STL GALV PPC";
+        public string ExteriorMaterialType { get; set; } = "";
 
         [JsonPropertyName("exteriorMaterialGauge")]
-        public int ExteriorMaterialGauge { get; set; } = 18;
+        public int ExteriorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("interiorMaterialType")]
-        public string InteriorMaterialType { get; set; } = "STL GALV";
+        public string InteriorMaterialType { get; set; } = "";
 
         [JsonPropertyName("interiorMaterialGauge")]
-        public int InteriorMaterialGauge { get; set; } = 22;
+        public int InteriorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("floorMaterialType")]
-        public string FloorMaterialType { get; set; } = "STL GALV";
+        public string FloorMaterialType { get; set; } = "";
 
         [JsonPropertyName("floorMaterialGauge")]
-        public int FloorMaterialGauge { get; set; } = 16;
+        public int FloorMaterialGauge { get; set; } = 0;
 
         [JsonPropertyName("floorMaterialGaugeString")]
-        public string FloorMaterialGaugeString { get; set; } = "16";
+        public string FloorMaterialGaugeString { get; set; } = "";
 
         [JsonPropertyName("housingStyle")]
-        public string HousingStyle { get; set; } = "ThermalBreak";
+        public string HousingStyle { get; set; } = "";
 
         [JsonPropertyName("insulationType")]
-        public string InsulationType { get; set; } = "Foam";
+        public string InsulationType { get; set; } = "";
 
         [JsonPropertyName("exteriorPaintType")]
         public string ExteriorPaintType { get; set; } = "None";
@@ -66,32 +67,32 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("housingThicknessFront")]
         public double HousingThicknessFront { get; set; } = 2.0;
 
-        [JsonPropertyName("housingThicknessRear")]
+        [JsonIgnore]
         public double HousingThicknessRear { get; set; } = 2.0;
 
         [JsonPropertyName("housingThicknessTop")]
         public double HousingThicknessTop { get; set; } = 2.0;
 
-        [JsonPropertyName("housingThicknessBottom")]
+        [JsonIgnore]
         public double HousingThicknessBottom { get; set; } = 0.0;
 
-        [JsonPropertyName("housingThicknessLeft")]
+        [JsonIgnore]
         public double HousingThicknessLeft { get; set; } = 2.0;
 
-        [JsonPropertyName("housingThicknessRight")]
+        [JsonIgnore]
         public double HousingThicknessRight { get; set; } = 2.0;
     }
 
     public class UnitOptions
     {
         [JsonPropertyName("unitType")]
-        public string UnitType { get; set; } = "Outdoor";
+        public string UnitType { get; set; } = "";
 
         [JsonPropertyName("brandOption")]
         public string BrandOption { get; set; } = "YORKCustom";
 
         [JsonPropertyName("unitConstructionType")]
-        public string UnitConstructionType { get; set; } = "Standard";
+        public string UnitConstructionType { get; set; } = "";
 
         [JsonPropertyName("shippingProtection")]
         public string ShippingProtection { get; set; } = "ShrinkWrap";
@@ -114,6 +115,9 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("noa")]
         public bool Noa { get; set; }
 
+        [JsonPropertyName("noaRating")]
+        public string NoaRating { get; set; } = "N/A";
+
         [JsonPropertyName("thermalBreak")]
         public bool ThermalBreak { get; set; } = true;
 
@@ -121,7 +125,7 @@ namespace AHUVerification.Core.Models
         public string PrimaryAccessSide { get; set; } = "Left";
 
         [JsonPropertyName("defaultUnitBaseHeight")]
-        public double DefaultUnitBaseHeight { get; set; } = 10;
+        public double DefaultUnitBaseHeight { get; set; } = 0;
 
         [JsonPropertyName("materials")]
         public MaterialOptions Materials { get; set; } = new();
@@ -136,10 +140,10 @@ namespace AHUVerification.Core.Models
         public double RoofSlope { get; set; } = 0.25;
 
         [JsonPropertyName("roofSlopeHighSide")]
-        public string RoofSlopeHighSide { get; set; } = "Center";
+        public string RoofSlopeHighSide { get; set; } = "Internal";
 
         [JsonPropertyName("roofPeak")]
-        public string RoofPeak { get; set; } = "Center";
+        public string RoofPeak { get; set; } = "Internal (Center)";
 
         [JsonPropertyName("roofPeakZDim")]
         public double RoofPeakZDim { get; set; } = 97;
@@ -735,14 +739,23 @@ namespace AHUVerification.Core.Models
 
     public class NormalizedXmlGraph
     {
+        // The parser retains absent or malformed source facts separately from
+        // its compatibility-shaped graph defaults.  Fact extraction uses this
+        // list to prevent a default from becoming an authoritative fact.
+        [JsonPropertyName("missingFacts")]
+        public List<string> MissingFacts { get; set; } = new();
+
+        [JsonPropertyName("sourceFieldStates")]
+        public Dictionary<string, string> SourceFieldStates { get; set; } = new();
+
         [JsonPropertyName("unitMOMID")]
         public string UnitMOMID { get; set; } = "{00000000-0000-0000-0000-000000000000}";
 
         [JsonPropertyName("documentVersion")]
-        public string DocumentVersion { get; set; } = "2018.9.14.1003";
+        public string DocumentVersion { get; set; } = ApplicationVersion.DocumentSchema;
 
         [JsonPropertyName("generatingSoftware")]
-        public string GeneratingSoftware { get; set; } = "M.O.M. AHU Revision Serializer";
+        public string GeneratingSoftware { get; set; } = "M.O.M. AHU Revision Serializer v2026";
 
         [JsonPropertyName("unitWeight")]
         public double UnitWeight { get; set; }

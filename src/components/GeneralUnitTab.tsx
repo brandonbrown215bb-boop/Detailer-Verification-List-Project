@@ -229,13 +229,13 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           </span>
           {fact.sourcePointer ? (
             <span
-              className="text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate max-w-[240px]"
+              className="text-[10px] font-mono text-slate-600 dark:text-slate-400 truncate max-w-[240px]"
               title={fact.sourcePointer}
             >
               {fact.sourcePointer.split('/').slice(-2).join('/')}
             </span>
           ) : (
-            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+            <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400">
               {fact.promptNote ? 'User Specified' : 'General Specification'}
             </span>
           )}
@@ -246,6 +246,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           {isDetailerField && onOpenDetailerModal ? (
             <button
               onClick={onOpenDetailerModal}
+              aria-label="Detailer Name Profile"
               title="Click to edit Detailer Name profile"
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-right text-slate-900 dark:text-slate-100 hover:border-blue-500 transition-all shadow-inner"
             >
@@ -253,6 +254,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             </button>
           ) : key === 'unit.unitType' ? (
             <select
+              aria-label={fact.label || 'Unit Type'}
               value={String(fact.value || 'Outdoor')}
               onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
@@ -262,6 +264,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             </select>
           ) : key === 'unit.shellType' ? (
             <select
+              aria-label={fact.label || 'Shell Type'}
               value={String(fact.value || 'ISG').toUpperCase() === 'CAD' ? 'CAD' : 'ISG'}
               onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
@@ -272,18 +275,20 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           ) : key === 'unit.thermalBreak' ? (
             <button
               type="button"
+              aria-label={fact.label || 'Thermal Break'}
               onClick={() => onUpdateFact(key, !Boolean(fact.value), 'Detailer')}
               className={`w-44 sm:w-52 px-3 py-1.5 text-xs font-mono rounded-md border text-center font-bold transition-all shadow-inner flex items-center justify-between ${
                 Boolean(fact.value)
                   ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-750'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-750'
               }`}
             >
-              <span className="text-[10px] text-slate-400 font-normal">State:</span>
+              <span className="text-[10px] text-slate-600 dark:text-slate-400 font-normal">State:</span>
               <span>{Boolean(fact.value) ? 'Yes (Thermal Break)' : 'No (Standard)'}</span>
             </button>
           ) : key === 'roof.roofPeak' ? (
             <select
+              aria-label={fact.label || 'Roof Peak Style'}
               value={String(fact.value || 'Internal (Center)')}
               onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
@@ -295,6 +300,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           ) : (
             <input
               type="text"
+              aria-label={fact.label || key}
               value={displayValue}
               placeholder={fact.promptNote || 'Enter value...'}
               onChange={(e) => onUpdateFact(key, e.target.value)}
@@ -319,7 +325,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
               Active Unit Features & Options
             </h3>
-            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+            <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
               Only True Attributes Shown
             </span>
           </div>
@@ -402,7 +408,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                     <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                       {item.label}
                     </span>
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 font-semibold">
                       Active: Yes
                     </span>
                   </div>
@@ -411,8 +417,9 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                     {renderProvenanceBadge(fact)}
                     <button
                       onClick={() => onUpdateFact(item.key, false, 'Detailer', 'Disabled feature')}
+                      aria-label={`Disable ${item.label} feature`}
                       title="Disable feature"
-                      className="p-1 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors"
+                      className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-500 dark:text-slate-400 transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -433,7 +440,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
               Unit Casing Specifications & Ratings
             </h3>
           </div>
-          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+          <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
             Verification List: D7..D18
           </span>
         </div>
@@ -447,12 +454,12 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
       <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+            <Cpu className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+            <h3 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
               Materials & Gauges Schedule (Segment Breakdown)
             </h3>
           </div>
-          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+          <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
             {graph.segments.length} Segments Evaluated
           </span>
         </div>
@@ -468,7 +475,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
               <Layers className="w-4 h-4 text-amber-500" />
               Special Quotes (SQs) & Detailing Deviations
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Notated project Special Quotes and deviations mapped to Excel deliverable columns G & H.
             </p>
           </div>
@@ -484,6 +491,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
         <div className="flex flex-col lg:flex-row items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
           <input
             type="text"
+            aria-label="Special Quote text"
             placeholder="Add new Special Quote (e.g. SQ-101: Custom drain pan depth 3.5 in)..."
             value={newSqText}
             onChange={(e) => setNewSqText(e.target.value)}
@@ -492,6 +500,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
           />
 
           <select
+            aria-label="Special Quote Scope"
             value={newSqScope}
             onChange={(e) => setNewSqScope(e.target.value)}
             className="w-full lg:w-56 px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 font-mono"
@@ -506,7 +515,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
           <button
             onClick={handleAddSq}
-            className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
+            className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Add Special Quote</span>
@@ -529,43 +538,42 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
               {sqItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-slate-500 font-mono">
+                  <td colSpan={6} className="py-8 text-center text-slate-600 dark:text-slate-400 font-mono text-xs">
                     No Special Quotes added. Use the form above to add detailing SQ items.
                   </td>
                 </tr>
               ) : (
                 sqItems.map((sq) => {
-                  const linkedSkid = graph.skids.find(s => s.id === sq.linkedSkidId);
+                  const linkedSkid = sq.linkedSkidId ? graph.skids.find(s => s.id === sq.linkedSkidId) : null;
 
                   return (
                     <tr
-                      key={sq.id}
+                      key={sq.slot}
                       draggable
                       onDragStart={() => handleDragStart(sq.slot)}
                       onDragOver={handleDragOver}
                       onDrop={() => handleDropOnSlot(sq.slot)}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 group transition-colors cursor-move ${
-                        draggedSlot === sq.slot ? 'opacity-40 bg-blue-50 dark:bg-blue-950/30' : ''
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors cursor-move ${
+                        draggedSlot === sq.slot ? 'opacity-40 bg-blue-50 dark:bg-blue-950/20' : ''
                       }`}
                     >
-                      <td className="py-2.5 px-2 text-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <GripVertical className="w-4 h-4 mx-auto" />
+                      <td className="py-2.5 px-3 text-center text-slate-300 dark:text-slate-600">
+                        <GripVertical className="w-3.5 h-3.5 mx-auto" />
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className="inline-block w-8 py-0.5 text-center font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
-                          {sq.slot}
-                        </span>
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-600 dark:text-slate-400">
+                        #{sq.slot}
                       </td>
                       <td className="py-2.5 px-4">
                         <input
                           type="text"
+                          aria-label={`Special Quote #${sq.slot} text`}
                           value={sq.text}
                           onChange={(e) => handleUpdateSqText(sq.slot, e.target.value)}
-                          className="w-full bg-transparent border-0 border-b border-transparent focus:border-blue-500 text-slate-900 dark:text-slate-200 focus:bg-slate-50 dark:focus:bg-slate-850 px-2 py-1 rounded outline-none text-xs"
+                          className="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-blue-500 outline-none text-slate-900 dark:text-slate-100 py-0.5 transition-colors font-medium"
                         />
                       </td>
                       <td className="py-2.5 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-mono text-[11px] font-semibold ${
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
                           linkedSkid
                             ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -589,6 +597,7 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
                       <td className="py-2.5 px-4 text-center">
                         <button
                           onClick={() => handleDeleteSq(sq.slot)}
+                          aria-label={`Delete Special Quote slot ${sq.slot}`}
                           title="Delete SQ item"
                           className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-colors"
                         >
@@ -609,11 +618,12 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">
           General Additional Comments
         </h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
+        <p className="text-xs text-slate-600 dark:text-slate-400 leading-tight">
           Will be written to cell D22 of the official 'Verification List' workbook sheet.
         </p>
         <textarea
           rows={3}
+          aria-label="General Additional Comments"
           value={generalComments}
           onChange={(e) => onUpdateComments(e.target.value)}
           placeholder="Add general unit verification notes, checker remarks, or special manufacturing instructions..."

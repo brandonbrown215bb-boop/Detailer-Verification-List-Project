@@ -67,6 +67,13 @@ namespace AHUVerification.RuleEditor
                 }
 #endif
 
+                string[] args = Environment.GetCommandLineArgs();
+                string? requestedRulePack = GetRulePackArgument(args);
+                if (!string.IsNullOrWhiteSpace(requestedRulePack) && Directory.Exists(requestedRulePack))
+                {
+                    rulePackPath = Path.GetFullPath(requestedRulePack);
+                }
+
                 if (!Directory.Exists(rulePackPath))
                     throw new DirectoryNotFoundException($"Packaged Rule Pack not found: {rulePackPath}");
                 if (!File.Exists(Path.Combine(distFolder, "rule-editor.html")))
@@ -74,6 +81,15 @@ namespace AHUVerification.RuleEditor
 
                 _bridgeHandler = new RuleEditorBridgeHandler(this, rulePackPath);
                 _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
+
+                _webView.CoreWebView2.NewWindowRequested += (s, ev) => ev.Handled = true;
+                _webView.CoreWebView2.NavigationStarting += (s, ev) => ev.Cancel = !IsAllowedOrigin(ev.Uri);
+
+#if !DEBUG
+                _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+#endif
 
                 // Configure Virtual Host mapping for built frontend
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
@@ -108,6 +124,7 @@ namespace AHUVerification.RuleEditor
             string? message = null;
             try
             {
+                if (!IsAllowedOrigin(e.Source)) return;
                 message = e.TryGetWebMessageAsString();
                 if (string.IsNullOrEmpty(message)) return;
 
@@ -125,6 +142,41 @@ namespace AHUVerification.RuleEditor
                 string jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                 _webView.CoreWebView2.PostWebMessageAsJson(jsonResponse);
             }
+        }
+
+        private static bool IsAllowedOrigin(string? value)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
+            if (string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(uri.Host, "rule-editor.local", StringComparison.OrdinalIgnoreCase) &&
+                uri.Port == 443)
+            {
+                return true;
+            }
+
+#if DEBUG
+            return string.Equals(uri.Scheme, "http", StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) &&
+                   uri.Port == 5173;
+#else
+            return false;
+#endif
+        }
+
+        private static string? GetRulePackArgument(string[] args)
+        {
+            for (int index = 1; index < args.Length; index++)
+            {
+                if (string.Equals(args[index], "--rule-pack", StringComparison.OrdinalIgnoreCase) && index + 1 < args.Length)
+                    return args[index + 1];
+
+                // Preserve the existing positional launch contract for local
+                // scripts while preferring the explicit named argument.
+                if (!args[index].StartsWith("-", StringComparison.Ordinal) && Directory.Exists(args[index]))
+                    return args[index];
+            }
+
+            return null;
         }
 
 #if DEBUG

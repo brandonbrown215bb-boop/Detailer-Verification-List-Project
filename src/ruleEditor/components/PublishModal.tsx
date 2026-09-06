@@ -19,8 +19,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   onClose,
   onPublish
 }) => {
-  if (!isOpen) return null;
-
   // Calculate semantic version suggestions
   const semverParts = currentVersion.split('.').map(p => parseInt(p, 10) || 0);
   const major = semverParts[0] ?? 14;

@@ -1,7 +1,28 @@
 export type FactStatus = 'Known' | 'Derived' | 'Unknown' | 'ManuallyOverridden';
 export type FactConfidence = 'Authoritative' | 'RequiresConfirmation';
+/** How a persisted fact got its value. This is separate from status/confidence. */
+export type FactSourceState = 'present' | 'absent' | 'malformed' | 'defaulted' | 'derived' | 'manual';
+
+export interface FactSnapshot {
+  value: unknown;
+  status: FactStatus;
+  confidence: FactConfidence;
+  sourceRawValue?: unknown;
+  sourcePointer?: string;
+  derivationName?: string;
+  promptNote?: string;
+  sourceState?: FactSourceState;
+}
+
+export interface FactAuditEntry {
+  action: string;
+  timestamp: string;
+  by: string;
+  note?: string;
+  snapshot: FactSnapshot;
+}
 export type RuleApplicability = 'Applicable' | 'NotApplicable' | 'NeedsInput';
-export type CheckStatus = 'Incomplete' | 'Passed' | 'NA' | 'Flagged';
+export type CheckStatus = 'Incomplete' | 'Passed' | 'NA' | 'Flagged' | 'NeedsInput' | 'NotApplicable';
 export type RuleScope = 'Unit' | 'Skid' | 'Segment' | 'Component';
 export type ThemeMode = 'dark' | 'light' | 'system';
 export type SkidViewMode = 'cards' | 'grid';
@@ -14,6 +35,8 @@ export interface Fact<T = any> {
   status: FactStatus;
   sourcePointer?: string;        // e.g. /AHU/unitOptions/housingStyle
   sourceRawValue?: any;
+  /** Source presence/provenance is explicit so defaults cannot look authored. */
+  sourceState?: FactSourceState;
   derivationName?: string;
   confidence: FactConfidence;
   promptNote?: string;          // Guidance when unconfirmed or unknown
@@ -23,6 +46,12 @@ export interface Fact<T = any> {
     timestamp: string;
     note?: string;
   }>;
+  /** Immutable baseline captured before the first manual override. */
+  originalSnapshot?: FactSnapshot;
+  /** Append-only audit records for overrides and reverts. */
+  auditHistory?: FactAuditEntry[];
+  /** Diagnostic calculation retained separately from authoritative value. */
+  calculatedValue?: unknown;
 }
 
 export interface UnitDoor {
@@ -304,6 +333,10 @@ export interface NormalizedXmlGraph {
   doors?: UnitDoor[];
   dampers?: UnitDamper[];
   floorDrains?: UnitFloorDrain[];
+  /** Field-level ingestion outcomes used to distinguish absent/malformed/defaulted values. */
+  sourceFieldStates?: Record<string, FactSourceState>;
+  /** Legacy compact form retained for compatibility with earlier .dvl files. */
+  missingFacts?: string[];
 }
 
 export interface SpecialQuote {
@@ -345,8 +378,14 @@ export interface ChecklistInstance {
   applicability: RuleApplicability;
   applicabilityReason: string;
   status: CheckStatus;
+  /** Rule policy copied into instances for readiness checks after persistence. */
+  allowNA?: boolean;
   detailerComment: string;
+  /** Optional per-instance initials retained for the official workbook export. */
+  detailerInitials?: string;
   checkerComment?: string;
+  /** Optional checker initials retained for the official workbook export. */
+  checkerInitials?: string;
   updatedAt: string;
   factTraces: Array<{ key: string; label: string; value: any; status: FactStatus }>;
 }
@@ -420,7 +459,21 @@ export interface DvlProjectFile {
   rulePack: {
     version: string;
     sha256: string;
+    /** Hash of semantic rule content used during evaluation. */
+    ruleSemanticFingerprint?: string;
+    /** Hashes/identities of the physical export artifacts used with this pack. */
+    templateSha256?: string;
+    templateMapSha256?: string;
+    approvedMappingsSha256?: string;
+    /** True only when the active host can retrieve the exact template by pack hash. */
+    templateRetrievable?: boolean;
   };
+  /**
+   * Immutable evaluator snapshot. The binary template remains external and is
+   * matched by templateSha256; a project without this snapshot cannot claim
+   * historical reproducibility from hashes alone.
+   */
+  rulePackSnapshot?: DvlRulePackSnapshot;
   sourceXml: {
     fileName: string;
     fileSha256: string;
@@ -428,17 +481,46 @@ export interface DvlProjectFile {
     rawXml: string;
     isUpzBundle?: boolean;
     orderRevision?: OrderRevisionData;
+    rawOrderRevisionXml?: string;
+    rawManifestXml?: string;
   };
   normalizedGraph: NormalizedXmlGraph;
   factRegistry: Record<string, Fact>;
   sqItems: SpecialQuote[];
   checklistInstances: ChecklistInstance[];
   generalComments: string;
+  /**
+   * Integrity metadata for the complete persisted state. Legacy projects may
+   * contain only sourceXml.fileSha256 and therefore remain unverified.
+   */
+  integrity?: {
+    algorithm: 'dvl-canonical-json-v1' | string;
+    sourceXmlSha256?: string;
+    completeStateSha256?: string;
+    state: 'complete' | 'source-only' | 'legacy' | 'tampered' | string;
+  };
+}
+
+export interface DvlRulePackSnapshot {
+  version: string;
+  bundleSha256: string;
+  rules: RuleDefinition[];
+  templateMap: TemplateMap;
+  approvedMappings: unknown;
+  templateSha256?: string;
+  templateRetrievable?: boolean;
+  templateEmbedded: boolean;
+  reproducibility: 'snapshot-without-template' | 'complete' | 'unavailable' | string;
 }
 
 export interface RulePackIdentity {
   version: string;
   sha256: string;
+  ruleSemanticFingerprint?: string;
+  templateSha256?: string;
+  templateMapSha256?: string;
+  approvedMappingsSha256?: string;
+  templateRetrievable?: boolean;
 }
 
 export interface RulePackManifestFileEntry {

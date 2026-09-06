@@ -24,6 +24,7 @@ dist-ssr/
 playwright-report/
 test-results/
 .playwright/
+.tools/
 
 # .NET / C#
 **/bin/Debug/
@@ -33,6 +34,7 @@ src/backend/*/bin/
 tests/*/bin/
 publish/
 Releases/
+Releases.failed-*/
 TestResults/
 [Dd]ebug/
 [Rr]elease/

@@ -1,20 +1,23 @@
 {
   "name": "AHU Detailing Verification Rule Pack",
   "version": "14.0.0",
-  "generatedAt": "2026-09-01T01:52:30.584Z",
-  "bundleSha256": "cdecf315b8dc55ed3eaed96c043dff8c8a03cdc73ef905764a25c39822ccaf0e",
+  "generatedAt": "2026-09-04T20:59:07.180Z",
+  "bundleSha256": "adcf4e49fcdf608b074c383f92957506f37878e9043b7d8366072cb3f4883af4",
   "files": {
     "rules.json": {
-      "sha256": "083456eceb16cc43a42829c562feac630d56a8443ffc4ae2eef8bc12d3a666dc",
+      "sha256": "89c207f081fee204ea89b983d3969a26e436b26957b9875db26e46cb20cc839a",
       "totalRules": 104,
       "activeRules": 99,
       "archivedRules": 5
     },
     "template_map.json": {
-      "sha256": "363614b0a29288d1ceb05245c074b77986dcc9acbfc3c1a9a9c909d650a92827"
+      "sha256": "9549e926bf4d8cd8771d00f6249e630d3c6b97094740770576f2e79a955018f4"
     },
     "approved_mappings.json": {
       "sha256": "956376711f4d3e9ed9b9c6b07eb18519d76e46302e17cd7eaa5399b41c2a7ad7"
+    },
+    "fact_contract.json": {
+      "sha256": "3242058a4c57a86fbcc1755292465abb1724d68a5fb3bf19c8fb5645cfe3d9f6"
     },
     "template.xlsx": {
       "sha256": "406f6a516635deef612b540171a665e157c282bac0f2d3d4bdf77a07e70fbc44"

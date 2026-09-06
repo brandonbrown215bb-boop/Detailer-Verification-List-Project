@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
@@ -99,8 +99,8 @@ namespace AHUVerification.RuleEditor.Bridge
             return new
             {
                 appName = "AHU Verification • Rule & Logic Editor",
-                appVersion = "1.0.0",
-                rulePackVersion = _activeRulePack?.Manifest.Version ?? "14.0.0",
+                appVersion = ApplicationVersion.Current,
+                rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 ruleCount = _activeRulePack?.Rules.Count ?? 0,
                 isDesktopHost = true
             };
@@ -127,7 +127,10 @@ namespace AHUVerification.RuleEditor.Bridge
 
         private object PublishRulePack(JsonElement payload)
         {
-            string version = BridgeValidation.RequireStringProperty(payload, "publishRulePack", "version");
+            string version = BridgeValidation.RequireStringProperty(payload, "publishRulePack", "version").Trim();
+            if (version.StartsWith("v", StringComparison.OrdinalIgnoreCase)) version = version[1..];
+            if (!Regex.IsMatch(version, @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$"))
+                throw new InvalidOperationException($"Invalid Rule Pack version '{version}'. Use SemVer such as 1.2.3 or 1.2.3-rc1.");
             var rulesEl = BridgeValidation.RequireArrayProperty(payload, "publishRulePack", "rules");
             var tmEl = BridgeValidation.RequireObjectProperty(payload, "publishRulePack", "templateMap");
 
@@ -139,7 +142,13 @@ namespace AHUVerification.RuleEditor.Bridge
                 amEl.ValueKind != JsonValueKind.Undefined &&
                 amEl.ValueKind != JsonValueKind.Null)
             {
+                if (amEl.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("publishRulePack.approvedMappings must be an object.");
                 approvedMappings = amEl;
+            }
+            else if (_activeRulePack != null && _activeRulePack.ApprovedMappings.ValueKind != JsonValueKind.Undefined && _activeRulePack.ApprovedMappings.ValueKind != JsonValueKind.Null)
+            {
+                approvedMappings = _activeRulePack.ApprovedMappings.Clone();
             }
             else
             {
@@ -147,10 +156,25 @@ namespace AHUVerification.RuleEditor.Bridge
                 approvedMappings = emptyDoc.RootElement.Clone();
             }
 
+            string contractPath = Path.Combine(_rulePackPath, "fact_contract.json");
+            if (!File.Exists(contractPath))
+            {
+                string repoRoot = PathUtils.FindRepoRoot();
+                string fallbackContract = Path.Combine(repoRoot, "resources", "rulepack", "fact_contract.json");
+                if (File.Exists(fallbackContract)) contractPath = fallbackContract;
+            }
+            if (!File.Exists(contractPath))
+                throw new FileNotFoundException($"Rule pack fact_contract.json not found at: {contractPath}");
+            using (var contractDoc = JsonDocument.Parse(File.ReadAllText(contractPath)))
+            using (var rulesDoc = JsonDocument.Parse(rulesEl.GetRawText()))
+            using (var tmDoc = JsonDocument.Parse(tmEl.GetRawText()))
+            {
+                FactContractValidator.Validate(contractDoc.RootElement, rulesDoc.RootElement, tmDoc.RootElement);
+            }
+
             string templatePath = Path.Combine(_rulePackPath, "template.xlsx");
             if (!File.Exists(templatePath))
             {
-                // Look for repository fallback
                 string repoRoot = PathUtils.FindRepoRoot();
                 string fallbackRes = Path.Combine(repoRoot, "resources", "rulepack", "template.xlsx");
                 if (File.Exists(fallbackRes))
@@ -169,30 +193,67 @@ namespace AHUVerification.RuleEditor.Bridge
                 throw new FileNotFoundException($"Template Excel file 'template.xlsx' not found at: {templatePath}", templatePath);
             }
 
-            // 1. Publish directly into local packaged rule pack directory
-            var published = _rulePackManager.PublishToDirectory(
-                _rulePackPath,
-                version,
-                rules,
-                templateMap,
-                approvedMappings,
-                templatePath
-            );
-
-            // 2. If target distribution path was specified (e.g. remote share / OneDrive folder)
+            string activePath = Path.GetFullPath(_rulePackPath);
+            string? targetDir = null;
             if (payload.TryGetProperty("targetPath", out var targetProp) &&
                 targetProp.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(targetProp.GetString()))
             {
-                string targetDir = targetProp.GetString()!;
-                try
+                targetDir = Path.GetFullPath(targetProp.GetString()!);
+                if (!Path.IsPathRooted(targetDir))
+                    throw new InvalidOperationException("publishRulePack.targetPath must be an absolute path.");
+                if (string.Equals(targetDir, activePath, StringComparison.OrdinalIgnoreCase) ||
+                    targetDir.StartsWith(activePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                    activePath.StartsWith(targetDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("publishRulePack.targetPath must be separate from the active Rule Pack directory.");
+            }
+
+            string transactionRoot = Path.Combine(Path.GetTempPath(), $"rulepack_{Guid.NewGuid():N}");
+            string activeStage = Path.Combine(transactionRoot, "active");
+            RulePackBundle published;
+            DirectoryPromotion? activePromotion = null;
+            DirectoryPromotion? targetPromotion = null;
+            try
+            {
+                Directory.CreateDirectory(transactionRoot);
+                published = _rulePackManager.PublishToDirectory(
+                    activeStage,
+                    version,
+                    rules,
+                    templateMap,
+                    approvedMappings,
+                    templatePath
+                );
+
+                // Validate every output before changing either destination. The
+                // target distribution copy is staged independently so a failed
+                // share write cannot leave the active pack half-published.
+                if (targetDir != null)
                 {
-                    Directory.CreateDirectory(targetDir);
-                    _rulePackManager.PublishToDirectory(targetDir, version, rules, templateMap, approvedMappings, templatePath);
+                    string targetStage = Path.Combine(transactionRoot, "target");
+                    _rulePackManager.PublishToDirectory(targetStage, version, rules, templateMap, approvedMappings, templatePath);
+                    _ = _rulePackManager.LoadFromDirectory(targetStage);
+                    targetPromotion = PromoteDirectory(targetStage, targetDir);
                 }
-                catch (Exception ex)
+
+                activePromotion = PromoteDirectory(activeStage, activePath);
+                // Load the promoted directory rather than retaining the staging
+                // object. This is the publish -> reload proof used by the UI.
+                published = _rulePackManager.LoadFromDirectory(activePath);
+                FinalizePromotion(targetPromotion);
+                FinalizePromotion(activePromotion);
+            }
+            catch
+            {
+                RollbackPromotion(activePromotion);
+                RollbackPromotion(targetPromotion);
+                throw;
+            }
+            finally
+            {
+                if (Directory.Exists(transactionRoot))
                 {
-                    throw new InvalidOperationException($"Failed to publish to distribution folder '{targetDir}': {ex.Message}", ex);
+                    try { Directory.Delete(transactionRoot, true); } catch { }
                 }
             }
 
@@ -207,6 +268,62 @@ namespace AHUVerification.RuleEditor.Bridge
             };
         }
 
+        private sealed class DirectoryPromotion
+        {
+            public required string Destination { get; init; }
+            public string? Backup { get; init; }
+        }
+
+        private static DirectoryPromotion PromoteDirectory(string staged, string destination)
+        {
+            if (File.Exists(destination))
+                throw new IOException($"Rule Pack destination is a file, not a directory: {destination}");
+            string? parent = Path.GetDirectoryName(destination);
+            if (string.IsNullOrWhiteSpace(parent))
+                throw new IOException($"Rule Pack destination has no parent directory: {destination}");
+            Directory.CreateDirectory(parent);
+
+            string? backup = null;
+            if (Directory.Exists(destination))
+            {
+                backup = destination + ".backup_" + Guid.NewGuid().ToString("N");
+                Directory.Move(destination, backup);
+            }
+
+            try
+            {
+                Directory.Move(staged, destination);
+                return new DirectoryPromotion { Destination = destination, Backup = backup };
+            }
+            catch
+            {
+                if (Directory.Exists(destination)) Directory.Delete(destination, true);
+                if (backup != null && Directory.Exists(backup)) Directory.Move(backup, destination);
+                throw;
+            }
+        }
+
+        private static void FinalizePromotion(DirectoryPromotion? promotion)
+        {
+            if (promotion?.Backup == null || !Directory.Exists(promotion.Backup)) return;
+            try { Directory.Delete(promotion.Backup, true); } catch { /* cleanup is best effort after promotion */ }
+        }
+
+        private static void RollbackPromotion(DirectoryPromotion? promotion)
+        {
+            if (promotion == null) return;
+            try
+            {
+                if (Directory.Exists(promotion.Destination)) Directory.Delete(promotion.Destination, true);
+                if (promotion.Backup != null && Directory.Exists(promotion.Backup))
+                    Directory.Move(promotion.Backup, promotion.Destination);
+            }
+            catch
+            {
+                // Preserve the original publish error. The backup remains for
+                // operator recovery if Windows has a file lock during rollback.
+            }
+        }
         private object? ShowOpenFileDialog()
         {
             if (_parentForm == null) return null;

@@ -17,7 +17,7 @@ REM 1. Frontend Web Assets Build
 echo [1/4] Building Vite Frontend (dist\)...
 if not exist "node_modules\" (
     echo [INFO] Installing npm packages...
-    call npm install --no-audit --no-fund
+    call npm ci --no-audit --no-fund
     if %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Failed to install npm dependencies.
         pause

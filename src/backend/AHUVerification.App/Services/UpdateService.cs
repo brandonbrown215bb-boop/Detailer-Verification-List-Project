@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using AHUVerification.Core.Utils;
 using Velopack;
 using Velopack.Sources;
 
@@ -43,13 +44,13 @@ namespace AHUVerification.App.Services
                 {
                     IsInstalled = false,
                     HasUpdate = false,
-                    CurrentVersion = "dev"
+                    CurrentVersion = ApplicationVersion.Current
                 };
             }
 
             try
             {
-                var currentVer = _updateManager.CurrentVersion?.ToFullString() ?? "1.0.0";
+                var currentVer = _updateManager.CurrentVersion?.ToFullString() ?? ApplicationVersion.Current;
                 var updateInfo = await _updateManager.CheckForUpdatesAsync();
 
                 if (updateInfo == null)

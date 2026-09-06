@@ -7,19 +7,17 @@ echo  AHU Detailing Verification - Vite Development Server
 echo ======================================================================
 echo.
 
-:: Check Node.js and npm
-where npm >nul 2>&1
+:: Check the pinned Node.js/npm prerequisites without installing them.
+call "%~dp0scripts\init_env.bat"
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js / npm is not installed or not in PATH.
-    echo Please install Node.js (v18+) to run the Vite dev server.
     pause
-    exit /b 1
+    exit /b %ERRORLEVEL%
 )
 
 :: Install dependencies if node_modules is missing
 if not exist "node_modules\" (
-    echo [INFO] node_modules not found. Installing NPM dependencies...
-    call npm install
+    echo [INFO] node_modules not found. Installing locked NPM dependencies...
+    call npm ci --no-audit --no-fund
     if %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Failed to install npm dependencies.
         pause

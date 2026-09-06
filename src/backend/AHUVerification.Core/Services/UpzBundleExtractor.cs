@@ -24,7 +24,7 @@ namespace AHUVerification.Core.Services
                 return customDir;
 
             string baseDir = AppContext.BaseDirectory;
-            
+
             // Check baseDir/resources/bin
             string subDir = Path.Combine(baseDir, "resources", "bin");
             if (Directory.Exists(subDir) && File.Exists(Path.Combine(subDir, "unpack32.exe")))

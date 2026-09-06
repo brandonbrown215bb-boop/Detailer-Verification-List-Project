@@ -18,10 +18,10 @@ namespace AHUVerification.Tests
             var extractor = new FactExtractor();
             var facts = extractor.ExtractFacts(graph);
 
-            // Authoritative Known Facts
+            // Missing Facts from Config.xml evaluate to Unknown
             Assert.True(facts.ContainsKey("unit.jobName"));
-            Assert.Equal(FactStatus.Known, facts["unit.jobName"].Status);
-            Assert.Equal(FactConfidence.Authoritative, facts["unit.jobName"].Confidence);
+            Assert.Equal(FactStatus.Unknown, facts["unit.jobName"].Status);
+            Assert.Equal(FactConfidence.RequiresConfirmation, facts["unit.jobName"].Confidence);
 
             // Derived Facts
             Assert.True(facts.ContainsKey("unit.thermalBreak"));
@@ -39,10 +39,24 @@ namespace AHUVerification.Tests
             Assert.Equal(FactStatus.Derived, facts["unit.noa"].Status);
             Assert.Equal(FactConfidence.Authoritative, facts["unit.noa"].Confidence);
 
-            // Skid Weight is Authoritative (informational)
+            // Skid Weight is Authoritative from engineering segment weights
             Assert.True(facts.ContainsKey("skid.skid-1.weight"));
-            Assert.Equal(FactStatus.Derived, facts["skid.skid-1.weight"].Status);
-            Assert.Equal(FactConfidence.Authoritative, facts["skid.skid-1.weight"].Confidence);
+            var skid1Weight = facts["skid.skid-1.weight"];
+            Assert.Equal(FactStatus.Derived, skid1Weight.Status);
+            Assert.Equal(FactConfidence.Authoritative, skid1Weight.Confidence);
+            Assert.True(System.Convert.ToDouble(skid1Weight.Value) > 0);
+            Assert.Equal("Sum of Segment Weights", skid1Weight.DerivationName);
+            Assert.Equal("derived", skid1Weight.SourceState);
+
+            // Verify a skid without engineering weight remains Unknown / RequiresConfirmation
+            graph.Skids.Add(new ShippingSkid { Id = "skid-empty", Index = 99, Name = "Empty Skid", CalculatedWeight = 0 });
+            var factsWithEmpty = extractor.ExtractFacts(graph);
+            var emptyWeight = factsWithEmpty["skid.skid-empty.weight"];
+            Assert.Equal(FactStatus.Unknown, emptyWeight.Status);
+            Assert.Equal(FactConfidence.RequiresConfirmation, emptyWeight.Confidence);
+            Assert.Null(emptyWeight.Value);
+            Assert.Equal("absent", emptyWeight.SourceState);
+            Assert.Contains("Authoritative skid weight is required", emptyWeight.PromptNote);
         }
 
         [Fact]

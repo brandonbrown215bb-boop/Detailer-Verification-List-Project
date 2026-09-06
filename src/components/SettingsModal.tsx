@@ -204,7 +204,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md transition-colors"
+            className="px-5 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold shadow-md transition-colors"
           >
             Done
           </button>
@@ -214,7 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       <div className="space-y-6">
           {/* Section 1: Appearance Theme */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
               Interface Appearance Theme
             </label>
             <div className="grid grid-cols-3 gap-3">
@@ -223,13 +223,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onSetThemeMode('system')}
                 className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all ${
                   themeMode === 'system'
-                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-600 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
+                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
                     : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Laptop className="w-5 h-5" />
                 <span className="text-xs">System Default</span>
-                <span className="text-[10px] text-slate-400">Auto OS sync</span>
+                <span className={`text-[10px] ${themeMode === 'system' ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-slate-600 dark:text-slate-400'}`}>Auto OS sync</span>
               </button>
 
               {/* Dark */}
@@ -237,13 +237,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onSetThemeMode('dark')}
                 className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all ${
                   themeMode === 'dark'
-                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-600 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
+                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
                     : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Moon className="w-5 h-5" />
                 <span className="text-xs">Dark Theme</span>
-                <span className="text-[10px] text-slate-400">Zinc / High contrast</span>
+                <span className={`text-[10px] ${themeMode === 'dark' ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-slate-600 dark:text-slate-400'}`}>Zinc / High contrast</span>
               </button>
 
               {/* Light */}
@@ -251,29 +251,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => onSetThemeMode('light')}
                 className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all ${
                   themeMode === 'light'
-                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-600 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
+                    ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
                     : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <Sun className="w-5 h-5" />
                 <span className="text-xs">Light Theme</span>
-                <span className="text-[10px] text-slate-400">Clean daytime</span>
+                <span className={`text-[10px] ${themeMode === 'light' ? 'text-blue-700 dark:text-blue-300 font-semibold' : 'text-slate-600 dark:text-slate-400'}`}>Clean daytime</span>
               </button>
             </div>
           </div>
 
           {/* Section 2: Detailer Identity */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
               <User className="w-3.5 h-3.5" />
               <span>Detailer Signature Defaults</span>
             </label>
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-750 space-y-3">
               <div>
-                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1">
+                <label htmlFor="settings-detailer-name" className="block text-[11px] font-mono text-slate-600 dark:text-slate-400 mb-1">
                   Default Detailer Full Name:
                 </label>
                 <input
+                  id="settings-detailer-name"
+                  aria-label="Default Detailer Full Name"
                   type="text"
                   value={detailerName}
                   onChange={(e) => onUpdateDetailerName(e.target.value)}
@@ -281,7 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
                 Initials will be auto-derived ({detailerName ? detailerName.slice(0, 2).toUpperCase() : 'TD'}) and written to cell Z of the Excel Verification List sheet.
               </p>
             </div>
@@ -289,17 +291,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Section 3: Central Rule Pack Network Distribution */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
               <span>Central Rule Pack Distribution Path & Updates</span>
             </label>
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-750 space-y-3">
               <div>
-                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1">
+                <label htmlFor="settings-rule-path" className="block text-[11px] font-mono text-slate-600 dark:text-slate-400 mb-1">
                   Central Rule Pack Network Share / Folder:
                 </label>
                 <div className="flex gap-2">
                   <input
+                    id="settings-rule-path"
+                    aria-label="Central Rule Pack Network Share or Folder"
                     type="text"
                     value={rulePath}
                     onChange={(e) => handleRulePathChange(e.target.value)}
@@ -344,6 +348,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <label className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
+                    aria-label="Automatically check for new rule packs on application startup"
                     checked={autoSync}
                     onChange={(e) => handleAutoSyncToggle(e.target.checked)}
                     className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
@@ -356,18 +361,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-lg space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 dark:text-slate-400">Active Rule Pack:</span>
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                    <span className="text-slate-600 dark:text-slate-400">Active Rule Pack:</span>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/40">
                       v{rulePackVersion}
                     </span>
-                    <span className="text-[11px] text-slate-400">({ruleCount} Rules)</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-400">({ruleCount} Rules)</span>
                   </div>
 
                   <button
                     type="button"
                     disabled={checkStatus === 'checking'}
                     onClick={handleCheckForUpdates}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-sm transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold shadow-sm transition-all"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${checkStatus === 'checking' ? 'animate-spin' : ''}`} />
                     <span>{checkStatus === 'checking' ? 'Checking...' : 'Check for Updates Now'}</span>
@@ -413,7 +418,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="button"
                   disabled={launchStatus === 'launching'}
                   onClick={handleLaunchRuleEditor}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
                 >
                   {launchStatus === 'launching' ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -428,16 +433,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Section 4: Shared Network Drive & Export Location */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
               <FolderSync className="w-3.5 h-3.5 text-indigo-500" />
               <span>Shared Drive Deliverable Export Directory</span>
             </label>
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-750 space-y-2.5">
               <div>
-                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1">
+                <label htmlFor="settings-export-path" className="block text-[11px] font-mono text-slate-600 dark:text-slate-400 mb-1">
                   Network Share or Folder Path:
                 </label>
                 <input
+                  id="settings-export-path"
+                  aria-label="Shared Drive Deliverable Export Directory"
                   type="text"
                   value={exportPath}
                   onChange={(e) => handleExportPathChange(e.target.value)}
@@ -445,7 +452,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full px-3.5 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
                 When specified, Excel exports and saved projects will automatically target and scan this shared directory for checking handoffs.
               </p>
             </div>
@@ -453,7 +460,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Section 5: Workspace Storage & Autosave */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
               <HardDrive className="w-3.5 h-3.5 text-blue-500" />
               <span>Project Persistence & Crash Recovery</span>
             </label>
@@ -463,7 +470,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Clock className="w-3.5 h-3.5 text-blue-500" />
                   <span>Continuous Local Autosave</span>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
                   {lastAutosavedAt ? `Last saved at ${new Date(lastAutosavedAt).toLocaleTimeString()}` : 'Active session autosaving enabled'}
                 </p>
               </div>
@@ -501,7 +508,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {!isResetConfirming && (
                     <button
                       onClick={() => setIsResetConfirming(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-colors shadow-sm shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm shrink-0"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       <span>Reset Changes</span>
@@ -528,7 +535,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           setResetSuccessMessage('Project successfully reset to original XML state.');
                           setTimeout(() => setResetSuccessMessage(null), 4000);
                         }}
-                        className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm"
+                        className="px-3 py-1 rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs font-bold shadow-sm"
                       >
                         Yes, Reset All Changes
                       </button>

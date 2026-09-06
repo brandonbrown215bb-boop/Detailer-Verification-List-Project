@@ -87,6 +87,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
           </label>
           <input
             type="text"
+            aria-label="Job / Project Name"
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
             placeholder="e.g. HCA 3100300032 DHOA Vertical Exp"
@@ -103,6 +104,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
             </label>
             <input
               type="text"
+              aria-label="COM Number"
               value={comNumber}
               onChange={(e) => setComNumber(e.target.value)}
               placeholder="e.g. 20183"
@@ -118,6 +120,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
             </label>
             <input
               type="text"
+              aria-label="Order Number"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
               placeholder="e.g. 6E-900064-07"
@@ -135,6 +138,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
             </label>
             <input
               type="text"
+              aria-label="Unit Tag"
               value={unitTag}
               onChange={(e) => setUnitTag(e.target.value)}
               placeholder="e.g. AHU-518"
@@ -150,6 +154,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
             </label>
             <input
               type="date"
+              aria-label="Verification Date"
               value={verificationDate}
               onChange={(e) => setVerificationDate(e.target.value)}
               className="w-full px-3.5 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500 transition-colors"
@@ -165,6 +170,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
           </label>
           <input
             type="text"
+            aria-label="Detailer Name"
             value={detailer}
             onChange={(e) => setDetailer(e.target.value)}
             placeholder="e.g. Brandon Brown"
@@ -183,7 +189,7 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
           </button>
           <button
             type="submit"
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all"
+            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-700/20 transition-all"
           >
             <Check className="w-4 h-4" />
             <span>Save Identity</span>

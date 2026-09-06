@@ -1,5 +1,7 @@
-import React, { useState, useMemo, useEffect, useId } from 'react';
+import React, { useId } from 'react';
+import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useManualUnitWizard, type ManualWizardStep } from '../hooks/useManualUnitWizard';
 import {
   X,
   PlusCircle,
@@ -27,12 +29,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import {
-  ManualUnitConfig,
-  ManualSkidItem,
-  ManualSegmentItem,
+  type ManualUnitConfig,
   AVAILABLE_SEGMENT_TEMPLATES,
-  MANUAL_UNIT_PRESETS,
-  SegmentTemplate
+  MANUAL_UNIT_PRESETS
 } from '../services/manualUnitFactory';
 
 interface ManualUnitModalProps {
@@ -40,7 +39,6 @@ interface ManualUnitModalProps {
   onClose: () => void;
   onCreateUnit: (config: ManualUnitConfig) => void;
 }
-
 const SEGMENT_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   IP: { bg: 'bg-cyan-500/15 dark:bg-cyan-500/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-500/40' },
   MB: { bg: 'bg-orange-500/15 dark:bg-orange-500/20', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-500/40' },
@@ -84,280 +82,74 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
     onEscape: onClose
   });
 
-  // Wizard Navigation Step
-  const [activeStep, setActiveStep] = useState<'general' | 'skids' | 'segments' | 'review'>('general');
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('preset-standard-vav');
-
-  // Step 1: General & Construction Specs
-  const [jobName, setJobName] = useState('New AHU Project');
-  const [comNumber, setComNumber] = useState('');
-  const [detailerName, setDetailerName] = useState(() => {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('dvl_detailer_name') || '' : '';
+  const {
+    activeStep,
+    selectedPresetId,
+    jobName,
+    comNumber,
+    detailerName,
+    unitType,
+    housingStyle,
+    defaultUnitWidth,
+    defaultUnitHeight,
+    defaultBaseHeight,
+    defaultWallThickness,
+    totalStaticPressure,
+    exteriorMaterialType,
+    exteriorMaterialGauge,
+    interiorMaterialType,
+    interiorMaterialGauge,
+    floorMaterialType,
+    floorMaterialGauge,
+    insulationType,
+    skids,
+    segments,
+    selectedTemplateCode,
+    targetAddSkidId,
+    unitMetrics,
+    setJobName,
+    setComNumber,
+    setDetailerName,
+    setUnitType,
+    setHousingStyle,
+    setDefaultUnitWidth,
+    setDefaultUnitHeight,
+    setDefaultBaseHeight,
+    setDefaultWallThickness,
+    setTotalStaticPressure,
+    setExteriorMaterialType,
+    setExteriorMaterialGauge,
+    setInteriorMaterialType,
+    setInteriorMaterialGauge,
+    setFloorMaterialType,
+    setFloorMaterialGauge,
+    setInsulationType,
+    setSelectedTemplateCode,
+    setTargetAddSkidId,
+    selectStep,
+    goToNextStep,
+    goToPreviousStep,
+    loadPreset,
+    handleAddSkid,
+    handleRemoveSkid,
+    handleUpdateSkid,
+    handleAddSegmentFromTemplate,
+    handleRemoveSegment,
+    handleDuplicateSegment,
+    handleMoveSegment,
+    handleUpdateSegment,
+    handleAddInternal,
+    handleRemoveInternal,
+    handleSubmit
+  } = useManualUnitWizard({
+    isOpen,
+    onClose,
+    onCreateUnit
   });
-  const [unitType, setUnitType] = useState<'Outdoor' | 'Indoor'>('Outdoor');
-  const [housingStyle, setHousingStyle] = useState<'ThermalBreak' | 'Standard'>('ThermalBreak');
-  const [defaultUnitWidth, setDefaultUnitWidth] = useState<number>(84);
-  const [defaultUnitHeight, setDefaultUnitHeight] = useState<number>(96);
-  const [defaultBaseHeight, setDefaultBaseHeight] = useState<number>(10.0);
-  const [defaultWallThickness, setDefaultWallThickness] = useState<number>(2.0);
-  const [totalStaticPressure, setTotalStaticPressure] = useState<number>(2.5);
-
-  // Casing Materials
-  const [exteriorMaterialType, setExteriorMaterialType] = useState('STL GALV PPC');
-  const [exteriorMaterialGauge, setExteriorMaterialGauge] = useState(18);
-  const [interiorMaterialType, setInteriorMaterialType] = useState('STL GALV');
-  const [interiorMaterialGauge, setInteriorMaterialGauge] = useState(22);
-  const [floorMaterialType, setFloorMaterialType] = useState('STL GALV');
-  const [floorMaterialGauge, setFloorMaterialGauge] = useState(16);
-  const [insulationType, setInsulationType] = useState('Foam');
-
-  // Step 2 & 3: Dynamic Skids & Segments
-  const [skids, setSkids] = useState<ManualSkidItem[]>([]);
-  const [segments, setSegments] = useState<ManualSegmentItem[]>([]);
-
-  // Add Segment Helper states
-  const [selectedTemplateCode, setSelectedTemplateCode] = useState<string>('FF');
-  const [targetAddSkidId, setTargetAddSkidId] = useState<string>('');
-  const [newInternalText, setNewInternalText] = useState<string>('');
-  const [selectedSegmentForInternal, setSelectedSegmentForInternal] = useState<string | null>(null);
-
-  // Initialize or reset with preset
-  const loadPreset = (presetId: string) => {
-    const preset = MANUAL_UNIT_PRESETS.find(p => p.id === presetId);
-    if (!preset) return;
-
-    setSelectedPresetId(presetId);
-    setSkids(preset.skids.map(s => ({ ...s })));
-
-    const newSegments: ManualSegmentItem[] = preset.segments.map((seg, idx) => ({
-      ...seg,
-      id: `seg-${Date.now()}-${idx + 1}`,
-      width: defaultUnitWidth,
-      height: defaultUnitHeight
-    }));
-
-    setSegments(newSegments);
-    if (preset.skids.length > 0) {
-      setTargetAddSkidId(preset.skids[0].id);
-    }
-  };
-
-  // Run initial preset load when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      if (typeof localStorage !== 'undefined') {
-        const saved = localStorage.getItem('dvl_detailer_name') || '';
-        setDetailerName(saved);
-      }
-      loadPreset('preset-standard-vav');
-      setActiveStep('general');
-    }
-  }, [isOpen]);
-
-  // Keep targetAddSkidId valid if skids change
-  useEffect(() => {
-    if (skids.length > 0 && !skids.some(s => s.id === targetAddSkidId)) {
-      setTargetAddSkidId(skids[0].id);
-    }
-  }, [skids, targetAddSkidId]);
-
-  // --- SKID HANDLERS ---
-  const handleAddSkid = () => {
-    const nextIndex = skids.length + 1;
-    const nextId = `skid-${nextIndex}`;
-    const newSkid: ManualSkidItem = {
-      id: nextId,
-      index: nextIndex,
-      name: `Skid ${nextIndex}`,
-      baseHeight: defaultBaseHeight,
-      baseMaterial: 'StructuralSteel',
-      baseType: 'A36',
-      hasSubFloor: true,
-      subFloorMaterial: 'STL GALV 22ga'
-    };
-    setSkids([...skids, newSkid]);
-    setTargetAddSkidId(nextId);
-  };
-
-  const handleRemoveSkid = (skidId: string) => {
-    if (skids.length <= 1) {
-      alert('A unit must have at least 1 shipping skid.');
-      return;
-    }
-
-    const remainingSkids = skids.filter(s => s.id !== skidId);
-    // Reassign any segments that belonged to deleted skid to the previous available skid
-    const fallbackSkidId = remainingSkids[0]?.id || 'skid-1';
-
-    setSegments(prev => prev.map(s => (s.skidId === skidId ? { ...s, skidId: fallbackSkidId } : s)));
-    setSkids(remainingSkids);
-  };
-
-  const handleUpdateSkid = (skidId: string, updates: Partial<ManualSkidItem>) => {
-    setSkids(prev => prev.map(s => (s.id === skidId ? { ...s, ...updates } : s)));
-  };
-
-  // --- SEGMENT HANDLERS ---
-  const handleAddSegmentFromTemplate = (templateCode: string) => {
-    const template = AVAILABLE_SEGMENT_TEMPLATES.find(t => t.typeCode === templateCode);
-    if (!template) return;
-
-    const assignedSkid = targetAddSkidId || skids[0]?.id || 'skid-1';
-    const newSeg: ManualSegmentItem = {
-      id: `seg-${Date.now()}-${segments.length + 1}`,
-      typeCode: template.typeCode,
-      name: template.name,
-      skidId: assignedSkid,
-      length: template.defaultLength,
-      width: defaultUnitWidth,
-      height: defaultUnitHeight,
-      weight: template.defaultWeight,
-      airPressureType: template.defaultPressure,
-      airVolume: 18000,
-      internals: [...template.defaultInternals]
-    };
-
-    setSegments([...segments, newSeg]);
-  };
-
-  const handleRemoveSegment = (segId: string) => {
-    setSegments(prev => prev.filter(s => s.id !== segId));
-  };
-
-  const handleDuplicateSegment = (segId: string) => {
-    const segIdx = segments.findIndex(s => s.id === segId);
-    if (segIdx === -1) return;
-
-    const source = segments[segIdx];
-    const clone: ManualSegmentItem = {
-      ...source,
-      id: `seg-${Date.now()}`,
-      name: `${source.name} (Copy)`,
-      internals: [...source.internals]
-    };
-
-    const newSegments = [...segments];
-    newSegments.splice(segIdx + 1, 0, clone);
-    setSegments(newSegments);
-  };
-
-  const handleMoveSegment = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === segments.length - 1) return;
-
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const next = [...segments];
-    const temp = next[index];
-    next[index] = next[targetIndex];
-    next[targetIndex] = temp;
-    setSegments(next);
-  };
-
-  const handleUpdateSegment = (segId: string, updates: Partial<ManualSegmentItem>) => {
-    setSegments(prev => prev.map(s => (s.id === segId ? { ...s, ...updates } : s)));
-  };
-
-  const handleAddInternal = (segId: string) => {
-    if (!newInternalText.trim()) return;
-    setSegments(prev => prev.map(s => {
-      if (s.id === segId) {
-        return { ...s, internals: [...s.internals, newInternalText.trim()] };
-      }
-      return s;
-    }));
-    setNewInternalText('');
-  };
-
-  const handleRemoveInternal = (segId: string, internalIdx: number) => {
-    setSegments(prev => prev.map(s => {
-      if (s.id === segId) {
-        const next = [...s.internals];
-        next.splice(internalIdx, 1);
-        return { ...s, internals: next };
-      }
-      return s;
-    }));
-  };
-
-  // --- DERIVED METRICS ---
-  const unitMetrics = useMemo(() => {
-    let totalLength = 0;
-    let totalWeight = 0;
-    let maxW = defaultUnitWidth;
-    let maxH = defaultUnitHeight;
-
-    segments.forEach(seg => {
-      totalLength += Number(seg.length) || 0;
-      totalWeight += Number(seg.weight) || 0;
-      maxW = Math.max(maxW, Number(seg.width) || defaultUnitWidth);
-      maxH = Math.max(maxH, Number(seg.height) || defaultUnitHeight);
-    });
-
-    const skidBreakdown = skids.map(skid => {
-      const segs = segments.filter(s => s.skidId === skid.id);
-      const sLen = segs.reduce((acc, curr) => acc + (Number(curr.length) || 0), 0);
-      const sWt = segs.reduce((acc, curr) => acc + (Number(curr.weight) || 0), 0);
-      return {
-        ...skid,
-        segments: segs,
-        calculatedLength: sLen,
-        calculatedWeight: sWt
-      };
-    });
-
-    return {
-      totalLength,
-      totalLengthFeet: (totalLength / 12).toFixed(1),
-      totalWeight,
-      maxW,
-      maxH,
-      totalHeightWithBase: maxH + defaultBaseHeight,
-      skidBreakdown
-    };
-  }, [segments, skids, defaultUnitWidth, defaultUnitHeight, defaultBaseHeight]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (skids.length === 0) {
-      alert('Please configure at least 1 shipping skid.');
-      return;
-    }
-
-    if (segments.length === 0) {
-      alert('Please add at least 1 segment to the unit sequence.');
-      return;
-    }
-
-    onCreateUnit({
-      jobName: jobName.trim() || 'Custom AHU Project',
-      comNumber: comNumber.trim() || 'COM-000000',
-      detailerName: detailerName.trim() || 'Detailer',
-      unitType,
-      housingStyle,
-      defaultUnitWidth,
-      defaultUnitHeight,
-      defaultBaseHeight,
-      defaultWallThickness,
-      totalStaticPressure,
-      casingMaterials: {
-        exteriorMaterialType,
-        exteriorMaterialGauge,
-        interiorMaterialType,
-        interiorMaterialGauge,
-        floorMaterialType,
-        floorMaterialGauge,
-        insulationType
-      },
-      skids,
-      segments
-    });
-    onClose();
-  };
-
-  return (
+  const modal = (
     <div
       ref={containerRef}
       role="dialog"
@@ -438,11 +230,11 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
               <button
                 key={step.id}
                 type="button"
-                onClick={() => setActiveStep(step.id as any)}
+                onClick={() => selectStep(step.id as ManualWizardStep)}
                 className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
                   isActive
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white/60 dark:bg-slate-800/60 font-bold'
-                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'border-blue-600 text-blue-700 dark:text-blue-400 bg-white/60 dark:bg-slate-800/60 font-bold'
+                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600 dark:text-blue-400' : ''}`} />
@@ -800,6 +592,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                             </span>
                             <input
                               type="text"
+                              aria-label={`Skid ${idx + 1} Name`}
                               value={skid.name}
                               onChange={(e) => handleUpdateSkid(skid.id, { name: e.target.value })}
                               className="px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
@@ -811,6 +604,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                             type="button"
                             onClick={() => handleRemoveSkid(skid.id)}
                             disabled={skids.length <= 1}
+                            aria-label={`Delete Skid ${idx + 1}`}
                             className={`p-1.5 rounded-lg transition-colors ${
                               skids.length <= 1
                                 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed'
@@ -838,8 +632,9 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                         {/* Base Profile Controls */}
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200 dark:border-slate-800 text-xs">
                           <div>
-                            <label className="block text-[10px] font-mono text-slate-500">Base Height</label>
+                            <label className="block text-[10px] font-mono text-slate-600 dark:text-slate-400">Base Height</label>
                             <select
+                              aria-label={`Skid ${idx + 1} Base Height`}
                               value={skid.baseHeight || defaultBaseHeight}
                               onChange={(e) => handleUpdateSkid(skid.id, { baseHeight: parseFloat(e.target.value) })}
                               className="w-full mt-0.5 px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
@@ -852,8 +647,9 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-mono text-slate-500">Base Material</label>
+                            <label className="block text-[10px] font-mono text-slate-600 dark:text-slate-400">Base Material</label>
                             <select
+                              aria-label={`Skid ${idx + 1} Base Material`}
                               value={skid.baseMaterial || 'StructuralSteel'}
                               onChange={(e) => handleUpdateSkid(skid.id, { baseMaterial: e.target.value })}
                               className="w-full mt-0.5 px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
@@ -976,7 +772,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleAddSegmentFromTemplate(selectedTemplateCode)}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/25 transition-all"
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-700/25 transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Insert Segment</span>
@@ -1014,6 +810,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                   type="button"
                                   disabled={idx === 0}
                                   onClick={() => handleMoveSegment(idx, 'up')}
+                                  aria-label={`Move ${seg.name} up`}
                                   className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500"
                                   title="Move Up"
                                 >
@@ -1024,6 +821,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                   type="button"
                                   disabled={idx === segments.length - 1}
                                   onClick={() => handleMoveSegment(idx, 'down')}
+                                  aria-label={`Move ${seg.name} down`}
                                   className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-500"
                                   title="Move Down"
                                 >
@@ -1043,6 +841,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                             <td className="py-2 px-3">
                               <input
                                 type="text"
+                                aria-label={`Segment ${idx + 1} Name`}
                                 value={seg.name}
                                 onChange={(e) => handleUpdateSegment(seg.id, { name: e.target.value })}
                                 className="w-full px-2 py-1 rounded bg-transparent border border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 font-medium text-slate-900 dark:text-white"
@@ -1052,6 +851,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                             {/* Assigned Skid */}
                             <td className="py-2 px-3">
                               <select
+                                aria-label={`Segment ${idx + 1} Assigned Skid`}
                                 value={seg.skidId}
                                 onChange={(e) => handleUpdateSegment(seg.id, { skidId: e.target.value })}
                                 className="w-full px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-[11px] font-semibold text-indigo-600 dark:text-indigo-400"
@@ -1070,6 +870,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 type="number"
                                 min={6}
                                 max={300}
+                                aria-label={`Segment ${idx + 1} Length`}
                                 value={seg.length}
                                 onChange={(e) => handleUpdateSegment(seg.id, { length: parseFloat(e.target.value) || 0 })}
                                 className="w-16 px-1.5 py-1 text-center font-mono rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold"
@@ -1082,6 +883,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 type="number"
                                 min={12}
                                 max={300}
+                                aria-label={`Segment ${idx + 1} Width`}
                                 value={seg.width || defaultUnitWidth}
                                 onChange={(e) => handleUpdateSegment(seg.id, { width: parseFloat(e.target.value) || defaultUnitWidth })}
                                 className="w-16 px-1.5 py-1 text-center font-mono rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
@@ -1094,6 +896,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 type="number"
                                 min={12}
                                 max={300}
+                                aria-label={`Segment ${idx + 1} Height`}
                                 value={seg.height || defaultUnitHeight}
                                 onChange={(e) => handleUpdateSegment(seg.id, { height: parseFloat(e.target.value) || defaultUnitHeight })}
                                 className="w-16 px-1.5 py-1 text-center font-mono rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
@@ -1106,6 +909,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 type="number"
                                 min={50}
                                 step={50}
+                                aria-label={`Segment ${idx + 1} Weight`}
                                 value={seg.weight}
                                 onChange={(e) => handleUpdateSegment(seg.id, { weight: parseFloat(e.target.value) || 0 })}
                                 className="w-20 px-1.5 py-1 text-center font-mono rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
@@ -1116,6 +920,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                             <td className="py-2 px-2 text-center">
                               <button
                                 type="button"
+                                aria-label={`Segment ${idx + 1} Pressure Type`}
                                 onClick={() => handleUpdateSegment(seg.id, { airPressureType: seg.airPressureType === 'Positive' ? 'Negative' : 'Positive' })}
                                 className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border transition-colors ${
                                   seg.airPressureType === 'Positive'
@@ -1138,6 +943,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                     <span className="truncate max-w-[120px]">{intern}</span>
                                     <button
                                       type="button"
+                                      aria-label={`Remove ${intern} from ${seg.name}`}
                                       onClick={() => handleRemoveInternal(seg.id, iIdx)}
                                       className="hover:text-red-500"
                                     >
@@ -1147,13 +953,14 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 ))}
                                 <button
                                   type="button"
+                                  aria-label={`Add feature to ${seg.name}`}
                                   onClick={() => {
                                     const feature = prompt('Enter internal equipment name (e.g. "Drain Pan", "EBM Fan Wall", "HEPA Filter"):');
                                     if (feature?.trim()) {
                                       handleUpdateSegment(seg.id, { internals: [...seg.internals, feature.trim()] });
                                     }
                                   }}
-                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-dashed border-slate-400 dark:border-slate-600 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-dashed border-slate-400 dark:border-slate-600 text-slate-600 hover:text-slate-900 dark:hover:text-white"
                                 >
                                   + feature
                                 </button>
@@ -1165,6 +972,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                               <div className="flex items-center justify-center gap-1 text-slate-400">
                                 <button
                                   type="button"
+                                  aria-label={`Duplicate ${seg.name}`}
                                   onClick={() => handleDuplicateSegment(seg.id)}
                                   className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
                                   title="Duplicate"
@@ -1173,6 +981,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
                                 </button>
                                 <button
                                   type="button"
+                                  aria-label={`Delete ${seg.name}`}
                                   onClick={() => handleRemoveSegment(seg.id)}
                                   className="p-1 rounded hover:bg-red-500/15 hover:text-red-500"
                                   title="Delete"
@@ -1310,11 +1119,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
               {activeStep !== 'general' && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (activeStep === 'review') setActiveStep('segments');
-                    else if (activeStep === 'segments') setActiveStep('skids');
-                    else if (activeStep === 'skids') setActiveStep('general');
-                  }}
+                  onClick={goToPreviousStep}
                   className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors"
                 >
                   Back
@@ -1334,12 +1139,8 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
               {activeStep !== 'review' ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (activeStep === 'general') setActiveStep('skids');
-                    else if (activeStep === 'skids') setActiveStep('segments');
-                    else if (activeStep === 'segments') setActiveStep('review');
-                  }}
-                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition-all"
+                  onClick={goToNextStep}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold shadow-lg shadow-blue-700/30 transition-all"
                 >
                   <span>Next Step</span>
                   <ChevronRight className="w-4 h-4" />
@@ -1347,7 +1148,7 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
               ) : (
                 <button
                   type="submit"
-                  className="flex items-center gap-2 px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all"
+                  className="flex items-center gap-2 px-6 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-lg shadow-emerald-700/30 transition-all"
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>Initialize Workspace</span>
@@ -1359,4 +1160,6 @@ export const ManualUnitModal: React.FC<ManualUnitModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 };

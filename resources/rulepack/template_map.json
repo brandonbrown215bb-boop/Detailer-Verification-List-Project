@@ -74,13 +74,13 @@
     },
     "unit.unitType": {
       "sheet": "Verification List",
-      "cell": "D8"
+      "cell": "D16"
     },
     "unit.baseHeight": {
       "sheet": "Verification List",
       "cell": "D9"
     },
-    "unit.wallThickness": {
+    "casing.thicknessFront": {
       "sheet": "Verification List",
       "cell": "D10"
     },
@@ -88,7 +88,7 @@
       "sheet": "Verification List",
       "cell": "D11"
     },
-    "unit.roofPeak": {
+    "roof.roofPeak": {
       "sheet": "Verification List",
       "cell": "D12"
     },
@@ -104,39 +104,35 @@
       "sheet": "Verification List",
       "cell": "D15"
     },
-    "unit.location": {
-      "sheet": "Verification List",
-      "cell": "D16"
-    },
     "unit.knockdown": {
       "sheet": "Verification List",
       "cell": "D17"
     },
-    "unit.utl": {
+    "unit.hasUTL": {
       "sheet": "Verification List",
       "cell": "D18"
     },
-    "unit.linerMaterial": {
+    "casing.interiorMaterial": {
       "sheet": "Verification List",
       "cell": "D19"
     },
-    "unit.linerGauge": {
+    "casing.interiorGauge": {
       "sheet": "Verification List",
       "cell": "F19"
     },
-    "unit.skinMaterial": {
+    "casing.exteriorMaterial": {
       "sheet": "Verification List",
       "cell": "D20"
     },
-    "unit.skinGauge": {
+    "casing.exteriorGauge": {
       "sheet": "Verification List",
       "cell": "F20"
     },
-    "unit.floorMaterial": {
+    "casing.floorMaterial": {
       "sheet": "Verification List",
       "cell": "D21"
     },
-    "unit.floorGauge": {
+    "casing.floorGauge": {
       "sheet": "Verification List",
       "cell": "F21"
     },

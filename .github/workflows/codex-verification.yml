@@ -1,6 +1,13 @@
 name: Codex Verification
 
 on:
+  workflow_call:
+    inputs:
+      publish_artifacts:
+        description: 'Build Windows publish artifacts after verification'
+        required: false
+        default: false
+        type: boolean
   pull_request:
     branches: [master]
   push:
@@ -37,18 +44,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '22'
+          node-version: '22.18.0'
           cache: npm
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.408'
 
       - name: Capture toolchain versions
         shell: pwsh
@@ -62,6 +69,15 @@ jobs:
 
       - name: Compile TypeScript and build Vite frontend
         run: npm run build
+
+      - name: Verify version metadata
+        run: npm run test:version
+
+      - name: Verify packaged entry assets
+        run: npm run test:dist
+
+      - name: Verify bundle size budget
+        run: npm run test:bundle
 
       - name: Validate rule-pack integrity
         shell: pwsh
@@ -79,31 +95,33 @@ jobs:
             git diff -- resources/rulepack
             exit 1
           }
-
-          git restore -- resources/rulepack
+          $dirty = git status --porcelain -- resources/rulepack
+          if ($dirty) {
+            Write-Error "Rule-pack generation changed tracked files. Commit the canonical generated output before merging."
+            Write-Host $dirty
+            exit 1
+          }
 
       - name: Restore .NET projects
         shell: pwsh
         run: |
-          dotnet restore src/backend/AHUVerification.Core/AHUVerification.Core.csproj
-          dotnet restore src/backend/AHUVerification.App/AHUVerification.App.csproj
-          dotnet restore src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj
-          dotnet restore tests/AHUVerification.Tests/AHUVerification.Tests.csproj
+          dotnet restore AHUVerification.sln
 
-      - name: Build .NET core engine
-        run: dotnet build src/backend/AHUVerification.Core/AHUVerification.Core.csproj -c Release --no-restore
+      - name: Build .NET solution
+        run: dotnet build AHUVerification.sln -c Release --no-restore
 
-      - name: Build Windows detailer host
-        run: dotnet build src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release --no-restore
-
-      - name: Build Windows rule editor
-        run: dotnet build src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release --no-restore
-
-      - name: Run .NET test suite
-        run: dotnet test tests/AHUVerification.Tests/AHUVerification.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=ahu-verification.trx" --results-directory TestResults
+      - name: Run .NET test suite and Core coverage gate
+        shell: pwsh
+        run: npm run test:coverage
 
       - name: Run AST converter tests
         run: node scripts/test_ast_converter.mjs
+
+      - name: Run fact contract parity tests
+        run: node scripts/test_fact_contract.mjs
+
+      - name: Run canonical DVL contract tests
+        run: node scripts/test_dvl_canonical.mjs
 
       - name: Run state reducers and domain logic tests
         run: node scripts/test_reducers.mjs
@@ -141,7 +159,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results-${{ github.sha }}
           path: TestResults/
@@ -150,7 +168,7 @@ jobs:
 
       - name: Upload frontend build
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: frontend-dist-${{ github.sha }}
           path: dist/
@@ -164,19 +182,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '22'
+          node-version: '22.18.0'
           cache: npm
 
       - name: Install application dependencies
         run: npm ci --no-audit --no-fund
-
-      - name: Install browser-test tooling without modifying the lockfile
-        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
 
       - name: Install Chromium and system dependencies
         run: npx playwright install --with-deps chromium
@@ -184,12 +199,18 @@ jobs:
       - name: Compile frontend before browser tests
         run: npm run build
 
+      - name: Verify packaged entry assets
+        run: npm run test:dist
+
+      - name: Verify bundle size budget
+        run: npm run test:bundle
+
       - name: Run Playwright UI and accessibility smoke tests
         run: npx playwright test
 
       - name: Upload Playwright HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report-${{ github.sha }}
           path: playwright-report/
@@ -198,7 +219,7 @@ jobs:
 
       - name: Upload Playwright traces, screenshots, and videos
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-failures-${{ github.sha }}
           path: test-results/
@@ -207,25 +228,25 @@ jobs:
 
   publish:
     name: Windows publish smoke test
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_artifacts }}
+    if: ${{ inputs.publish_artifacts == true }}
     needs: [verify, browser]
     runs-on: windows-2022
     timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '22'
+          node-version: '22.18.0'
           cache: npm
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.408'
 
       - name: Install dependencies and build frontend
         shell: pwsh
@@ -234,10 +255,10 @@ jobs:
           npm run build
 
       - name: Publish detailer application
-        run: dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained false -o publish/AHUVerification
+        run: dotnet publish src/backend/AHUVerification.App/AHUVerification.App.csproj -c Release -r win-x64 --self-contained true -o publish/AHUVerification
 
       - name: Publish rule editor
-        run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained false -o publish/RuleEditor
+        run: dotnet publish src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj -c Release -r win-x64 --self-contained true -o publish/RuleEditor
 
       - name: Validate required publish assets
         shell: pwsh
@@ -245,10 +266,25 @@ jobs:
           $required = @(
             'publish/AHUVerification/AHUVerification.App.exe',
             'publish/AHUVerification/dist/index.html',
+            'publish/AHUVerification/dist/rule-editor.html',
+            'publish/AHUVerification/version.json',
             'publish/AHUVerification/resources/rulepack/manifest.json',
+            'publish/AHUVerification/resources/rulepack/rules.json',
+            'publish/AHUVerification/resources/rulepack/template_map.json',
+            'publish/AHUVerification/resources/rulepack/approved_mappings.json',
+            'publish/AHUVerification/resources/rulepack/fact_contract.json',
+            'publish/AHUVerification/resources/rulepack/template.xlsx',
             'publish/AHUVerification/resources/bin/unpack32.exe',
             'publish/AHUVerification/resources/bin/ywunpack.dll',
-            'publish/RuleEditor/AHUVerification.RuleEditor.exe'
+            'publish/RuleEditor/RuleEditor.exe',
+            'publish/RuleEditor/dist/rule-editor.html',
+            'publish/RuleEditor/version.json',
+            'publish/RuleEditor/resources/rulepack/manifest.json',
+            'publish/RuleEditor/resources/rulepack/rules.json',
+            'publish/RuleEditor/resources/rulepack/template_map.json',
+            'publish/RuleEditor/resources/rulepack/approved_mappings.json',
+            'publish/RuleEditor/resources/rulepack/fact_contract.json',
+            'publish/RuleEditor/resources/rulepack/template.xlsx'
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) {
@@ -256,9 +292,10 @@ jobs:
               exit 1
             }
           }
+          node scripts/verify_version.mjs --publish-dir publish/AHUVerification --publish-dir publish/RuleEditor
 
       - name: Upload Windows publish artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-publish-${{ github.sha }}
           path: publish/

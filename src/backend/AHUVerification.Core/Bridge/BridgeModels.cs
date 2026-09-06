@@ -143,6 +143,33 @@ namespace AHUVerification.Core.Bridge
 
             return defaultValue;
         }
+
+        public static void ValidatePayloadSchema(string action, JsonElement payload)
+        {
+            if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null)
+            {
+                return;
+            }
+
+            // Reject relative paths
+            if (payload.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in payload.EnumerateObject())
+                {
+                    if (prop.Name.Contains("Path", StringComparison.OrdinalIgnoreCase) || prop.Name.Equals("filePath", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String)
+                        {
+                            string path = prop.Value.GetString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(path) && !System.IO.Path.IsPathRooted(path))
+                            {
+                                throw new ArgumentException($"Action '{action}' requires an absolute path for '{prop.Name}'. Relative paths are not allowed.");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

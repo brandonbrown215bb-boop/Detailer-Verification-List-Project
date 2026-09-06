@@ -58,7 +58,7 @@
     "reference": "Base Fab Dwg 391-10001-002",
     "excelRow": 32,
     "requiredFacts": [
-      "unit.floorMaterial"
+      "casing.floorMaterial"
     ],
     "allowNA": true,
     "verificationMode": "ManualCheckbox"
@@ -86,7 +86,7 @@
     "reference": "Sheet Metal Sizing Std",
     "excelRow": 41,
     "requiredFacts": [
-      "unit.floorMaterial"
+      "casing.floorMaterial"
     ],
     "allowNA": true,
     "verificationMode": "ManualCheckbox"
@@ -101,8 +101,8 @@
     "reference": "Unit Schedule Specs",
     "excelRow": 42,
     "requiredFacts": [
-      "unit.floorMaterial",
-      "unit.floorGauge"
+      "casing.floorMaterial",
+      "casing.floorGauge"
     ],
     "allowNA": false,
     "verificationMode": "ManualCheckbox"
@@ -173,7 +173,7 @@
         {
           "var": "unit.curbrest"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -202,14 +202,21 @@
     "reference": "Aluminum Base Standard",
     "excelRow": 51,
     "requiredFacts": [
-      "unit.floorMaterial"
+      "casing.floorMaterial"
     ],
     "predicate": {
-      "includes": [
+      "in": [
         {
-          "var": "unit.floorMaterial"
+          "var": "casing.floorMaterial"
         },
-        "AL"
+        [
+          "AL",
+          "ALUMINUM",
+          "AL TREAD",
+          "ALUMINUM TREAD",
+          "AL DIAMOND PLATE",
+          "ALUMINUM DIAMOND PLATE"
+        ]
       ]
     },
     "allowNA": true,
@@ -384,7 +391,7 @@
     "reference": "Aluminum Base Standard",
     "excelRow": 118,
     "requiredFacts": [
-      "unit.floorMaterial"
+      "casing.floorMaterial"
     ],
     "allowNA": true,
     "verificationMode": "ManualCheckbox",
@@ -576,8 +583,8 @@
     "reference": "Engineering Casing Spec",
     "excelRow": 74,
     "requiredFacts": [
-      "unit.skinMaterial",
-      "unit.linerMaterial"
+      "casing.exteriorMaterial",
+      "casing.interiorMaterial"
     ],
     "allowNA": false,
     "verificationMode": "ManualCheckbox"
@@ -742,14 +749,21 @@
     "reference": "Casing Corner Liners Spec",
     "excelRow": 146,
     "requiredFacts": [
-      "unit.linerMaterial"
+      "casing.interiorMaterial"
     ],
     "predicate": {
-      "includes": [
+      "in": [
         {
-          "var": "unit.linerMaterial"
+          "var": "casing.interiorMaterial"
         },
-        "AL"
+        [
+          "AL",
+          "ALUMINUM",
+          "AL TREAD",
+          "ALUMINUM TREAD",
+          "AL DIAMOND PLATE",
+          "ALUMINUM DIAMOND PLATE"
+        ]
       ]
     },
     "allowNA": true,
@@ -772,7 +786,7 @@
         {
           "var": "unit.thermalBreak"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -795,7 +809,7 @@
         {
           "var": "unit.knockdown"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -818,7 +832,7 @@
         {
           "var": "unit.knockdown"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -841,7 +855,7 @@
         {
           "var": "unit.knockdown"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -864,7 +878,7 @@
         {
           "var": "unit.knockdown"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -880,14 +894,14 @@
     "reference": "UTL Drain Pan Detail",
     "excelRow": 183,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -903,14 +917,14 @@
     "reference": "UTL Wall Panel Sizing Spec",
     "excelRow": 185,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -926,15 +940,15 @@
     "reference": "UTL Detail Standard 391-30002",
     "excelRow": 186,
     "requiredFacts": [
-      "unit.utl",
+      "unit.hasUTL",
       "unit.isSeismic"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -950,14 +964,14 @@
     "reference": "UTL Coil Panel Guide",
     "excelRow": 187,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -973,14 +987,14 @@
     "reference": "Vestibule Standard Spec",
     "excelRow": 189,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -996,14 +1010,14 @@
     "reference": "Shared Wall Coil Detail",
     "excelRow": 190,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -1019,14 +1033,14 @@
     "reference": "Footer Coil Panel Specification",
     "excelRow": 191,
     "requiredFacts": [
-      "unit.utl"
+      "unit.hasUTL"
     ],
     "predicate": {
-      "includes": [
+      "===": [
         {
-          "var": "unit.utl"
+          "var": "unit.hasUTL"
         },
-        "Yes"
+        true
       ]
     },
     "allowNA": true,
@@ -1820,7 +1834,7 @@
     "reference": "Materials Specification Sec 2",
     "excelRow": 210,
     "requiredFacts": [
-      "unit.linerMaterial",
+      "casing.interiorMaterial",
       "skid.hasSplit"
     ],
     "predicate": {

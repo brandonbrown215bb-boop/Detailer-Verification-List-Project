@@ -10,8 +10,18 @@ export function exportToExcel(
   rules: RuleDefinition[],
   graph?: NormalizedXmlGraph,
   fileName?: string,
-  isDraft: boolean = false
+  isDraft: boolean = false,
+  generalComments: string = ''
 ): void {
+  if (sqItems.length > 22) {
+    throw new RangeError(`The official workbook supports at most 22 Special Quote slots; ${sqItems.length} were supplied. Browser preview refuses to drop overflow entries.`);
+  }
+  if (sqItems.some(sq => !Number.isInteger(sq.slot) || sq.slot < 1 || sq.slot > 22)) {
+    throw new RangeError('Special Quote slots must be integers from 1 through 22.');
+  }
+  if (new Set(sqItems.map(sq => sq.slot)).size !== sqItems.length) {
+    throw new RangeError('Special Quote slots must be unique.');
+  }
   const wb = XLSX.utils.book_new();
 
   // Workbook metadata watermark
@@ -61,7 +71,10 @@ export function exportToExcel(
   vlData.push(['', 'LINER MATERIAL', facts['unit.linerMaterial']?.value || 'STL GALV', 'GA', facts['unit.linerGauge']?.value || 22]);
   vlData.push(['', 'SKIN MATERIAL', facts['unit.skinMaterial']?.value || 'STL GALV PPC', 'GA', facts['unit.skinGauge']?.value || 18]);
   vlData.push(['', 'FLOOR MATERIAL', facts['unit.floorMaterial']?.value || 'STL GALV', 'GA', facts['unit.floorGauge']?.value || 16]);
-  vlData.push(['', 'Additional Comments:', isDraft ? '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] [DRAFT - INCOMPLETE AUDIT] Verified against Config.xml pipeline.' : '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] Verified against Config.xml automated pipeline.']);
+  const browserNotice = isDraft
+    ? '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING] [DRAFT - INCOMPLETE AUDIT]'
+    : '[BROWSER PREVIEW DRAFT - NOT FOR PRODUCTION CHECKING]';
+  vlData.push(['', 'Additional Comments:', `${browserNotice} ${generalComments || 'Official OpenXML synthesis is required for production checking.'}`]);
 
   // Fill Special Quotes in columns G & H dynamically
   const maxSqRows = Math.max(sqItems.length, 10);
@@ -81,9 +94,30 @@ export function exportToExcel(
   const columnsHeader = ['', 'Rule ID', 'Verification Check Item', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Status', 'Detailer Check', '', 'Checker Check', '', '', 'Detailer Comments', 'Initials'];
 
   const detailerInitials = facts['unit.detailer']?.value ? String(facts['unit.detailer'].value).split(' ').map(n => n[0]).join('').toUpperCase() : 'TD';
+  const workbookStatus = (inst: ChecklistInstance): string => {
+    if (inst.applicability === 'NeedsInput' || inst.status === 'NeedsInput') return 'Needs Input';
+    if (inst.applicability === 'NotApplicable' || inst.status === 'NotApplicable') return 'Not Applicable';
+    if (inst.status === 'NA') return 'N/A';
+    if (inst.status === 'Flagged') return 'Flagged';
+    return inst.status === 'Passed' ? 'Passed' : 'Incomplete';
+  };
+  const detailerValue = (inst: ChecklistInstance): string => {
+    if (inst.applicability === 'NeedsInput' || inst.status === 'NeedsInput') return 'Needs Input';
+    if (inst.applicability === 'NotApplicable' || inst.status === 'NotApplicable' || inst.status === 'NA') return 'N/A';
+    if (inst.status === 'Flagged') return 'Flagged';
+    return inst.status === 'Passed' ? 'Yes' : '0';
+  };
+  const commentsValue = (inst: ChecklistInstance): string => [
+    inst.detailerComment ? `Detailer: ${inst.detailerComment}` : '',
+    inst.checkerComment ? `Checker: ${inst.checkerComment}` : ''
+  ].filter(Boolean).join(' | ');
+  const initialsValue = (inst: ChecklistInstance): string => [
+    inst.detailerInitials || detailerInitials,
+    inst.checkerInitials || ''
+  ].filter(Boolean).join(' / ');
 
   // --- SECTION 1: GENERAL UNIT VERIFICATIONS ---
-  const unitChecks = checklists.filter(c => c.scopeTargetId === 'unit' && c.applicability === 'Applicable');
+  const unitChecks = checklists.filter(c => c.scopeTargetId === 'unit');
   if (unitChecks.length > 0) {
     vlData.push(['', '=== GENERAL UNIT VERIFICATIONS ===']);
     vlData.push(columnsHeader);
@@ -102,19 +136,18 @@ export function exportToExcel(
       items.forEach(inst => {
         const rule = rules.find(r => r.id === inst.ruleId);
         if (!rule) return;
-        const isPassed = inst.status === 'Passed';
         vlData.push([
           '',
           rule.id,
           rule.text,
           '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-          isPassed ? 'Verified' : 'Pending',
-          isPassed ? 'Yes' : '0',
+          workbookStatus(inst),
+          detailerValue(inst),
           '',
-          '0',
+          inst.checkerComment || inst.checkerInitials ? (inst.status === 'Passed' ? 'Yes' : '0') : '0',
           '', '',
-          inst.detailerComment || '',
-          detailerInitials
+          commentsValue(inst),
+          initialsValue(inst)
         ]);
       });
     });
@@ -124,7 +157,7 @@ export function exportToExcel(
   // --- SECTION 2..N: SKID VERIFICATIONS ---
   const skids = graph?.skids || [];
   skids.forEach((skid) => {
-    const skidChecks = checklists.filter(c => c.scopeTargetId === skid.id && c.applicability === 'Applicable');
+    const skidChecks = checklists.filter(c => c.scopeTargetId === skid.id);
     if (skidChecks.length === 0) return;
 
     vlData.push(['', `=== ${skid.name.toUpperCase()} VERIFICATIONS ===`]);
@@ -150,19 +183,18 @@ export function exportToExcel(
         items.forEach(inst => {
           const rule = rules.find(r => r.id === inst.ruleId);
           if (!rule) return;
-          const isPassed = inst.status === 'Passed';
           vlData.push([
             '',
             rule.id,
             rule.text,
             '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-            isPassed ? 'Verified' : 'Pending',
-            isPassed ? 'Yes' : '0',
+            workbookStatus(inst),
+            detailerValue(inst),
             '',
-            '0',
+            inst.checkerComment || inst.checkerInitials ? (inst.status === 'Passed' ? 'Yes' : '0') : '0',
             '', '',
-            inst.detailerComment || '',
-            detailerInitials
+            commentsValue(inst),
+            initialsValue(inst)
           ]);
         });
       });

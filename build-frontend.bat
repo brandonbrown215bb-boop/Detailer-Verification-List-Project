@@ -15,7 +15,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 if not exist "node_modules\" (
     echo [INFO] Installing npm dependencies...
-    call npm install --no-audit --no-fund
+    call npm ci --no-audit --no-fund
     if %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Failed to install npm dependencies.
         pause
