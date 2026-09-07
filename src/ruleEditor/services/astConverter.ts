@@ -1,9 +1,45 @@
 import type { ASTPredicate } from '../../types/index.ts';
-import type { VisualConditionGroup, VisualConditionLeaf, VisualConditionNode, ComparisonOperator } from '../types.ts';
+import type {
+  VisualConditionGroup,
+  VisualConditionLeaf,
+  VisualConditionNode,
+  VisualConditionUnsupported,
+  ComparisonOperator
+} from '../types.ts';
 
 let idCounter = 1;
 export function generateNodeId(): string {
   return `node_${Date.now()}_${idCounter++}`;
+}
+
+/**
+ * Inverts relational operators when a variable is on the right-hand side.
+ * e.g. 4000 > x <=> x < 4000
+ */
+export function invertOperator(op: ComparisonOperator): ComparisonOperator {
+  switch (op) {
+    case '>':
+      return '<';
+    case '>=':
+      return '<=';
+    case '<':
+      return '>';
+    case '<=':
+      return '>=';
+    default:
+      return op; // === and !== are symmetric
+  }
+}
+
+/**
+ * Coerces numeric inputs safely without silent fallback to 0.
+ */
+function parseNumericValue(val: any): any {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+    return Number(val);
+  }
+  return val;
 }
 
 /**
@@ -18,6 +54,8 @@ export function visualTreeToAst(root: VisualConditionGroup): ASTPredicate | unde
     .map(child => {
       if (child.type === 'condition') {
         return leafToAst(child);
+      } else if (child.type === 'unsupported') {
+        return child.rawPredicate;
       } else {
         return subGroupToAst(child);
       }
@@ -28,7 +66,7 @@ export function visualTreeToAst(root: VisualConditionGroup): ASTPredicate | unde
     return undefined;
   }
 
-  if (convertedChildren.length === 1 && root.logicalOperator === 'and' && root.children[0].type === 'condition') {
+  if (convertedChildren.length === 1 && root.logicalOperator === 'and' && (root.children[0].type === 'condition' || root.children[0].type === 'unsupported')) {
     return convertedChildren[0];
   }
 
@@ -48,6 +86,8 @@ function subGroupToAst(group: VisualConditionGroup): ASTPredicate | undefined {
     .map(child => {
       if (child.type === 'condition') {
         return leafToAst(child);
+      } else if (child.type === 'unsupported') {
+        return child.rawPredicate;
       } else {
         return subGroupToAst(child);
       }
@@ -69,26 +109,32 @@ function leafToAst(leaf: VisualConditionLeaf): ASTPredicate | undefined {
   if (!leaf.factKey) return undefined;
 
   const varRef = { var: leaf.factKey };
+  const isVarValue = leaf.value && typeof leaf.value === 'object' && 'var' in leaf.value;
+  const rightOperand = isVarValue
+    ? { var: leaf.value.var }
+    : leaf.operator === '>' || leaf.operator === '>=' || leaf.operator === '<' || leaf.operator === '<='
+      ? parseNumericValue(leaf.value)
+      : leaf.value;
 
   switch (leaf.operator) {
     case '>':
-      return { '>': [varRef, Number(leaf.value) || 0] };
+      return { '>': [varRef, rightOperand] };
     case '>=':
-      return { '>=': [varRef, Number(leaf.value) || 0] };
+      return { '>=': [varRef, rightOperand] };
     case '<':
-      return { '<': [varRef, Number(leaf.value) || 0] };
+      return { '<': [varRef, rightOperand] };
     case '<=':
-      return { '<=': [varRef, Number(leaf.value) || 0] };
+      return { '<=': [varRef, rightOperand] };
     case '===':
-      return { '===': [varRef, leaf.value] };
+      return { '===': [varRef, rightOperand] };
     case '!==':
-      return { '!==': [varRef, leaf.value] };
+      return { '!==': [varRef, rightOperand] };
     case 'includes':
-      return { includes: [varRef, String(leaf.value || '')] };
+      return { includes: [varRef, String(leaf.value ?? '')] };
     case 'in': {
       const list = Array.isArray(leaf.value)
         ? leaf.value
-        : String(leaf.value || '')
+        : String(leaf.value ?? '')
             .split(',')
             .map(s => s.trim())
             .filter(Boolean);
@@ -101,7 +147,7 @@ function leafToAst(leaf: VisualConditionLeaf): ASTPredicate | undefined {
     case 'is_defined':
       return { '!==': [varRef, null] };
     default:
-      return { '===': [varRef, leaf.value] };
+      return { '===': [varRef, rightOperand] };
   }
 }
 
@@ -123,33 +169,31 @@ export function astToVisualTree(predicate: ASTPredicate | undefined): VisualCond
   // Handle 'and'
   if ('and' in predicate && Array.isArray(predicate.and)) {
     root.logicalOperator = 'and';
-    root.children = predicate.and.map(sub => parseSubPredicate(sub)).filter(Boolean) as VisualConditionNode[];
+    root.children = predicate.and.map(sub => parseSubPredicate(sub));
     return root;
   }
 
   // Handle 'or'
   if ('or' in predicate && Array.isArray(predicate.or)) {
     root.logicalOperator = 'or';
-    root.children = predicate.or.map(sub => parseSubPredicate(sub)).filter(Boolean) as VisualConditionNode[];
+    root.children = predicate.or.map(sub => parseSubPredicate(sub));
     return root;
   }
 
-  // Single condition
-  const single = parseLeaf(predicate);
-  if (single) {
-    root.children.push(single);
-  }
+  // Single condition or unsupported structure
+  const single = parseSubPredicate(predicate);
+  root.children.push(single);
 
   return root;
 }
 
-function parseSubPredicate(sub: ASTPredicate): VisualConditionNode | undefined {
+function parseSubPredicate(sub: ASTPredicate): VisualConditionNode {
   if ('and' in sub && Array.isArray(sub.and)) {
     return {
       type: 'group',
       id: generateNodeId(),
       logicalOperator: 'and',
-      children: sub.and.map(s => parseSubPredicate(s)).filter(Boolean) as VisualConditionNode[]
+      children: sub.and.map(s => parseSubPredicate(s))
     };
   }
 
@@ -158,11 +202,22 @@ function parseSubPredicate(sub: ASTPredicate): VisualConditionNode | undefined {
       type: 'group',
       id: generateNodeId(),
       logicalOperator: 'or',
-      children: sub.or.map(s => parseSubPredicate(s)).filter(Boolean) as VisualConditionNode[]
+      children: sub.or.map(s => parseSubPredicate(s))
     };
   }
 
-  return parseLeaf(sub);
+  const leaf = parseLeaf(sub);
+  if (leaf) {
+    return leaf;
+  }
+
+  // Preserve unsupported structure verbatim without dropping
+  return {
+    type: 'unsupported',
+    id: generateNodeId(),
+    rawPredicate: sub,
+    diagnostic: `Complex predicate structure preserved (${Object.keys(sub).join(', ') || 'unknown'})`
+  };
 }
 
 function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
@@ -182,25 +237,40 @@ function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
   for (const { key, op } of operators) {
     if (key in predicate && Array.isArray(predicate[key]) && predicate[key].length >= 2) {
       const [left, right] = predicate[key];
+      const leftIsVar = Boolean(left && typeof left === 'object' && 'var' in left && typeof (left as any).var === 'string');
+      const rightIsVar = Boolean(right && typeof right === 'object' && 'var' in right && typeof (right as any).var === 'string');
+
       let factKey = '';
       let value: any = right;
+      let effectiveOp = op;
 
-      if (left && typeof left === 'object' && 'var' in left) {
-        factKey = left.var;
-      } else if (right && typeof right === 'object' && 'var' in right) {
-        factKey = right.var;
+      if (leftIsVar && rightIsVar) {
+        // Variable-to-variable comparison
+        factKey = (left as any).var;
+        value = { var: (right as any).var };
+      } else if (leftIsVar) {
+        // Standard variable on left
+        factKey = (left as any).var;
+        value = right;
+      } else if (rightIsVar) {
+        // Variable on right: invert operator for relational comparisons
+        if (op === 'includes' || op === 'in') {
+          return undefined;
+        }
+        factKey = (right as any).var;
         value = left;
+        effectiveOp = invertOperator(op);
       }
 
       if (factKey) {
         // Special case booleans and defined
-        if (op === '===' && value === true) {
+        if (effectiveOp === '===' && value === true) {
           return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_true', value: true };
         }
-        if (op === '===' && value === false) {
+        if (effectiveOp === '===' && value === false) {
           return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_false', value: false };
         }
-        if (op === '!==' && value === null) {
+        if (effectiveOp === '!==' && value === null) {
           return { type: 'condition', id: generateNodeId(), factKey, operator: 'is_defined', value: null };
         }
 
@@ -208,7 +278,7 @@ function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
           type: 'condition',
           id: generateNodeId(),
           factKey,
-          operator: op,
+          operator: effectiveOp,
           value
         };
       }
@@ -216,6 +286,16 @@ function parseLeaf(predicate: ASTPredicate): VisualConditionLeaf | undefined {
   }
 
   return undefined;
+}
+
+function extractVarsFromRaw(obj: any, facts: Set<string>): void {
+  if (!obj || typeof obj !== 'object') return;
+  if ('var' in obj && typeof obj.var === 'string' && obj.var.trim()) {
+    facts.add(obj.var.trim());
+  }
+  for (const key of Object.keys(obj)) {
+    extractVarsFromRaw(obj[key], facts);
+  }
 }
 
 /**
@@ -229,6 +309,11 @@ export function extractRequiredFactsFromTree(group: VisualConditionGroup): strin
       if (node.factKey && node.factKey.trim()) {
         facts.add(node.factKey.trim());
       }
+      if (node.value && typeof node.value === 'object' && 'var' in node.value && typeof (node.value as any).var === 'string') {
+        facts.add((node.value as any).var.trim());
+      }
+    } else if (node.type === 'unsupported') {
+      extractVarsFromRaw(node.rawPredicate, facts);
     } else if (node.type === 'group' && node.children) {
       node.children.forEach(collect);
     }

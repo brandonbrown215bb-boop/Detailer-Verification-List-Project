@@ -10,7 +10,7 @@ import {
   Check
 } from 'lucide-react';
 import { ModalShell } from './common/ModalShell';
-import { UnitReadiness, computeUnitReadiness } from '../utils/readiness';
+import { UnitReadiness, EMPTY_READINESS } from '../utils/readiness';
 import { formatEnumLabel } from '../utils/formatters';
 
 interface ResolutionCenterModalProps {
@@ -41,7 +41,7 @@ export const ResolutionCenterModal: React.FC<ResolutionCenterModalProps> = ({
   if (!isOpen) return null;
 
   // Derive readiness strictly from centralized predicate
-  const unitReadiness = readiness || computeUnitReadiness(facts, checklists);
+  const unitReadiness = readiness || EMPTY_READINESS;
   const {
     unconfirmedFacts,
     blockedRules,

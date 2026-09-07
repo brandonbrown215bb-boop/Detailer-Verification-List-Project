@@ -1,6 +1,6 @@
 import React from 'react';
 import { NormalizedXmlGraph, ChecklistInstance, SpecialQuote, Fact } from '../types';
-import { UnitReadiness, computeUnitReadiness, computeScopeReadiness } from '../utils/readiness';
+import { UnitReadiness, EMPTY_READINESS, EMPTY_SCOPE_READINESS } from '../utils/readiness';
 import {
   Box,
   Layers,
@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   if (!graph) return null;
 
   // Global centralized readiness
-  const unitReadiness = readiness || computeUnitReadiness(facts || {}, checklists);
+  const unitReadiness = readiness || EMPTY_READINESS;
   const {
     totalApplicableChecksCount,
     completedChecksCount,
@@ -49,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     percentComplete: overallPercent
   } = unitReadiness;
 
-  const unitScope = unitReadiness.scopeReadinessMap['unit'] || computeScopeReadiness(facts || {}, checklists, 'unit');
+  const unitScope = unitReadiness.scopeReadinessMap['unit'] || EMPTY_SCOPE_READINESS;
   const unitPassed = unitScope.completedChecksCount;
   const unitApplicableCount = unitScope.totalApplicableChecksCount;
   const unitNeedsInput = unitScope.blockedChecksCount;
@@ -230,7 +230,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="space-y-1.5">
             {graph.skids.map((skid) => {
-              const skidScope = unitReadiness.scopeReadinessMap[skid.id] || computeScopeReadiness(facts || {}, checklists, skid.id);
+              const skidScope = unitReadiness.scopeReadinessMap[skid.id] || EMPTY_SCOPE_READINESS;
               const applicableCount = skidScope.totalApplicableChecksCount;
               const passed = skidScope.completedChecksCount;
               const needsInput = skidScope.blockedChecksCount;

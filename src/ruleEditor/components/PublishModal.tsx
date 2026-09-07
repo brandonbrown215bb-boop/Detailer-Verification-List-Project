@@ -82,7 +82,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
               type="button"
               disabled={isPublishing || diffs.length === 0}
               onClick={handleConfirmPublish}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg shadow-lg shadow-emerald-950 transition-all"
+              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 rounded-lg shadow-lg shadow-emerald-950 transition-all"
             >
               <Upload className="w-4 h-4" />
               {isPublishing ? 'Publishing & Hashing...' : 'Publish Release'}
@@ -119,7 +119,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             </h3>
 
             {diffs.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-500 bg-slate-950/40 rounded-lg border border-slate-800">
+              <div className="p-4 text-center text-xs text-slate-400 bg-slate-950/40 rounded-lg border border-slate-800">
                 No changes detected. The rule pack is currently identical to the published release.
               </div>
             ) : (

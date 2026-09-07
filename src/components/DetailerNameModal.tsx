@@ -7,7 +7,8 @@ interface DetailerNameModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentName: string;
-  onSaveName: (name: string) => void;
+  currentInitials?: string;
+  onSaveName: (name: string, initials?: string) => void;
   isFirstLaunch?: boolean;
 }
 
@@ -15,31 +16,52 @@ export const DetailerNameModal: React.FC<DetailerNameModalProps> = ({
   isOpen,
   onClose,
   currentName,
+  currentInitials,
   onSaveName,
   isFirstLaunch = false
 }) => {
+  const deriveInitials = (fullName: string): string => {
+    const trimmed = fullName.trim();
+    if (!trimmed) return 'TD';
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) {
+      return parts[0].length >= 2 ? parts[0].slice(0, 2).toUpperCase() : parts[0].toUpperCase();
+    }
+    return parts.map(part => part[0]).join('').slice(0, 4).toUpperCase();
+  };
+
   const [name, setName] = useState(currentName || '');
+  const [initials, setInitials] = useState(currentInitials || '');
+  const [isInitialsOverridden, setIsInitialsOverridden] = useState(false);
 
   useEffect(() => {
     setName(currentName || '');
-  }, [currentName, isOpen]);
+    const savedInitials = currentInitials || (typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) || '' : '');
+    setInitials(savedInitials || deriveInitials(currentName || ''));
+    setIsInitialsOverridden(Boolean(savedInitials));
+  }, [currentName, currentInitials, isOpen]);
 
-  const derivedInitials = name.trim()
-    ? name
-        .trim()
-        .split(/\s+/)
-        .map(part => part[0])
-        .join('')
-        .slice(0, 3)
-        .toUpperCase()
-    : 'TD';
+  const handleNameChange = (newName: string) => {
+    setName(newName);
+    if (!isInitialsOverridden) {
+      setInitials(deriveInitials(newName));
+    }
+  };
+
+  const handleInitialsChange = (newInitials: string) => {
+    const formatted = newInitials.toUpperCase().slice(0, 5);
+    setInitials(formatted);
+    setIsInitialsOverridden(true);
+  };
 
   const handleSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!name.trim()) return;
 
+    const finalInitials = initials.trim() || deriveInitials(name.trim());
     localStorage.setItem(STORAGE_KEYS.DETAILER_NAME, name.trim());
-    onSaveName(name.trim());
+    localStorage.setItem(STORAGE_KEYS.DETAILER_INITIALS, finalInitials);
+    onSaveName(name.trim(), finalInitials);
     onClose();
   };
 
@@ -67,18 +89,47 @@ export const DetailerNameModal: React.FC<DetailerNameModalProps> = ({
             type="text"
             autoFocus
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => handleNameChange(e.target.value)}
             placeholder="e.g. Tanner Dean"
             className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-950/70 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all shadow-inner"
           />
         </div>
 
-        {/* Initials Preview */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-          <span className="text-slate-600 dark:text-slate-400">Generated Sign-off Initials:</span>
-          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-md border border-blue-500/30">
-            {derivedInitials}
-          </span>
+        {/* Initials Input & Override */}
+        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="detailer-initials-input" className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+              Sign-off Initials:
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="detailer-initials-input"
+                aria-label="Detailer Sign-off Initials"
+                type="text"
+                maxLength={5}
+                value={initials}
+                onChange={e => handleInitialsChange(e.target.value)}
+                placeholder={deriveInitials(name)}
+                className="w-20 font-mono font-bold text-center uppercase px-2.5 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 transition-colors"
+              />
+              {isInitialsOverridden && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInitialsOverridden(false);
+                    setInitials(deriveInitials(name));
+                  }}
+                  className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors underline"
+                  title="Reset to auto-derived initials"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Auto-derived from your name. Edit to override with a custom signature code.
+          </p>
         </div>
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">

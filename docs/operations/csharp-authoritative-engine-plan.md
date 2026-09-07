@@ -1,8 +1,11 @@
 # C# authoritative engine migration plan
 
 Date: 2026-09-06
-Status: Planned; no migration implementation performed
-Inspection baseline: `master`, HEAD `29836826b5cccedc8c2f3779b5dd8d5a35e19c22`, plus existing local changes.
+Status: Implementation substantially delivered; completion remediation planned
+Completion plan: [C# migration remediation](csharp-migration-remediation-plan.md)
+Migration log: [ce-migration-log.md](ce-migration-log.md)
+Architecture decision: [ADR 0012](../decisions/0012-csharp-authoritative-engine-and-browser-engine-retirement.md)
+Inspection baseline: `master`, commit `ed8e9d5`.
 
 ## Outcome and scope
 
@@ -12,9 +15,9 @@ This is a follow-on migration to the [remediation plan](remediation-plan.md), no
 
 No UI framework rewrite, cloud service, local HTTP server, new database, event-sourcing framework, or general plugin architecture is required. Node/Vite remain build tools. Static UI tests may run in a browser using fixed host-response fixtures; they do not implement application processing.
 
-## Observed ownership gaps
+## Original inspection baseline: ownership gaps
 
-Paths are relative to the repository root. These are current source observations, not claims that earlier release checks failed.
+Paths are relative to the repository root. This table records the original pre-migration inspection, not current implementation status. See the completion plan above for remaining source-backed findings and acceptance work.
 
 | Area | Current evidence | Required destination |
 |---|---|---|

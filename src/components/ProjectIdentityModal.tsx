@@ -61,6 +61,14 @@ export const ProjectIdentityModal: React.FC<ProjectIdentityModalProps> = ({
     if (detailer !== (facts[FACT_KEYS.DETAILER]?.value ?? '')) {
       onUpdateFact(FACT_KEYS.DETAILER, detailer.trim(), 'Detailer', 'Manual project identity update');
       localStorage.setItem(STORAGE_KEYS.DETAILER_NAME, detailer.trim());
+      const savedInitials = localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS);
+      if (!savedInitials && detailer.trim()) {
+        const parts = detailer.trim().split(/\s+/);
+        const derived = parts.length === 1
+          ? (parts[0].length >= 2 ? parts[0].slice(0, 2).toUpperCase() : parts[0].toUpperCase())
+          : parts.map(p => p[0]).join('').slice(0, 4).toUpperCase();
+        onUpdateFact(FACT_KEYS.DETAILER_INITIALS, derived, 'Detailer', 'Auto-derived from detailer name');
+      }
     }
     if (verificationDate !== (facts[FACT_KEYS.DATE]?.value ?? '')) {
       onUpdateFact(FACT_KEYS.DATE, verificationDate.trim(), 'Detailer', 'Manual project identity update');

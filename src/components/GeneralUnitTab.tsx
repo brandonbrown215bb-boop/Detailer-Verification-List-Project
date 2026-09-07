@@ -169,12 +169,20 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
   const handleAddSq = () => {
     if (!newSqText.trim()) return;
+    if (sqItems.length >= 22) {
+      alert('A maximum of 22 Special Quotes are supported by the Excel deliverable template.');
+      return;
+    }
 
-    // Find next available slot 1..N
+    // Find next available slot 1..22
     const usedSlots = new Set(sqItems.map(s => s.slot));
     let nextSlot = 1;
-    while (usedSlots.has(nextSlot)) {
+    while (usedSlots.has(nextSlot) && nextSlot <= 22) {
       nextSlot++;
+    }
+    if (nextSlot > 22) {
+      alert('All 22 Special Quote slots are currently assigned.');
+      return;
     }
 
     const isSkidTag = newSqScope.startsWith('skid:');
@@ -278,7 +286,8 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
     'unit.baseHeight',
     'unit.lipHeight',
     ...(isOutdoor ? ['roof.roofPeak'] : []),
-    'unit.totalStaticPressure'
+    'unit.totalStaticPressure',
+    'unit.weight'
   ];
 
   const activeFeatures = ONLY_SHOW_WHEN_TRUE_FACTS.filter(item => {
@@ -593,10 +602,15 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
           <button
             onClick={handleAddSq}
-            className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold shadow-md transition-colors shrink-0"
+            disabled={sqItems.length >= 22}
+            className={`w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-colors shrink-0 ${
+              sqItems.length >= 22
+                ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed text-slate-200'
+                : 'bg-blue-700 hover:bg-blue-600 text-white'
+            }`}
           >
             <Plus className="w-4 h-4" />
-            <span>Add Special Quote</span>
+            <span>{sqItems.length >= 22 ? 'Max SQs (22/22)' : 'Add Special Quote'}</span>
           </button>
         </div>
 

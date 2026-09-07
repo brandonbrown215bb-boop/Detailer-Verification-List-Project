@@ -451,7 +451,7 @@ export const SkidViewTab: React.FC<SkidViewTabProps> = ({
                                             isPassed ? 'Incomplete' : 'Passed'
                                           )
                                         }
-                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                        className={`inline-flex items-center justify-center gap-1 w-20 py-1 rounded-md text-xs font-semibold transition-all shrink-0 ${
                                           isPassed
                                             ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
                                             : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'

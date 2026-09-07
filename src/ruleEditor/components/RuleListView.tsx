@@ -1,6 +1,6 @@
 import React from 'react';
 import { RuleDefinition } from '../../types';
-import { Search, Plus, ArrowUp, ArrowDown, Copy, Archive, CheckCircle2, SlidersHorizontal, Tag, Filter } from 'lucide-react';
+import { Search, Plus, ArrowUp, ArrowDown, Copy, Archive, CheckCircle2, SlidersHorizontal, Tag, Filter, Trash2 } from 'lucide-react';
 
 interface RuleListViewProps {
   rules: RuleDefinition[];
@@ -19,6 +19,7 @@ interface RuleListViewProps {
   onReorder: (ruleId: string, direction: 'up' | 'down') => void;
   onClone: (rule: RuleDefinition) => void;
   onToggleArchive: (ruleId: string) => void;
+  onDeleteRule?: (ruleId: string) => void;
 }
 
 export const RuleListView: React.FC<RuleListViewProps> = ({
@@ -37,7 +38,8 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
   onStatusFilterChange,
   onReorder,
   onClone,
-  onToggleArchive
+  onToggleArchive,
+  onDeleteRule
 }) => {
   const categories = [
     'All',
@@ -132,6 +134,7 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
         <div className="flex items-center justify-between gap-2">
           {/* Scope Dropdown */}
           <select
+            aria-label="Filter rules by scope"
             value={selectedScope}
             onChange={e => onScopeChange(e.target.value)}
             className="bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-300 focus:outline-none"
@@ -143,6 +146,7 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
 
           {/* Status Filter */}
           <select
+            aria-label="Filter rules by status"
             value={statusFilter}
             onChange={e => onStatusFilterChange(e.target.value as any)}
             className="bg-slate-950 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-300 focus:outline-none"
@@ -178,7 +182,7 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
       {/* Rules Scrollable List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {filteredRules.length === 0 ? (
-          <div className="py-12 text-center text-xs text-slate-500">
+          <div className="py-12 text-center text-xs text-slate-400">
             No rules match the current filters.
           </div>
         ) : (
@@ -268,6 +272,20 @@ export const RuleListView: React.FC<RuleListViewProps> = ({
                     >
                       <Archive className="w-3 h-3" />
                     </button>
+                    {onDeleteRule && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to permanently delete rule "${rule.id}"? This will also remove its dynamic Excel cell mappings.`)) {
+                            onDeleteRule(rule.id);
+                          }
+                        }}
+                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-red-400"
+                        title="Permanently delete rule"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

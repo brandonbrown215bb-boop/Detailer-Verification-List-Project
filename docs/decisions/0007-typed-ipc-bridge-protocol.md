@@ -47,8 +47,27 @@ A robust, typed, asynchronous Inter-Process Communication (IPC) protocol is requ
 - Resilient schema validation rejects invalid/malformed JSON envelopes before action routing.
 - Graceful degradation allows seamless frontend browser testing and standalone desktop deployment.
 
-## Addendum (2026-09-02): current implementation
+## Addendum (2026-09-02): historical baseline
 
 The shipped C# projects target .NET 8 (`net8.0` / `net8.0-windows`). The main `BridgeHandler` registers 13 actions: `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, `selectFolderDialog`, and `launchRuleEditor`.
 
-All IPC requests require a non-empty `action` and structured JSON envelope `{ id, action, payload }`. Handlers preserve incoming `id` values even on deserialization failure and return structured failure responses `{ id, success: false, error: string }`. `desktopBridge.ts` enforces a 30-second timeout on requests. WinForms dialog actions marshal to the UI thread with `Form.Invoke`. The Rule Editor owns a separate five-action bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
+## Addendum (2026-09-06): C# Authoritative Engine and Browser Retirement (ADR 0012)
+
+Under [ADR 0012](0012-csharp-authoritative-engine-and-browser-engine-retirement.md), all domain processing (parsing, fact extraction, AST evaluation, persistence, recovery, and Excel generation) moved exclusively to C# Core. The IPC bridge catalog was expanded:
+
+1. **Active Project Session Lifecycle (`ProjectSession`)**:
+   - `projectSession_dispatchCommand`: Dispatches validated domain mutations (fact overrides, checklist toggles, SQ edits, general comments) with monotonic revision tracking.
+   - `projectSession_save`: Saves `.dvl` project bundles directly from host session state.
+   - `projectSession_openDvl`: Opens existing `.dvl` files and rehydrates an active host session.
+   - `projectSession_exportExcel`: Synthesizes OpenXML workbooks with authoritative fact and checklist state.
+   - `getRecoveryInfo`, `restoreRecovery`, `discardRecovery`: Manages native crash recovery snapshots in `%LOCALAPPDATA%\AHUVerification\recovery\`.
+   - `getSegmentTemplates`: Supplies canonical segment presets for the manual unit wizard.
+
+2. **Rule Editor Studio Actions**:
+   - `saveDraft`: Prompts native `SaveFileDialog` to persist rule pack drafts.
+   - `openDraft`: Prompts native `OpenFileDialog` to load rule pack drafts.
+   - `evaluateRuleSandbox`: Dispatches live sandbox simulation directly to C# `AstRuleEvaluator`.
+
+3. **Browser Fallback Retirement**:
+   - `BrowserPreviewBridge` was deleted. `desktopBridge.ts` contains `WebView2DesktopBridge` only.
+   - When running outside the WebView2 desktop host, the application renders `DesktopHostRequiredScreen.tsx` with diagnostic details rather than executing a duplicate browser engine.

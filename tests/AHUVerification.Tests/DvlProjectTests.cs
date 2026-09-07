@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Xunit;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Parsers;
@@ -303,6 +305,85 @@ namespace AHUVerification.Tests
             {
                 if (File.Exists(tempFile)) File.Delete(tempFile);
             }
+        }
+
+        [Fact]
+        public void DvlProjectManager_EdgeCaseValidationAndIntegrity_Coverage()
+        {
+            var manager = new DvlProjectManager();
+            string validDvlPath = Path.Combine(Path.GetTempPath(), $"valid_{Guid.NewGuid():N}.dvl");
+            string textPath = Path.Combine(Path.GetTempPath(), $"invalid_{Guid.NewGuid():N}.txt");
+
+            // SaveToFile parameter guards
+            Assert.Throws<ArgumentNullException>(() => manager.SaveToFile(null!, validDvlPath));
+            var legacyProj = new DvlProjectFile { FormatVersion = "1.0" };
+            Assert.Throws<ArgumentException>(() => manager.SaveToFile(legacyProj, validDvlPath));
+
+            // SaveJsonToFile path validation
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("{}", ""));
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("{}", "   "));
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("{}", textPath));
+
+            // ValidateJsonForSave envelope guards
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("", validDvlPath));
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("   ", validDvlPath));
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("[]", validDvlPath));
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile("{\"unrelated\": 123}", validDvlPath));
+
+            // Legacy DVL JSON with completeStateSha256 rejected
+            string legacyTampered = "{\"formatVersion\": \"1.0\", \"sourceXml\": {}, \"integrity\": {\"completeStateSha256\": \"" + new string('a', 64) + "\"}}";
+            Assert.Throws<ArgumentException>(() => manager.SaveJsonToFile(legacyTampered, validDvlPath));
+
+            // Legacy DVL JSON valid save
+            string legacyValid = "{\"formatVersion\": \"1.0\", \"sourceXml\": {}, \"sqItems\": []}";
+            manager.SaveJsonToFile(legacyValid, validDvlPath);
+            Assert.True(File.Exists(validDvlPath));
+            File.Delete(validDvlPath);
+
+            // LoadFromFile non-existent file
+            Assert.Throws<FileNotFoundException>(() => manager.LoadFromFile(Path.Combine(Path.GetTempPath(), $"missing_{Guid.NewGuid():N}.dvl")));
+
+            // Create a valid v2 project
+            var bundle = new RulePackManager().LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
+            var project = manager.CreateProject(
+                new NormalizedXmlGraph(),
+                new Dictionary<string, Fact>(),
+                new List<SpecialQuote>(),
+                new List<ChecklistInstance>(),
+                "<Config />",
+                bundle);
+
+            // ValidateV2ProjectForSave guards
+            var missingRulePack = JsonSerializer.Deserialize<DvlProjectFile>(JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions()), JsonDefaults.CreateFlexibleOptions())!;
+            missingRulePack.RulePack = null!;
+            Assert.Throws<ArgumentException>(() => manager.SaveToFile(missingRulePack, validDvlPath));
+
+            var missingSourceXml = JsonSerializer.Deserialize<DvlProjectFile>(JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions()), JsonDefaults.CreateFlexibleOptions())!;
+            missingSourceXml.SourceXml = null!;
+            Assert.Throws<ArgumentException>(() => manager.SaveToFile(missingSourceXml, validDvlPath));
+
+            var tamperedSourceXml = JsonSerializer.Deserialize<DvlProjectFile>(JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions()), JsonDefaults.CreateFlexibleOptions())!;
+            tamperedSourceXml.SourceXml.RawXml = "<Config modified=\"true\" />";
+            Assert.Throws<ArgumentException>(() => manager.SaveToFile(tamperedSourceXml, validDvlPath));
+
+            var tamperedCompleteState = JsonSerializer.Deserialize<DvlProjectFile>(JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions()), JsonDefaults.CreateFlexibleOptions())!;
+            tamperedCompleteState.Integrity.CompleteStateSha256 = new string('f', 64);
+            Assert.Throws<ArgumentException>(() => manager.SaveToFile(tamperedCompleteState, validDvlPath));
+
+            // ValidateIntegrity detection of problems
+            var integrityResult = manager.ValidateIntegrity(tamperedSourceXml);
+            Assert.False(integrityResult.IsVerified);
+            Assert.NotNull(integrityResult.Message);
+            Assert.Contains("embedded Config.xml hash", integrityResult.Message);
+
+            var activeRulePackMismatch = new RulePackInfo
+            {
+                Version = "99.0.0",
+                Sha256 = new string('0', 64)
+            };
+            var mismatchResult = manager.ValidateIntegrity(project, activeRulePackMismatch);
+            Assert.NotNull(mismatchResult.Message);
+            Assert.Contains("pinned to Rule Pack", mismatchResult.Message);
         }
     }
 }

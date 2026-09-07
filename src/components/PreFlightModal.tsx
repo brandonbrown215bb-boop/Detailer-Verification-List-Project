@@ -8,7 +8,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { ModalShell } from './common/ModalShell';
-import { UnitReadiness, computeUnitReadiness } from '../utils/readiness';
+import { UnitReadiness, EMPTY_READINESS } from '../utils/readiness';
 
 interface PreFlightModalProps {
   isOpen: boolean;
@@ -43,7 +43,7 @@ export const PreFlightModal: React.FC<PreFlightModalProps> = ({
   if (!isOpen) return null;
 
   // Single centralized readiness predicate derivation
-  const unitReadiness = readiness || computeUnitReadiness(facts, checklists);
+  const unitReadiness = readiness || EMPTY_READINESS;
   const {
     totalApplicableChecksCount,
     completedChecksCount,

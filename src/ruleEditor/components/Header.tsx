@@ -1,20 +1,22 @@
 import React from 'react';
-import { Sliders, ShieldCheck, Download, UploadCloud, FileJson, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sliders, Save, FolderOpen, UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface HeaderProps {
   version: string;
   dirtyCount: number;
+  draftName?: string | null;
   onOpenPublish: () => void;
-  onExportJson: () => void;
-  onImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSaveDraft: () => void;
+  onOpenDraft: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   version,
   dirtyCount,
+  draftName,
   onOpenPublish,
-  onExportJson,
-  onImportJson
+  onSaveDraft,
+  onOpenDraft
 }) => {
   return (
     <header className="h-14 border-b border-slate-800 bg-slate-950/80 px-4 flex items-center justify-between gap-4 select-none">
@@ -45,6 +47,11 @@ export const Header: React.FC<HeaderProps> = ({
             <AlertCircle className="w-3.5 h-3.5" />
             <span>Draft Mode: {dirtyCount} rule{dirtyCount > 1 ? 's' : ''} modified</span>
           </div>
+        ) : draftName ? (
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-950/40 border border-amber-700/60 text-amber-200 text-xs font-semibold rounded-full">
+            <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Draft Saved ({draftName}) — Unpublished</span>
+          </div>
         ) : (
           <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/50 border border-emerald-800 text-emerald-300 text-xs font-semibold rounded-full">
             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -55,30 +62,28 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right actions */}
       <div className="flex items-center gap-2">
-        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg cursor-pointer transition-colors">
-          <FileJson className="w-3.5 h-3.5 text-slate-400" />
-          Import
-          <input
-            type="file"
-            accept=".json"
-            onChange={onImportJson}
-            className="hidden"
-          />
-        </label>
+        <button
+          type="button"
+          onClick={onOpenDraft}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-slate-400" />
+          Open Draft
+        </button>
 
         <button
           type="button"
-          onClick={onExportJson}
+          onClick={onSaveDraft}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
         >
-          <Download className="w-3.5 h-3.5 text-slate-400" />
-          Export JSON
+          <Save className="w-3.5 h-3.5 text-slate-400" />
+          Save Draft As
         </button>
 
         <button
           type="button"
           onClick={onOpenPublish}
-          className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md shadow-emerald-950 transition-colors ml-1"
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg shadow-md shadow-emerald-950 transition-colors ml-1"
         >
           <UploadCloud className="w-4 h-4" />
           Publish Release

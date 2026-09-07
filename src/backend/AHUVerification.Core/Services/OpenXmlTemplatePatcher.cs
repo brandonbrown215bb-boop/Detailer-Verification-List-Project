@@ -292,7 +292,9 @@ namespace AHUVerification.Core.Services
 
                 var dynamicMerges = new List<string>(retainedMerges);
                 string detailerName = facts.TryGetValue("unit.detailer", out var dFact) ? (dFact.Value?.ToString() ?? "TD") : "TD";
-                string initials = detailerName.Length >= 2 ? detailerName.Substring(0, 2).ToUpperInvariant() : detailerName.ToUpperInvariant();
+                string initials = facts.TryGetValue("unit.detailerInitials", out var initFact) && !string.IsNullOrWhiteSpace(initFact.Value?.ToString())
+                    ? initFact.Value.ToString()!.Trim()
+                    : DeriveInitials(detailerName);
 
                 uint currentRow = 26;
                 bool zebraState = false;
@@ -302,7 +304,9 @@ namespace AHUVerification.Core.Services
                 int strDetailerCheck = InsertSharedString("Detailer Check off");
                 int strCheckerCheck = InsertSharedString("Checker Check off");
 
-                var exportChecklists = checklists.ToList();
+                var exportChecklists = checklists
+                    .Where(c => c.Applicability != RuleApplicability.NotApplicable)
+                    .ToList();
                 // --- SECTION 1: GENERAL UNIT VERIFICATIONS ---
                 var unitChecks = exportChecklists.Where(c => c.ScopeTargetId == "unit").ToList();
                 if (unitChecks.Any())
@@ -470,7 +474,10 @@ namespace AHUVerification.Core.Services
                     }
                 }
 
-                // 10. Remove CalculationChainPart if present so Excel rebuilds formulas freshly
+                // 10. Generate Hidden Audit Log Sheet to audit pencil-whipping
+                AddAuditLogSheet(wbPart, checklists, rules, detailerName, initials, graph, InsertSharedString);
+
+                // 11. Remove CalculationChainPart if present so Excel rebuilds formulas freshly
                 if (wbPart.CalculationChainPart != null)
                 {
                     wbPart.DeletePart(wbPart.CalculationChainPart);
@@ -712,9 +719,143 @@ namespace AHUVerification.Core.Services
                 row.AppendChild(new Cell { CellReference = $"Y{rowIndex}", StyleIndex = 19U });
             }
 
-            row.AppendChild(new Cell { CellReference = $"Z{rowIndex}", StyleIndex = 19U, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(initials).ToString()) });
+            bool isReviewed = inst.Status == CheckStatus.Passed || inst.Status == CheckStatus.Flagged;
+            string stampInitials = !string.IsNullOrWhiteSpace(inst.DetailerInitials) ? inst.DetailerInitials! : initials;
+            if (isReviewed && !string.IsNullOrEmpty(stampInitials))
+            {
+                row.AppendChild(new Cell { CellReference = $"Z{rowIndex}", StyleIndex = 19U, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(stampInitials).ToString()) });
+            }
+            else
+            {
+                row.AppendChild(new Cell { CellReference = $"Z{rowIndex}", StyleIndex = 19U });
+            }
 
             return row;
+        }
+
+        public static string DeriveInitials(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "TD";
+            var parts = name.Trim().Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "TD";
+            if (parts.Length == 1)
+            {
+                return parts[0].Length >= 2 ? parts[0].Substring(0, 2).ToUpperInvariant() : parts[0].ToUpperInvariant();
+            }
+            var letters = parts.Select(p => char.ToUpperInvariant(p[0])).ToArray();
+            var result = new string(letters);
+            return result.Length > 4 ? result.Substring(0, 4) : result;
+        }
+
+        private static void AddAuditLogSheet(
+            WorkbookPart wbPart,
+            List<ChecklistInstance> checklists,
+            List<RuleDefinition> rules,
+            string detailerName,
+            string defaultInitials,
+            NormalizedXmlGraph? graph,
+            Func<string, int> insertSharedString)
+        {
+            var sheetsElement = wbPart.Workbook.Sheets ?? wbPart.Workbook.AppendChild(new Sheets());
+
+            // If an existing Audit Log sheet is present (e.g. from template or previous export), remove it
+            var existingSheet = sheetsElement.Elements<Sheet>().FirstOrDefault(s => string.Equals(s.Name?.Value, "Audit Log", StringComparison.OrdinalIgnoreCase));
+            if (existingSheet != null && existingSheet.Id != null)
+            {
+                var existingPart = wbPart.GetPartById(existingSheet.Id!);
+                existingSheet.Remove();
+                wbPart.DeletePart(existingPart);
+            }
+
+            var auditWsPart = wbPart.AddNewPart<WorksheetPart>();
+            var auditWs = new Worksheet();
+            var auditSheetData = new SheetData();
+            auditWs.AppendChild(auditSheetData);
+            auditWsPart.Worksheet = auditWs;
+
+            uint maxSheetId = sheetsElement.Elements<Sheet>().Select(s => s.SheetId?.Value ?? 0).DefaultIfEmpty(0U).Max();
+            uint auditSheetId = maxSheetId + 1;
+            string relId = wbPart.GetIdOfPart(auditWsPart);
+
+            var auditSheet = new Sheet
+            {
+                Id = relId,
+                SheetId = auditSheetId,
+                Name = "Audit Log",
+                State = SheetStateValues.Hidden
+            };
+            sheetsElement.AppendChild(auditSheet);
+
+            void AddAuditCell(Row row, string col, uint rowIndex, string text)
+            {
+                int idx = insertSharedString(text);
+                row.AppendChild(new Cell
+                {
+                    CellReference = $"{col}{rowIndex}",
+                    DataType = CellValues.SharedString,
+                    CellValue = new CellValue(idx.ToString())
+                });
+            }
+
+            // Row 1: Header Row
+            var headerRow = new Row { RowIndex = 1 };
+            AddAuditCell(headerRow, "A", 1, "Timestamp (UTC)");
+            AddAuditCell(headerRow, "B", 1, "Rule ID");
+            AddAuditCell(headerRow, "C", 1, "Rule Description");
+            AddAuditCell(headerRow, "D", 1, "Scope / Skid");
+            AddAuditCell(headerRow, "E", 1, "Status");
+            AddAuditCell(headerRow, "F", 1, "Detailer Name");
+            AddAuditCell(headerRow, "G", 1, "Sign-off Initials");
+            AddAuditCell(headerRow, "H", 1, "Detailer Comment");
+            auditSheetData.AppendChild(headerRow);
+
+            // Reviewed checks: Passed or Flagged, ordered chronologically by UpdatedAt
+            var completedChecks = checklists
+                .Where(c => c.Status == CheckStatus.Passed || c.Status == CheckStatus.Flagged)
+                .OrderBy(c => c.UpdatedAt)
+                .ToList();
+
+            uint auditRowIndex = 2;
+            foreach (var inst in completedChecks)
+            {
+                var rule = rules.FirstOrDefault(r => r.Id == inst.RuleId || r.SemanticKey == inst.SemanticKey);
+                string skidName = inst.ScopeTargetId;
+                if (inst.ScopeTargetId == "unit")
+                {
+                    skidName = "General Unit";
+                }
+                else if (graph?.Skids != null)
+                {
+                    var matchingSkid = graph.Skids.FirstOrDefault(s => s.Id == inst.ScopeTargetId);
+                    if (matchingSkid != null)
+                    {
+                        skidName = matchingSkid.Name;
+                    }
+                }
+
+                string timeStr = inst.UpdatedAt;
+                if (DateTime.TryParse(inst.UpdatedAt, out var parsedDt))
+                {
+                    timeStr = parsedDt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss");
+                }
+
+                string rowInitials = !string.IsNullOrWhiteSpace(inst.DetailerInitials) ? inst.DetailerInitials : defaultInitials;
+
+                var row = new Row { RowIndex = auditRowIndex };
+                AddAuditCell(row, "A", auditRowIndex, timeStr);
+                AddAuditCell(row, "B", auditRowIndex, rule?.Id ?? inst.RuleId);
+                AddAuditCell(row, "C", auditRowIndex, rule?.Text ?? "");
+                AddAuditCell(row, "D", auditRowIndex, skidName);
+                AddAuditCell(row, "E", auditRowIndex, inst.Status.ToString());
+                AddAuditCell(row, "F", auditRowIndex, detailerName);
+                AddAuditCell(row, "G", auditRowIndex, rowInitials);
+                AddAuditCell(row, "H", auditRowIndex, inst.DetailerComment ?? "");
+
+                auditSheetData.AppendChild(row);
+                auditRowIndex++;
+            }
+
+            auditWs.Save();
         }
     }
 }

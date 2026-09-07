@@ -45,7 +45,7 @@ npm run dev
 - Main UI: `http://localhost:5173/`
 - Rule Editor: `http://localhost:5173/rule-editor.html`
 
-Browser mode is a UI/development fallback. It has no WebView2 bridge, native file dialogs, `.dvl` saving, `.upz` extraction, or official OpenXML export. For the Rule Editor, use **Export Draft JSON** to transfer an in-browser draft; its Publish action does not write a rule-pack bundle without the desktop bridge.
+When navigating to `http://localhost:5173/` directly in a standard browser without the WebView2 host, the main application displays a `DesktopHostRequiredScreen` explaining that a native desktop host is required and providing diagnostic environment details. For the Rule Editor (`rule-editor.html`), browser mode is an authoring layout preview; saving native drafts, C# live sandbox evaluation, and rule pack publishing require the desktop host (`RuleEditor.exe`).
 
 ## Build and Test Commands
 

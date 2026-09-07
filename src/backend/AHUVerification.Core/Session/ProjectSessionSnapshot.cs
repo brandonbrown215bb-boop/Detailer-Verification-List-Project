@@ -153,5 +153,17 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("rawConfigXml")]
         public string RawConfigXml { get; set; } = "";
+
+        [JsonPropertyName("currentProjectPath")]
+        public string? CurrentProjectPath { get; set; }
+
+        [JsonPropertyName("lastSavedAt")]
+        public string? LastSavedAt { get; set; }
+
+        [JsonPropertyName("integrityState")]
+        public string? IntegrityState { get; set; }
+
+        [JsonPropertyName("integrityWarning")]
+        public string? IntegrityWarning { get; set; }
     }
 }

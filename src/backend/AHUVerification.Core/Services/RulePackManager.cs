@@ -50,11 +50,34 @@ namespace AHUVerification.Core.Services
             Converters = { new JsonStringEnumConverter() }
         };
 
-        public static DvlRulePackSnapshot CreateSnapshot(RulePackBundle bundle)
+        public static DvlRulePackSnapshot CreateSnapshot(RulePackBundle bundle, bool embedTemplate = true)
         {
             if (bundle == null || !bundle.IsValid)
                 throw new ArgumentException("A validated Rule Pack bundle is required.", nameof(bundle));
             bundle.Manifest.Files.TryGetValue("template.xlsx", out var templateEntry);
+
+            string? templateBytesBase64 = null;
+            bool isEmbedded = false;
+            bool exists = !string.IsNullOrEmpty(bundle.TemplatePath) && File.Exists(bundle.TemplatePath);
+            string? templateSha = templateEntry?.Sha256;
+            if (embedTemplate && exists)
+            {
+                try
+                {
+                    byte[] bytes = File.ReadAllBytes(bundle.TemplatePath);
+                    string actualSha = CryptoUtils.ComputeSha256(bytes);
+                    if (templateSha == null || string.Equals(actualSha, templateSha, StringComparison.OrdinalIgnoreCase))
+                    {
+                        templateBytesBase64 = Convert.ToBase64String(bytes);
+                        isEmbedded = true;
+                        templateSha ??= actualSha;
+                    }
+                }
+                catch
+                {
+                    // Fall back to retrievable without embedded bytes
+                }
+            }
 
             return new DvlRulePackSnapshot
             {
@@ -64,10 +87,11 @@ namespace AHUVerification.Core.Services
                 TemplateMap = bundle.TemplateMap,
                 ApprovedMappings = bundle.ApprovedMappings.Clone(),
                 FactContract = bundle.FactContract.Clone(),
-                TemplateSha256 = templateEntry?.Sha256,
-                TemplateRetrievable = File.Exists(bundle.TemplatePath),
-                TemplateEmbedded = false,
-                Reproducibility = File.Exists(bundle.TemplatePath) ? "snapshot-without-template" : "unavailable"
+                TemplateSha256 = templateSha,
+                TemplateRetrievable = exists,
+                TemplateEmbedded = isEmbedded,
+                TemplateBytesBase64 = templateBytesBase64,
+                Reproducibility = isEmbedded ? "self-contained" : (exists ? "snapshot-without-template" : "unavailable")
             };
         }
 

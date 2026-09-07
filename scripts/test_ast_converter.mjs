@@ -337,6 +337,102 @@ runTest('6.4 generateNodeId produces unique IDs across iterations', () => {
   assert.notStrictEqual(id1, id2);
 });
 
+// ---------------------------------------------------------------------------
+// Suite 7: CE-R5b Visual-Rule Fidelity & Lossless Roundtripping
+// ---------------------------------------------------------------------------
+console.log('\n[Suite 7/7] CE-R5b Visual-Rule Fidelity & Lossless Roundtripping...');
+
+runTest('7.1 Relational operator inversion: 4000 > skid.weight becomes skid.weight < 4000', () => {
+  const originalAst = { '>': [4000, { var: 'skid.weight' }] };
+  const tree = astToVisualTree(originalAst);
+  assert.strictEqual(tree.children.length, 1);
+  assert.strictEqual(tree.children[0].type, 'condition');
+  assert.strictEqual(tree.children[0].factKey, 'skid.weight');
+  assert.strictEqual(tree.children[0].operator, '<');
+  assert.strictEqual(tree.children[0].value, 4000);
+
+  const regenerated = visualTreeToAst(tree);
+  assert.deepStrictEqual(regenerated, { '<': [{ var: 'skid.weight' }, 4000] });
+});
+
+runTest('7.2 Truth table equivalence for 4000 > skid.weight vs skid.weight < 4000 below, at, and above threshold', () => {
+  const evaluateOriginal = (weight) => 4000 > weight;
+  const evaluateSaved = (weight) => weight < 4000;
+
+  for (const weight of [3000, 3999, 4000, 4001, 5000]) {
+    assert.strictEqual(
+      evaluateSaved(weight),
+      evaluateOriginal(weight),
+      `Equivalence failed at weight = ${weight}`
+    );
+  }
+});
+
+runTest('7.3 Relational inversion for >=, <, <=, and ===', () => {
+  // 4000 >= x <=> x <= 4000
+  const treeGte = astToVisualTree({ '>=': [4000, { var: 'skid.weight' }] });
+  assert.strictEqual(treeGte.children[0].operator, '<=');
+  assert.deepStrictEqual(visualTreeToAst(treeGte), { '<=': [{ var: 'skid.weight' }, 4000] });
+
+  // 4000 < x <=> x > 4000
+  const treeLt = astToVisualTree({ '<': [4000, { var: 'skid.weight' }] });
+  assert.strictEqual(treeLt.children[0].operator, '>');
+  assert.deepStrictEqual(visualTreeToAst(treeLt), { '>': [{ var: 'skid.weight' }, 4000] });
+
+  // 4000 <= x <=> x >= 4000
+  const treeLte = astToVisualTree({ '<=': [4000, { var: 'skid.weight' }] });
+  assert.strictEqual(treeLte.children[0].operator, '>=');
+  assert.deepStrictEqual(visualTreeToAst(treeLte), { '>=': [{ var: 'skid.weight' }, 4000] });
+
+  // "Outdoor" === x <=> x === "Outdoor"
+  const treeEq = astToVisualTree({ '===': ['Outdoor', { var: 'unit.unitType' }] });
+  assert.strictEqual(treeEq.children[0].operator, '===');
+  assert.deepStrictEqual(visualTreeToAst(treeEq), { '===': [{ var: 'unit.unitType' }, 'Outdoor'] });
+});
+
+runTest('7.4 Variable-to-variable comparisons preserve right operand variable reference', () => {
+  const originalAst = { '>': [{ var: 'unit.length' }, { var: 'skid.length' }] };
+  const tree = astToVisualTree(originalAst);
+  assert.strictEqual(tree.children[0].type, 'condition');
+  assert.strictEqual(tree.children[0].factKey, 'unit.length');
+  assert.deepStrictEqual(tree.children[0].value, { var: 'skid.length' });
+
+  const regenerated = visualTreeToAst(tree);
+  assert.deepStrictEqual(regenerated, originalAst);
+
+  const facts = extractRequiredFactsFromTree(tree);
+  assert.deepStrictEqual(facts, ['skid.length', 'unit.length']);
+});
+
+runTest('7.5 No silent numeric fallback to zero for non-numeric/string inputs', () => {
+  const leaf = { type: 'condition', factKey: 'unit.tag', operator: '>', value: 'INVALID_NUM' };
+  const ast = visualTreeToAst({ type: 'group', logicalOperator: 'and', children: [leaf] });
+  assert.deepStrictEqual(ast, { '>': [{ var: 'unit.tag' }, 'INVALID_NUM'] });
+});
+
+runTest('7.6 Unsupported / complex AST structures are preserved as unsupported nodes and roundtrip losslessly', () => {
+  const complexAst = {
+    and: [
+      { '===': [{ var: 'unit.unitType' }, 'Outdoor'] },
+      { custom_func: [{ var: 'skid.weight' }, 'special_arg', 42] }
+    ]
+  };
+
+  const tree = astToVisualTree(complexAst);
+  assert.strictEqual(tree.children.length, 2);
+  assert.strictEqual(tree.children[0].type, 'condition');
+  assert.strictEqual(tree.children[1].type, 'unsupported');
+  assert.deepStrictEqual(tree.children[1].rawPredicate, { custom_func: [{ var: 'skid.weight' }, 'special_arg', 42] });
+
+  // Conversion back to AST does NOT drop the unsupported predicate
+  const regenerated = visualTreeToAst(tree);
+  assert.deepStrictEqual(regenerated, complexAst);
+
+  // Required facts extractor also discovers variables in unsupported structures
+  const facts = extractRequiredFactsFromTree(tree);
+  assert.deepStrictEqual(facts, ['skid.weight', 'unit.unitType']);
+});
+
 console.log('\n======================================================================');
 console.log(` [SUCCESS] All ${passedTests} / ${totalTests} AST converter unit tests passed cleanly!`);
 console.log('======================================================================\n');

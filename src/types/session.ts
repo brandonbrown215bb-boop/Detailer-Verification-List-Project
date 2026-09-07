@@ -57,7 +57,12 @@ export interface ProjectSessionSnapshot {
   rulePack: RulePackSummary;
   readiness: ProjectReadinessSummary;
   isDirty: boolean;
+  isTrusted?: boolean;
   rawConfigXml?: string;
+  currentProjectPath?: string;
+  lastSavedAt?: string;
+  integrityState?: string;
+  integrityWarning?: string;
 }
 
 export interface SessionCommandResult {
@@ -118,7 +123,7 @@ export interface UpdateChecklistPayload {
   expectedRevision: number;
   requestId?: string;
   checkId: string;
-  status: string;
+  status?: string;
   comment?: string;
   detailerInitials?: string;
 }
@@ -162,10 +167,60 @@ export interface ResetSessionPayload {
   requestId?: string;
 }
 
-import type { ManualUnitConfig, SegmentTemplate } from '../services/manualUnitFactory.ts';
+import type { ManualUnitConfig, SegmentTemplate } from './manual.ts';
 
 export interface CreateManualProjectCommand {
   config: ManualUnitConfig;
+}
+
+export interface SaveProjectPayload {
+  sessionId: string;
+  expectedRevision: number;
+  requestId?: string;
+  targetPath?: string;
+  forceSaveAs?: boolean;
+}
+
+export interface SaveProjectResult {
+  saved: boolean;
+  cancelled?: boolean;
+  path?: string;
+  fileName?: string;
+  lastSavedAt?: string;
+  snapshot?: ProjectSessionSnapshot;
+}
+
+export interface OpenDvlPayload {
+  filePath?: string;
+  dvlJson?: string;
+}
+
+export interface ExportExcelPayload {
+  sessionId: string;
+  expectedRevision: number;
+  requestId?: string;
+  isDraft: boolean;
+  targetPath?: string;
+}
+
+export interface ExportExcelResult {
+  exported: boolean;
+  cancelled?: boolean;
+  filePath?: string;
+  fileName?: string;
+  isDraft?: boolean;
+  certificationAllowed?: boolean;
+}
+
+export interface RecoveryInfo {
+  hasRecovery: boolean;
+  jobName?: string;
+  comNumber?: string;
+  author?: string;
+  lastSavedAt?: string;
+  sourceFileName?: string;
+  isTrusted?: boolean;
+  recoveryFilePath?: string;
 }
 
 export type { ManualUnitConfig, SegmentTemplate };

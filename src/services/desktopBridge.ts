@@ -1,7 +1,4 @@
 import type { DvlProjectFile, Fact, SpecialQuote, ChecklistInstance, NormalizedXmlGraph, RuleDefinition, UpzBundle } from '../types/index.ts';
-import { saveDvlToFile } from './projectStorage.ts';
-import { RULES_CATALOG, RULE_PACK_IDENTITY } from './rulesCatalog.ts';
-import { EFFECTIVE_APPLICATION_VERSION } from './version.ts';
 import type {
   ProjectSessionSnapshot,
   SessionCommandResult,
@@ -16,9 +13,14 @@ import type {
   UpdateGeneralCommentsPayload,
   ResetSessionPayload,
   CreateManualProjectCommand,
-  SegmentTemplate
+  SegmentTemplate,
+  SaveProjectPayload,
+  SaveProjectResult,
+  OpenDvlPayload,
+  ExportExcelPayload,
+  ExportExcelResult,
+  RecoveryInfo
 } from '../types/session.ts';
-import { AVAILABLE_SEGMENT_TEMPLATES } from './manualUnitFactory.ts';
 export * from '../types/session.ts';
 
 declare global {
@@ -61,22 +63,7 @@ export interface INativeBridge {
     isUpz: boolean;
     bundle: UpzBundle;
   }>;
-  saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }>;
-  verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any>;
   saveFileDialog(defaultName: string): Promise<string | null>;
-  exportExcelDeliverable(
-    facts: Record<string, Fact>,
-    sqItems: SpecialQuote[],
-    checklists: ChecklistInstance[],
-    rules: RuleDefinition[],
-    graph?: NormalizedXmlGraph,
-    generalComments?: string,
-    defaultName?: string,
-    isDraft?: boolean,
-    configXml?: string,
-    orderRevXml?: string,
-    manifestXml?: string
-  ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }>;
   openFile(filePath: string): Promise<void>;
   showInExplorer(filePath: string): Promise<void>;
   checkRulePackUpdate(remotePath: string): Promise<{
@@ -105,7 +92,11 @@ export interface INativeBridge {
   }>;
   selectFolderDialog(): Promise<string | null>;
   publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }>;
-  launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }>;
+  validateRulePack(payload: any): Promise<{ isValid: boolean; errors?: any[]; templateMap?: any; error?: string }>;
+  saveDraft(payload: any): Promise<{ success: boolean; filePath?: string; fileName?: string; templateMap?: any; cancelled?: boolean; error?: string; errors?: any[] }>;
+  openDraft(filePath?: string): Promise<{ success: boolean; filePath?: string; fileName?: string; rules?: RuleDefinition[]; templateMap?: any; approvedMappings?: any; manifest?: any; cancelled?: boolean; error?: string; errors?: any[] }>;
+  evaluateRuleSandbox(payload: { rule: any; simulatedValues: Record<string, any> }): Promise<{ isValid: boolean; result: boolean; needsInput: boolean; trace: string; error?: string }>;
+  reloadActiveRulePack(): Promise<any>;
   resolveRulePackLocation(configuredPath?: string): Promise<{
     path: string | null;
     isAutoDetected: boolean;
@@ -133,6 +124,12 @@ export interface INativeBridge {
   projectSessionReset(payload: ResetSessionPayload): Promise<SessionCommandResult>;
   projectSessionCreateManual(payload: CreateManualProjectCommand): Promise<ProjectSessionSnapshot>;
   getSegmentTemplates(): Promise<SegmentTemplate[]>;
+  projectSessionSave(payload: SaveProjectPayload): Promise<SaveProjectResult>;
+  projectSessionOpenDvl(payload: OpenDvlPayload): Promise<ProjectSessionSnapshot>;
+  projectSessionExportExcel(payload: ExportExcelPayload): Promise<ExportExcelResult>;
+  getRecoveryInfo(): Promise<RecoveryInfo>;
+  restoreRecovery(): Promise<ProjectSessionSnapshot>;
+  discardRecovery(): Promise<{ success: boolean }>;
 }
 
 export function isDesktopHost(): boolean {
@@ -150,10 +147,16 @@ export function isDesktopHost(): boolean {
  */
 export class WebView2DesktopBridge implements INativeBridge {
   private pendingRequests = new Map<string, { resolve: (data: any) => void; reject: (err: any) => void }>();
+  private isListening = false;
 
   constructor() {
-    if (isDesktopHost()) {
+    this.ensureMessageListener();
+  }
+
+  private ensureMessageListener() {
+    if (!this.isListening && isDesktopHost()) {
       window.chrome!.webview!.addEventListener('message', this.handleMessage.bind(this));
+      this.isListening = true;
     }
   }
 
@@ -187,6 +190,8 @@ export class WebView2DesktopBridge implements INativeBridge {
     if (!isDesktopHost()) {
       return Promise.reject(new Error('Not running in WebView2 desktop host.'));
     }
+
+    this.ensureMessageListener();
 
     const id = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     return new Promise((resolve, reject) => {
@@ -230,46 +235,10 @@ export class WebView2DesktopBridge implements INativeBridge {
     return this.sendRequest('extractUpz', { filePath });
   }
 
-  public async saveDvl(filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
-    return this.sendRequest('saveDvl', { filePath, projectJson: JSON.stringify(project, null, 2) });
-  }
-
-  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any> {
-    return this.sendRequest('verifySource', { configXml, orderRevXml, manifestXml, manualOverrides, sqItems, existingChecklists });
-  }
-
   public async saveFileDialog(defaultName: string): Promise<string | null> {
     return this.sendRequest('saveFileDialog', {
       defaultName,
       filter: 'DVL Project (*.dvl)|*.dvl'
-    });
-  }
-
-  public async exportExcelDeliverable(
-    facts: Record<string, Fact>,
-    sqItems: SpecialQuote[],
-    checklists: ChecklistInstance[],
-    rules: RuleDefinition[],
-    graph?: NormalizedXmlGraph,
-    generalComments: string = '',
-    defaultName?: string,
-    isDraft: boolean = false,
-    configXml?: string,
-    orderRevXml?: string,
-    manifestXml?: string
-  ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
-    return this.sendRequest('exportExcelDeliverable', {
-      facts,
-      sqItems,
-      checklists,
-      rules,
-      graph,
-      generalComments,
-      defaultName,
-      isDraft,
-      configXml,
-      orderRevXml,
-      manifestXml
     });
   }
 
@@ -319,12 +288,28 @@ export class WebView2DesktopBridge implements INativeBridge {
     return res?.folderPath || null;
   }
 
-  public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
+  public async publishRulePack(payload: any): Promise<{ success: boolean; bundleSha256?: string; version?: string; totalRules?: number; error?: string; errors?: any[] }> {
     return this.sendRequest('publishRulePack', payload);
   }
 
-  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
-    return this.sendRequest('launchRuleEditor');
+  public async validateRulePack(payload: any): Promise<{ isValid: boolean; valid?: boolean; errors?: any[]; templateMap?: any; rules?: RuleDefinition[]; error?: string }> {
+    return this.sendRequest('validateRulePack', payload);
+  }
+
+  public async saveDraft(payload: any): Promise<{ success: boolean; filePath?: string; fileName?: string; templateMap?: any; rules?: RuleDefinition[]; manifest?: any; cancelled?: boolean; error?: string; errors?: any[] }> {
+    return this.sendRequest('saveDraft', payload);
+  }
+
+  public async openDraft(filePath?: string): Promise<{ success: boolean; filePath?: string; fileName?: string; rules?: RuleDefinition[]; templateMap?: any; approvedMappings?: any; manifest?: any; cancelled?: boolean; error?: string; errors?: any[] }> {
+    return this.sendRequest('openDraft', { filePath });
+  }
+
+  public async evaluateRuleSandbox(payload: { rule: any; simulatedValues: Record<string, any> }): Promise<{ isValid: boolean; result: boolean; needsInput: boolean; trace: string; error?: string }> {
+    return this.sendRequest('evaluateRuleSandbox', payload);
+  }
+
+  public async reloadActiveRulePack(): Promise<any> {
+    return this.sendRequest('reloadActiveRulePack');
   }
 
   public async resolveRulePackLocation(configuredPath?: string): Promise<{
@@ -404,273 +389,55 @@ export class WebView2DesktopBridge implements INativeBridge {
   public async getSegmentTemplates(): Promise<SegmentTemplate[]> {
     return this.sendRequest('getSegmentTemplates');
   }
-}
 
-/**
- * Browser Preview Bridge implementation for standalone web preview / development mode.
- */
-export class BrowserPreviewBridge implements INativeBridge {
-  public isDesktopHost(): boolean {
-    return false;
+  public async projectSessionSave(payload: SaveProjectPayload): Promise<SaveProjectResult> {
+    return this.sendRequest('projectSession_save', payload);
   }
 
-  public isRunningInDesktop(): boolean {
-    return false;
+  public async projectSessionOpenDvl(payload: OpenDvlPayload): Promise<ProjectSessionSnapshot> {
+    return this.sendRequest('projectSession_openDvl', payload);
   }
 
-  public async getAppInfo(): Promise<{ appName: string; appVersion: string; rulePackVersion: string; ruleCount: number; isDesktopHost: boolean }> {
-    return {
-      appName: 'AHU Detailing Verification',
-      appVersion: `${EFFECTIVE_APPLICATION_VERSION} (Browser Preview)`,
-      rulePackVersion: RULE_PACK_IDENTITY.version,
-      ruleCount: RULES_CATALOG.length,
-      isDesktopHost: false
-    };
+  public async projectSessionExportExcel(payload: ExportExcelPayload): Promise<ExportExcelResult> {
+    return this.sendRequest('projectSession_exportExcel', payload);
   }
 
-  public async openFileDialog(): Promise<{
-    fileName: string;
-    filePath: string;
-    content: string;
-    isDvl: boolean;
-    isUpz?: boolean;
-    sourceHandle?: string;
-    bundle?: UpzBundle;
-  } | null> {
-    return null;
+  public async getRecoveryInfo(): Promise<RecoveryInfo> {
+    return this.sendRequest('getRecoveryInfo');
   }
 
-  public async extractUpz(_filePath: string): Promise<{
-    fileName: string;
-    filePath: string;
-    content: string;
-    isDvl: boolean;
-    isUpz: boolean;
-    bundle: UpzBundle;
-  }> {
-    throw new Error('UPZ decompression requires Microsoft Windows desktop host with Apprentice COM binaries.');
+  public async restoreRecovery(): Promise<ProjectSessionSnapshot> {
+    return this.sendRequest('restoreRecovery');
   }
 
-  public async saveDvl(_filePath: string, project: DvlProjectFile): Promise<{ saved: boolean; path: string }> {
-    saveDvlToFile(project);
-    return { saved: true, path: `${project.jobName}_${project.comNumber}.dvl` };
-  }
-
-  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]): Promise<any> {
-    throw new Error('verifySource requires Microsoft Windows desktop host');
-  }
-
-  public async saveFileDialog(_defaultName: string): Promise<string | null> {
-    return null;
-  }
-
-  public async exportExcelDeliverable(
-    facts: Record<string, Fact>,
-    sqItems: SpecialQuote[],
-    checklists: ChecklistInstance[],
-    rules: RuleDefinition[],
-    graph?: NormalizedXmlGraph,
-    _generalComments: string = '',
-    defaultName?: string,
-    isDraft: boolean = false,
-    _configXml?: string,
-    _orderRevXml?: string,
-    _manifestXml?: string
-  ): Promise<{ exported: boolean; filePath?: string; fileName?: string; cancelled?: boolean }> {
-    try {
-      const { exportToExcel } = await import('./excelExporter.ts');
-      exportToExcel(facts, sqItems, checklists, rules, graph, defaultName, isDraft);
-      return { exported: true, fileName: defaultName || 'Detailing_Verification_List.xlsx' };
-    } catch (err: any) {
-      console.error('Browser export error:', err);
-      throw new Error(`Failed to generate Excel deliverable: ${err?.message || err}`);
-    }
-  }
-
-  public async openFile(_filePath: string): Promise<void> {
-    console.warn('Native openFile is only available in desktop host.');
-  }
-
-  public async showInExplorer(_filePath: string): Promise<void> {
-    console.warn('Native showInExplorer is only available in desktop host.');
-  }
-
-  public async checkRulePackUpdate(_remotePath: string): Promise<{
-    hasUpdate: boolean;
-    currentVersion: string;
-    remoteVersion: string;
-    remoteBundleSha256: string;
-    remoteRuleCount: number;
-    error?: string;
-  }> {
-    return {
-      hasUpdate: false,
-      currentVersion: RULE_PACK_IDENTITY.version,
-      remoteVersion: RULE_PACK_IDENTITY.version,
-      remoteBundleSha256: RULE_PACK_IDENTITY.sha256,
-      remoteRuleCount: RULES_CATALOG.length
-    };
-  }
-
-  public async syncRulePack(_remotePath: string): Promise<{
-    success: boolean;
-    version: string;
-    bundleSha256?: string;
-    ruleCount: number;
-    rules?: RuleDefinition[];
-    templateMap?: any;
-    approvedMappings?: any;
-    manifest?: any;
-  }> {
-    return {
-      success: true,
-      version: RULE_PACK_IDENTITY.version,
-      bundleSha256: RULE_PACK_IDENTITY.sha256,
-      ruleCount: RULES_CATALOG.length,
-      rules: RULES_CATALOG
-    };
-  }
-
-  public async getRulePack(): Promise<{
-    rules: RuleDefinition[];
-    templateMap: any;
-    approvedMappings: any;
-    manifest: any;
-  }> {
-    return {
-      rules: RULES_CATALOG,
-      templateMap: null,
-      approvedMappings: null,
-      manifest: null
-    };
-  }
-
-  public async selectFolderDialog(): Promise<string | null> {
-    return null;
-  }
-
-  public async publishRulePack(_payload: any): Promise<{ success: boolean; bundleSha256?: string; error?: string }> {
-    return { success: false, error: 'Publishing is only available when running in the desktop Rule Editor application.' };
-  }
-
-  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
-    try {
-      const win = window.open('/rule-editor.html', '_blank');
-      if (!win) {
-        throw new Error('Popup window was blocked by browser. Please allow popups for this site.');
-      }
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
-    }
-  }
-
-  public async resolveRulePackLocation(_configuredPath?: string): Promise<{
-    path: string | null;
-    isAutoDetected: boolean;
-    sourceType: string;
-  }> {
-    return { path: null, isAutoDetected: false, sourceType: 'None' };
-  }
-
-  public async checkAppUpdate(): Promise<{
-    isInstalled: boolean;
-    hasUpdate: boolean;
-    currentVersion?: string;
-    remoteVersion?: string;
-    error?: string;
-  }> {
-    return { isInstalled: false, hasUpdate: false, currentVersion: 'web' };
-  }
-
-  public async downloadAppUpdate(): Promise<{ success: boolean; error?: string }> {
-    return { success: false };
-  }
-
-  public async applyAppUpdate(): Promise<void> {
-    console.warn('App update restart is only available in desktop host.');
-  }
-
-  public async projectSessionOpen(_payload: ProjectSessionOpenPayload): Promise<ProjectSessionSnapshot> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionGetSnapshot(): Promise<ProjectSessionSnapshot> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionOverrideFact(_payload: OverrideFactPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionBatchOverrideFacts(_payload: BatchOverrideFactsPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionRevertFact(_payload: RevertFactPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionUpdateChecklist(_payload: UpdateChecklistPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionUpdateSpecialQuote(_payload: UpdateSpecialQuotePayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionDeleteSpecialQuote(_payload: DeleteSpecialQuotePayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionReorderSpecialQuotes(_payload: ReorderSpecialQuotesPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionUpdateGeneralComments(_payload: UpdateGeneralCommentsPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionReset(_payload: ResetSessionPayload): Promise<SessionCommandResult> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async projectSessionCreateManual(_payload: CreateManualProjectCommand): Promise<ProjectSessionSnapshot> {
-    throw new Error('ProjectSession requires desktop host.');
-  }
-
-  public async getSegmentTemplates(): Promise<SegmentTemplate[]> {
-    return AVAILABLE_SEGMENT_TEMPLATES as SegmentTemplate[];
+  public async discardRecovery(): Promise<{ success: boolean }> {
+    return this.sendRequest('discardRecovery');
   }
 }
 
 /**
- * Unified DesktopBridge coordinator delegating to either WebView2DesktopBridge or BrowserPreviewBridge.
+ * Unified DesktopBridge coordinator targeting Microsoft Edge WebView2 desktop host.
  */
 export class DesktopBridge implements INativeBridge {
-  private activeBridge: INativeBridge;
+  private activeBridge: WebView2DesktopBridge;
 
   constructor() {
-    if (isDesktopHost()) {
-      this.activeBridge = new WebView2DesktopBridge();
-    } else {
-      this.activeBridge = new BrowserPreviewBridge();
-    }
+    this.activeBridge = new WebView2DesktopBridge();
   }
 
   public isDesktopHost(): boolean {
-    return this.activeBridge.isDesktopHost();
+    return isDesktopHost();
   }
 
   public isRunningInDesktop(): boolean {
-    return this.activeBridge.isRunningInDesktop();
+    return isDesktopHost();
   }
 
   public sendRequest<T = any>(action: string, payload: any = {}): Promise<T> {
-    if (this.activeBridge instanceof WebView2DesktopBridge) {
-      return this.activeBridge.sendRequest<T>(action, payload);
+    if (!isDesktopHost()) {
+      return Promise.reject(new Error(`Not running in WebView2 desktop host (action: '${action}').`));
     }
-    return Promise.reject(new Error(`Not running in WebView2 desktop host (action: '${action}').`));
+    return this.activeBridge.sendRequest<T>(action, payload);
   }
 
   public async getAppInfo() {
@@ -685,32 +452,8 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.extractUpz(filePath);
   }
 
-  public async saveDvl(filePath: string, project: DvlProjectFile) {
-    return this.activeBridge.saveDvl(filePath, project);
-  }
-
-  public async verifySource(configXml: string, orderRevXml?: string, manifestXml?: string, manualOverrides?: Record<string, Fact>, sqItems?: SpecialQuote[], existingChecklists?: ChecklistInstance[]) {
-    return this.activeBridge.verifySource(configXml, orderRevXml, manifestXml, manualOverrides, sqItems, existingChecklists);
-  }
-
   public async saveFileDialog(defaultName: string) {
     return this.activeBridge.saveFileDialog(defaultName);
-  }
-
-  public async exportExcelDeliverable(
-    facts: Record<string, Fact>,
-    sqItems: SpecialQuote[],
-    checklists: ChecklistInstance[],
-    rules: RuleDefinition[],
-    graph?: NormalizedXmlGraph,
-    generalComments: string = '',
-    defaultName?: string,
-    isDraft: boolean = false,
-    configXml?: string,
-    orderRevXml?: string,
-    manifestXml?: string
-  ) {
-    return this.activeBridge.exportExcelDeliverable(facts, sqItems, checklists, rules, graph, generalComments, defaultName, isDraft, configXml, orderRevXml, manifestXml);
   }
 
   public async openFile(filePath: string) {
@@ -741,19 +484,24 @@ export class DesktopBridge implements INativeBridge {
     return this.activeBridge.publishRulePack(payload);
   }
 
-  public async launchRuleEditor(): Promise<{ success: boolean; error?: string; path?: string; url?: string }> {
-    if (this.isRunningInDesktop()) {
-      return this.sendRequest('launchRuleEditor');
-    }
-    try {
-      const win = window.open('/rule-editor.html', '_blank');
-      if (!win) {
-        throw new Error('Popup window was blocked by browser. Please allow popups for this site.');
-      }
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to open Rule Editor window.' };
-    }
+  public async validateRulePack(payload: any) {
+    return this.activeBridge.validateRulePack(payload);
+  }
+
+  public async saveDraft(payload: any) {
+    return this.activeBridge.saveDraft(payload);
+  }
+
+  public async openDraft(filePath?: string) {
+    return this.activeBridge.openDraft(filePath);
+  }
+
+  public async evaluateRuleSandbox(payload: { rule: any; simulatedValues: Record<string, any> }) {
+    return this.activeBridge.evaluateRuleSandbox(payload);
+  }
+
+  public async reloadActiveRulePack() {
+    return this.activeBridge.reloadActiveRulePack();
   }
 
   public async resolveRulePackLocation(configuredPath?: string) {
@@ -822,6 +570,30 @@ export class DesktopBridge implements INativeBridge {
 
   public async getSegmentTemplates() {
     return this.activeBridge.getSegmentTemplates();
+  }
+
+  public async projectSessionSave(payload: SaveProjectPayload) {
+    return this.activeBridge.projectSessionSave(payload);
+  }
+
+  public async projectSessionOpenDvl(payload: OpenDvlPayload) {
+    return this.activeBridge.projectSessionOpenDvl(payload);
+  }
+
+  public async projectSessionExportExcel(payload: ExportExcelPayload) {
+    return this.activeBridge.projectSessionExportExcel(payload);
+  }
+
+  public async getRecoveryInfo() {
+    return this.activeBridge.getRecoveryInfo();
+  }
+
+  public async restoreRecovery() {
+    return this.activeBridge.restoreRecovery();
+  }
+
+  public async discardRecovery() {
+    return this.activeBridge.discardRecovery();
   }
 }
 

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RuleDefinition, RulePackIdentity } from '../types';
-import { RULES_CATALOG, RULE_PACK_IDENTITY } from '../services/rulesCatalog';
 import { desktopBridge } from '../services/desktopBridge';
 import {
   activeRulePackArtifactsFrom,
@@ -8,6 +7,11 @@ import {
   type ActiveRulePackArtifacts,
   type RulePackPayload
 } from '../orchestration/projectSession';
+
+const DEFAULT_RULE_PACK_IDENTITY: RulePackIdentity = {
+  version: '0.0.0',
+  sha256: ''
+};
 
 export interface AppUpdateNotice {
   message: string;
@@ -30,8 +34,8 @@ export interface UseRulePackSessionResult {
 }
 
 export function useRulePackSession(): UseRulePackSessionResult {
-  const [activeRules, setActiveRules] = useState<RuleDefinition[]>(RULES_CATALOG);
-  const [rulePackIdentity, setRulePackIdentity] = useState<RulePackIdentity>(RULE_PACK_IDENTITY);
+  const [activeRules, setActiveRules] = useState<RuleDefinition[]>([]);
+  const [rulePackIdentity, setRulePackIdentity] = useState<RulePackIdentity>(DEFAULT_RULE_PACK_IDENTITY);
   const [activeRulePackArtifacts, setActiveRulePackArtifacts] = useState<ActiveRulePackArtifacts>({});
   const [centralRulePackPath, setCentralRulePackPath] = useState<string>(() => {
     return localStorage.getItem('dvl_central_rulepack_path') || '';
@@ -55,7 +59,7 @@ export function useRulePackSession(): UseRulePackSessionResult {
       }
       setActiveRules(pack.rules as RuleDefinition[]);
       setActiveRulePackArtifacts(activeRulePackArtifactsFrom(pack));
-      setRulePackIdentity(identityFromRulePack(pack, RULE_PACK_IDENTITY));
+      setRulePackIdentity(identityFromRulePack(pack, DEFAULT_RULE_PACK_IDENTITY));
     };
 
     const loadAndSync = async () => {

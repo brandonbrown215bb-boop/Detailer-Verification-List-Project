@@ -83,7 +83,13 @@ namespace AHUVerification.Core.Session
         public string GeneralComments { get; private set; }
         public RulePackBundle ActiveRulePack { get; private set; }
         public int RulePackGeneration { get; private set; }
-        public bool IsDirty { get; private set; }
+        public bool IsDirty { get; internal set; }
+        public string? CurrentSavePath { get; set; }
+        public long LastSavedRevision { get; set; }
+        public string? LastSavedAt { get; set; }
+        public string? IntegrityState { get; set; }
+        public string? IntegrityWarning { get; set; }
+        public string? EmbeddedTemplateBytesBase64 { get; set; }
 
         public ProjectSession(
             string filePath,
@@ -100,7 +106,9 @@ namespace AHUVerification.Core.Session
             string? initialGeneralComments = null,
             NormalizedXmlGraph? synthesizedGraph = null,
             Dictionary<string, Fact>? synthesizedBaselineFacts = null,
-            Dictionary<string, Fact>? synthesizedFacts = null)
+            Dictionary<string, Fact>? synthesizedFacts = null,
+            bool isDvlHydration = false,
+            string? sourceFileName = null)
         {
             if (string.IsNullOrWhiteSpace(configXml))
                 throw new ArgumentException("Config.xml content cannot be empty", nameof(configXml));
@@ -110,8 +118,10 @@ namespace AHUVerification.Core.Session
             SessionId = Guid.NewGuid().ToString("N");
             Revision = 1;
 
-            FilePath = filePath ?? "";
-            FileName = !string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : (isUpz ? "UnitPackage.upz" : (isTrusted ? "Config.xml" : "Manual Unit Configuration.xml"));
+            FilePath = isDvlHydration ? "" : (filePath ?? "");
+            FileName = !string.IsNullOrWhiteSpace(sourceFileName)
+                ? sourceFileName
+                : (!string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : (isUpz ? "UnitPackage.upz" : (isTrusted ? "Config.xml" : "Manual Unit Configuration.xml")));
             FileSha256 = ComputeSha256(configXml);
             IsUpz = isUpz;
             IsTrusted = isTrusted;
@@ -173,11 +183,16 @@ namespace AHUVerification.Core.Session
                 }
             }
 
-            // Enforce CE1 authority boundary: legacy hydration (e.g. from saved DVL projects)
-            // must never establish trusted verification history on an authentic source session.
-            Checklists = (!isTrusted && initialChecklists != null)
-                ? initialChecklists.Select(CloneChecklist).ToList()
-                : new List<ChecklistInstance>();
+            if (isDvlHydration || (!isTrusted && initialChecklists != null))
+            {
+                Checklists = initialChecklists != null
+                    ? initialChecklists.Select(CloneChecklist).ToList()
+                    : new List<ChecklistInstance>();
+            }
+            else
+            {
+                Checklists = new List<ChecklistInstance>();
+            }
 
             SpecialQuotes = initialSpecialQuotes != null
                 ? initialSpecialQuotes.Select(CloneSpecialQuote).ToList()
@@ -249,7 +264,11 @@ namespace AHUVerification.Core.Session
                     },
                     Readiness = readiness,
                     IsDirty = IsDirty,
-                    RawConfigXml = RawConfigXml
+                    RawConfigXml = RawConfigXml,
+                    CurrentProjectPath = CurrentSavePath,
+                    LastSavedAt = LastSavedAt,
+                    IntegrityState = IntegrityState,
+                    IntegrityWarning = IntegrityWarning
                 };
             }
         }
@@ -416,7 +435,26 @@ namespace AHUVerification.Core.Session
                     return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Checklist item '{cmd.CheckId}' not found", CreateSnapshot()));
                 }
 
-                check.Status = cmd.Status;
+                if (cmd.Status.HasValue)
+                {
+                    if (!Enum.IsDefined(typeof(CheckStatus), cmd.Status.Value))
+                    {
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Invalid checklist status: {cmd.Status.Value}", CreateSnapshot()));
+                    }
+
+                    var rule = ActiveRulePack?.Rules?.FirstOrDefault(r => string.Equals(r.Id, check.RuleId, StringComparison.OrdinalIgnoreCase));
+                    if (cmd.Status.Value == CheckStatus.NA && rule?.AllowNA != true)
+                    {
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Checklist item '{cmd.CheckId}' does not allow N/A status", CreateSnapshot()));
+                    }
+
+                    check.Status = cmd.Status.Value;
+                    if (check.Status == CheckStatus.Incomplete)
+                    {
+                        check.DetailerInitials = null;
+                    }
+                }
+
                 if (cmd.Comment != null)
                 {
                     check.DetailerComment = cmd.Comment;
@@ -424,6 +462,18 @@ namespace AHUVerification.Core.Session
                 if (cmd.DetailerInitials != null)
                 {
                     check.DetailerInitials = cmd.DetailerInitials;
+                }
+                else if (check.Status == CheckStatus.Passed || check.Status == CheckStatus.Flagged)
+                {
+                    if (string.IsNullOrWhiteSpace(check.DetailerInitials))
+                    {
+                        string fallbackInitials = Facts.TryGetValue("unit.detailerInitials", out var fi) && !string.IsNullOrWhiteSpace(fi.Value?.ToString())
+                            ? fi.Value.ToString()!.Trim()
+                            : (Facts.TryGetValue("unit.detailer", out var df) && !string.IsNullOrWhiteSpace(df.Value?.ToString())
+                                ? OpenXmlTemplatePatcher.DeriveInitials(df.Value.ToString()!)
+                                : "TD");
+                        check.DetailerInitials = fallbackInitials;
+                    }
                 }
                 check.UpdatedAt = DateTime.UtcNow.ToString("o");
 
@@ -460,22 +510,31 @@ namespace AHUVerification.Core.Session
                     incoming.Id = Guid.NewGuid().ToString("N");
                 }
 
+                if (incoming.Slot < 1 || incoming.Slot > 22)
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail(
+                        $"Special Quote slot {incoming.Slot} is invalid. The DVL deliverable supports slots 1 through 22.", CreateSnapshot()));
+                }
+
                 int existingIndex = SpecialQuotes.FindIndex(sq => sq.Id == incoming.Id);
+                int slotIndex = SpecialQuotes.FindIndex(sq => sq.Slot == incoming.Slot);
+                if (existingIndex < 0 && slotIndex < 0 && SpecialQuotes.Count >= 22)
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail(
+                        "Cannot add Special Quote: maximum 22 slots supported by the DVL deliverable.", CreateSnapshot()));
+                }
+
                 if (existingIndex >= 0)
                 {
                     SpecialQuotes[existingIndex] = incoming;
                 }
+                else if (slotIndex >= 0)
+                {
+                    SpecialQuotes[slotIndex] = incoming;
+                }
                 else
                 {
-                    int slotIndex = SpecialQuotes.FindIndex(sq => sq.Slot == incoming.Slot);
-                    if (slotIndex >= 0)
-                    {
-                        SpecialQuotes[slotIndex] = incoming;
-                    }
-                    else
-                    {
-                        SpecialQuotes.Add(incoming);
-                    }
+                    SpecialQuotes.Add(incoming);
                 }
 
                 IsDirty = true;
@@ -533,7 +592,29 @@ namespace AHUVerification.Core.Session
                     return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail("Reorder assignments cannot be empty", CreateSnapshot()));
                 }
 
+                foreach (var assignment in cmd.Assignments)
+                {
+                    if (assignment.Slot < 1 || assignment.Slot > 22)
+                    {
+                        return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail(
+                            $"Invalid slot {assignment.Slot} in reorder assignment. Must be between 1 and 22.", CreateSnapshot()));
+                    }
+                }
+
+                if (cmd.Assignments.Select(a => a.Slot).Distinct().Count() != cmd.Assignments.Count)
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail(
+                        "Reorder assignments contain duplicate slot numbers.", CreateSnapshot()));
+                }
+
                 var map = cmd.Assignments.ToDictionary(a => a.QuoteId, a => a.Slot, StringComparer.Ordinal);
+                var candidateSlots = SpecialQuotes.Select(sq => map.TryGetValue(sq.Id, out int newSlot) ? newSlot : sq.Slot).ToList();
+                if (candidateSlots.Distinct().Count() != candidateSlots.Count)
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail(
+                        "Reorder assignments produce duplicate slot numbers across special quotes.", CreateSnapshot()));
+                }
+
                 foreach (var sq in SpecialQuotes)
                 {
                     if (map.TryGetValue(sq.Id, out int newSlot))
@@ -615,9 +696,13 @@ namespace AHUVerification.Core.Session
 
                 ActiveRulePack = newPack;
                 RulePackGeneration = packGeneration;
+                EmbeddedTemplateBytesBase64 = null;
 
                 ReevaluateInternal();
+                IsDirty = true;
                 Revision++;
+                IntegrityState = "complete";
+                IntegrityWarning = null;
 
                 return SessionCommandResult.Ok(CreateSnapshot());
             }
@@ -704,7 +789,8 @@ namespace AHUVerification.Core.Session
                 blockers.Add($"{incompleteSqCount} special quote items are incomplete");
             }
 
-            bool templateRetrievable = !string.IsNullOrEmpty(ActiveRulePack?.TemplatePath) && File.Exists(ActiveRulePack.TemplatePath);
+            bool templateRetrievable = (!string.IsNullOrEmpty(ActiveRulePack?.TemplatePath) && File.Exists(ActiveRulePack.TemplatePath))
+                || !string.IsNullOrEmpty(EmbeddedTemplateBytesBase64);
             bool exportBlocked = !templateRetrievable;
 
             if (!templateRetrievable)
@@ -871,6 +957,250 @@ namespace AHUVerification.Core.Session
                 };
             }
             return val;
+        }
+
+        public DvlProjectFile BuildDvlProject(DvlProjectManager manager)
+        {
+            lock (_syncLock)
+            {
+                return manager.CreateProject(
+                    graph: Graph,
+                    facts: CloneFacts(Facts),
+                    sqItems: SpecialQuotes.Select(CloneSpecialQuote).ToList(),
+                    checklists: Checklists.Select(CloneChecklist).ToList(),
+                    rawXml: RawConfigXml,
+                    bundle: ActiveRulePack,
+                    generalComments: GeneralComments,
+                    sourceFileName: FileName,
+                    isUpzBundle: IsUpz,
+                    orderRevision: OrderRevision,
+                    rawOrderRevisionXml: RawOrderRevXml,
+                    rawManifestXml: RawManifestXml,
+                    isTrusted: IsTrusted);
+            }
+        }
+
+        public SessionCommandResult Save(SaveProjectCommand cmd, string resolvedPath, DvlProjectManager manager)
+        {
+            lock (_syncLock)
+            {
+                if (TryGetDeduplicatedResult(cmd.RequestId, out var deduplicated))
+                {
+                    return deduplicated!;
+                }
+
+                if (cmd.ExpectedRevision != Revision)
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Conflict(Revision, CreateSnapshot(),
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}"));
+                }
+
+                if (string.IsNullOrWhiteSpace(resolvedPath))
+                {
+                    return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail("Target save path cannot be empty", CreateSnapshot()));
+                }
+
+                var project = BuildDvlProject(manager);
+                manager.SaveToFile(project, resolvedPath);
+
+                CurrentSavePath = resolvedPath;
+                LastSavedRevision = Revision;
+                LastSavedAt = project.LastSavedAt;
+                IsDirty = false;
+
+                return RecordCommandResult(cmd.RequestId, SessionCommandResult.Ok(CreateSnapshot()));
+            }
+        }
+
+        public static ProjectSession OpenDvl(
+            DvlProjectFile project,
+            string? filePath,
+            DvlIntegrityValidationResult integrity,
+            RulePackBundle activePack,
+            int packGeneration,
+            string? templateBase64 = null)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (activePack == null) throw new ArgumentNullException(nameof(activePack));
+
+            // Restore trust ONLY when the saved project was explicitly authentic (IsTrusted == true)
+            // and the saved project integrity is fully verified. Legacy/unknown/untrusted projects remain untrusted.
+            bool wasTrusted = project.SourceXml?.IsTrusted == true;
+
+            bool isTrusted = integrity.IsVerified && wasTrusted;
+
+            string configXml = project.SourceXml?.RawXml ?? "";
+            if (string.IsNullOrWhiteSpace(configXml))
+            {
+                throw new ArgumentException("DVL project contains no raw Config.xml content.");
+            }
+
+            NormalizedXmlGraph graph = project.NormalizedGraph ?? new NormalizedXmlParser().Parse(configXml);
+
+            string sourceFileName = project.SourceXml?.FileName ?? "";
+            if (string.IsNullOrWhiteSpace(sourceFileName))
+            {
+                sourceFileName = project.SourceXml?.IsUpzBundle == true ? "UnitPackage.upz" : "Config.xml";
+            }
+
+            var session = new ProjectSession(
+                filePath: null,
+                configXml: configXml,
+                orderRevXml: project.SourceXml?.RawOrderRevisionXml,
+                manifestXml: project.SourceXml?.RawManifestXml,
+                isUpz: project.SourceXml?.IsUpzBundle == true,
+                isTrusted: isTrusted,
+                activePack: activePack,
+                packGeneration: packGeneration,
+                initialOverrides: ExtractOverridesFromProject(project),
+                initialChecklists: project.ChecklistInstances,
+                initialSpecialQuotes: project.SqItems,
+                initialGeneralComments: project.GeneralComments,
+                synthesizedGraph: graph,
+                synthesizedBaselineFacts: null,
+                synthesizedFacts: project.FactRegistry != null ? CloneFacts(project.FactRegistry) : null,
+                isDvlHydration: true,
+                sourceFileName: sourceFileName
+            );
+
+            session.CurrentSavePath = filePath;
+            session.LastSavedRevision = session.Revision;
+            session.LastSavedAt = project.LastSavedAt;
+            session.IsDirty = false;
+            session.IntegrityState = integrity.State;
+            session.IntegrityWarning = !integrity.IsVerified ? integrity.Message : (integrity.State == "pack-mismatch" ? integrity.Message : null);
+            session.EmbeddedTemplateBytesBase64 = !string.IsNullOrEmpty(templateBase64)
+                ? templateBase64
+                : project.RulePackSnapshot?.TemplateBytesBase64;
+
+            return session;
+        }
+
+        private static Dictionary<string, Fact>? ExtractOverridesFromProject(DvlProjectFile project)
+        {
+            if (project.FactRegistry == null) return null;
+            var overrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
+            foreach (var kvp in project.FactRegistry)
+            {
+                if (kvp.Value?.Status == FactStatus.ManuallyOverridden)
+                {
+                    overrides[kvp.Key] = kvp.Value;
+                }
+            }
+            return overrides.Count > 0 ? overrides : null;
+        }
+
+        public ExportDeliverableResult ExportExcel(
+            ExportExcelDeliverableCommand cmd,
+            OpenXmlTemplatePatcher patcher,
+            string targetPath)
+        {
+            lock (_syncLock)
+            {
+                if (cmd.ExpectedRevision != Revision)
+                {
+                    throw new InvalidOperationException(
+                        $"Revision mismatch: command expected revision {cmd.ExpectedRevision}, current is {Revision}");
+                }
+
+                if (string.IsNullOrWhiteSpace(targetPath) || !Path.IsPathRooted(targetPath) || !targetPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Target path must be an absolute path ending in .xlsx");
+                }
+
+                var readiness = ComputeReadinessInternal();
+                if (!cmd.IsDraft)
+                {
+                    if (!IsTrusted)
+                    {
+                        throw new InvalidOperationException("Final export requires a verified authentic source (UPZ or verified Config.xml).");
+                    }
+                    if (!readiness.IsReadyForFinal)
+                    {
+                        string reasons = string.Join("; ", readiness.Blockers);
+                        throw new InvalidOperationException($"Final export blocked: {reasons}");
+                    }
+                    if (readiness.ExportBlocked)
+                    {
+                        throw new InvalidOperationException("Final export blocked: Excel template artifact (template.xlsx) is missing or unavailable.");
+                    }
+                }
+
+                // Ensure 'unit.date' is populated with today's date if missing or not set
+                var exportFacts = CloneFacts(Facts);
+                if (!exportFacts.TryGetValue("unit.date", out var dateFact) || dateFact.Value == null || string.IsNullOrWhiteSpace(dateFact.Value.ToString()))
+                {
+                    exportFacts["unit.date"] = new Fact
+                    {
+                        Key = "unit.date",
+                        Label = "Verification Date",
+                        Category = "Order & Identity",
+                        Value = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                        Status = FactStatus.Known,
+                        Confidence = FactConfidence.Authoritative
+                    };
+                }
+
+                string? tempTemplatePath = null;
+                string effectiveTemplatePath;
+                if (!string.IsNullOrEmpty(EmbeddedTemplateBytesBase64))
+                {
+                    byte[] bytes = Convert.FromBase64String(EmbeddedTemplateBytesBase64);
+                    tempTemplatePath = Path.Combine(Path.GetTempPath(), $"ahu_tpl_{Guid.NewGuid():N}.xlsx");
+                    File.WriteAllBytes(tempTemplatePath, bytes);
+                    effectiveTemplatePath = tempTemplatePath;
+                }
+                else if (!string.IsNullOrEmpty(ActiveRulePack?.TemplatePath) && File.Exists(ActiveRulePack.TemplatePath))
+                {
+                    effectiveTemplatePath = ActiveRulePack.TemplatePath;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Template artifact (template.xlsx) is missing and cannot be retrieved.");
+                }
+
+                string? targetDirectory = Path.GetDirectoryName(Path.GetFullPath(targetPath));
+                if (string.IsNullOrWhiteSpace(targetDirectory))
+                    throw new InvalidOperationException("Target path has no parent directory.");
+                Directory.CreateDirectory(targetDirectory);
+                string tmpPath = Path.Combine(targetDirectory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+
+                if (ActiveRulePack?.TemplateMap == null || ActiveRulePack.Rules == null)
+                {
+                    throw new InvalidOperationException("Active rule pack template map or rules are missing.");
+                }
+
+                try
+                {
+                    patcher.PatchTemplate(
+                        effectiveTemplatePath,
+                        tmpPath,
+                        ActiveRulePack.TemplateMap,
+                        exportFacts,
+                        SpecialQuotes.Select(CloneSpecialQuote).ToList(),
+                        Checklists.Select(CloneChecklist).ToList(),
+                        ActiveRulePack.Rules,
+                        GeneralComments,
+                        cmd.IsDraft,
+                        Graph
+                    );
+                    OpenXmlTemplatePatcher.ValidateGeneratedWorkbook(tmpPath);
+                    File.Move(tmpPath, targetPath, overwrite: true);
+
+                    return new ExportDeliverableResult
+                    {
+                        Success = true,
+                        FilePath = targetPath,
+                        FileName = Path.GetFileName(targetPath),
+                        IsDraft = cmd.IsDraft
+                    };
+                }
+                finally
+                {
+                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                    if (tempTemplatePath != null && File.Exists(tempTemplatePath)) File.Delete(tempTemplatePath);
+                }
+            }
         }
     }
 }

@@ -32,7 +32,7 @@ import {
   type ManualUnitConfig,
   AVAILABLE_SEGMENT_TEMPLATES,
   MANUAL_UNIT_PRESETS
-} from '../services/manualUnitFactory';
+} from '../types/manual';
 
 interface ManualUnitModalProps {
   isOpen: boolean;

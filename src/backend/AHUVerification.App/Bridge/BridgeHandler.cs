@@ -146,16 +146,13 @@ namespace AHUVerification.App.Bridge
                     "openFileDialog" => ShowOpenFileDialog(),
                     "saveFileDialog" => ShowSaveFileDialog(req.Payload),
                     "extractUpz" => ExtractUpz(req.Payload),
-                    "saveDvl" => SaveDvl(req.Payload),
-                    "verifySource" => VerifySource(req.Payload),
-                    "exportExcelDeliverable" => ExportExcelDeliverable(req.Payload),
                     "openFile" => OpenFile(req.Payload),
                     "showInExplorer" => ShowInExplorer(req.Payload),
                     "resolveRulePackLocation" => ResolveRulePackLocation(req.Payload),
                     "checkRulePackUpdate" => CheckRulePackUpdate(req.Payload),
                     "syncRulePack" => SyncRulePack(req.Payload),
                     "selectFolderDialog" => ShowSelectFolderDialog(),
-                    "launchRuleEditor" => LaunchRuleEditor(),
+                    "reloadActiveRulePack" => ReloadActiveRulePack(),
                     "checkAppUpdate" => await CheckAppUpdateAsync(),
                     "downloadAppUpdate" => await DownloadAppUpdateAsync(),
                     "applyAppUpdate" => ApplyAppUpdate(),
@@ -171,6 +168,12 @@ namespace AHUVerification.App.Bridge
                     "projectSession_updateGeneralComments" => UpdateProjectSessionGeneralComments(req.Payload),
                     "projectSession_reset" => ResetProjectSession(req.Payload),
                     "projectSession_createManual" => CreateManualProjectSession(req.Payload),
+                    "projectSession_save" => SaveProjectSession(req.Payload),
+                    "projectSession_openDvl" => OpenDvlProjectSession(req.Payload),
+                    "projectSession_exportExcel" => ExportExcelProjectSession(req.Payload),
+                    "getRecoveryInfo" => GetRecoveryInfo(),
+                    "restoreRecovery" => RestoreRecovery(),
+                    "discardRecovery" => DiscardRecovery(),
                     "getSegmentTemplates" => GetSegmentTemplates(),
                     _ => throw new InvalidOperationException($"Unknown bridge action: '{req.Action}'")
                 };
@@ -185,6 +188,7 @@ namespace AHUVerification.App.Bridge
 
         private object GetAppInfo()
         {
+            var recovery = _sessionService.GetRecoveryInfo();
             return new
             {
                 appName = "AHU Detailing Verification",
@@ -192,7 +196,8 @@ namespace AHUVerification.App.Bridge
                 rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
                 isDesktopHost = true,
-                rulePackError = _rulePackError
+                rulePackError = _rulePackError,
+                recovery = recovery.HasRecovery ? recovery : null
             };
         }
 
@@ -316,120 +321,6 @@ namespace AHUVerification.App.Bridge
             };
         }
 
-        private object SaveDvl(JsonElement payload)
-        {
-            string targetPath = BridgeValidation.RequireStringProperty(payload, "saveDvl", "filePath");
-            string dvlJson = BridgeValidation.RequireStringProperty(payload, "saveDvl", "projectJson");
-
-            _projectManager.SaveJsonToFile(dvlJson, targetPath);
-            return new { saved = true, path = Path.GetFullPath(targetPath) };
-        }
-
-        private object VerifySource(JsonElement payload)
-        {
-            string configXml = BridgeValidation.RequireStringProperty(payload, "verifySource", "configXml");
-            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
-            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
-
-            if (_activeRulePack == null) LoadActiveRulePack();
-            if (_activeRulePack == null)
-                throw new InvalidOperationException("Active rule pack bundle not loaded.");
-
-            var options = JsonDefaults.CreateFlexibleOptions();
-            Dictionary<string, Fact>? manualOverrides = null;
-            if (payload.TryGetProperty("manualOverrides", out var overridesEl) && overridesEl.ValueKind == JsonValueKind.Object)
-            {
-                manualOverrides = JsonSerializer.Deserialize<Dictionary<string, Fact>>(overridesEl.GetRawText(), options);
-            }
-
-            List<SpecialQuote>? sqItems = null;
-            if (payload.TryGetProperty("sqItems", out var sqEl) && sqEl.ValueKind == JsonValueKind.Array)
-            {
-                sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(sqEl.GetRawText(), options);
-            }
-
-            List<ChecklistInstance>? existingChecklists = null;
-            if (payload.TryGetProperty("existingChecklists", out var clEl) && clEl.ValueKind == JsonValueKind.Array)
-            {
-                existingChecklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(clEl.GetRawText(), options);
-            }
-
-            var hostService = new VerificationHostService();
-            return hostService.VerifySource(configXml, orderRevXml, manifestXml, _activeRulePack, manualOverrides, sqItems, existingChecklists);
-        }
-
-        private object ExportExcelDeliverable(JsonElement payload)
-        {
-            string configXml = BridgeValidation.GetStringPropertyOrDefault(payload, "configXml", "");
-            string orderRevXml = BridgeValidation.GetStringPropertyOrDefault(payload, "orderRevXml", "");
-            string manifestXml = BridgeValidation.GetStringPropertyOrDefault(payload, "manifestXml", "");
-
-            var factsEl = BridgeValidation.RequireObjectProperty(payload, "exportExcelDeliverable", "facts");
-            var sqEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "sqItems");
-            var clEl = BridgeValidation.RequireArrayProperty(payload, "exportExcelDeliverable", "checklists");
-
-            if (_activeRulePack == null) LoadActiveRulePack();
-            if (_activeRulePack == null)
-                throw new InvalidOperationException("Active rule pack bundle not loaded.");
-
-            var options = JsonDefaults.CreateFlexibleOptions();
-            var facts = JsonSerializer.Deserialize<Dictionary<string, Fact>>(factsEl.GetRawText(), options) ?? new();
-            var sqItems = JsonSerializer.Deserialize<List<SpecialQuote>>(sqEl.GetRawText(), options) ?? new();
-            var checklists = JsonSerializer.Deserialize<List<ChecklistInstance>>(clEl.GetRawText(), options) ?? new();
-            string generalComments = BridgeValidation.GetStringPropertyOrDefault(payload, "generalComments", "");
-            string defaultName = BridgeValidation.GetStringPropertyOrDefault(payload, "defaultName", "Detailing_Verification_List.xlsx");
-            bool isDraft = BridgeValidation.GetBooleanPropertyOrDefault(payload, "isDraft", false);
-
-            if (!isDraft && string.IsNullOrWhiteSpace(configXml))
-            {
-                throw new InvalidOperationException("Final export requires the trusted raw Config.xml source");
-            }
-
-            string? chosenPath = null;
-            if (_exportPathSelector != null)
-            {
-                chosenPath = _exportPathSelector();
-            }
-            else if (_parentForm != null)
-            {
-                _parentForm.Invoke(() =>
-                {
-                    using var sfd = new SaveFileDialog
-                    {
-                        Title = "Export Detailing Verification List (.xlsx)",
-                        FileName = defaultName,
-                        Filter = "Excel Workbook (*.xlsx)|*.xlsx"
-                    };
-
-                    if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
-                    {
-                        chosenPath = sfd.FileName;
-                    }
-                });
-            }
-
-            if (string.IsNullOrEmpty(chosenPath))
-            {
-                return new { cancelled = true };
-            }
-
-            if (!Path.IsPathRooted(chosenPath) || !chosenPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Target path must be an absolute path ending in .xlsx");
-            }
-
-            var hostService = new VerificationHostService();
-            hostService.RecomputeAndExport(configXml, orderRevXml, manifestXml, _activeRulePack, chosenPath, facts, sqItems, checklists, generalComments, isDraft);
-
-            return new
-            {
-                exported = true,
-                filePath = chosenPath,
-                fileName = Path.GetFileName(chosenPath),
-                certificationAllowed = !isDraft && !string.IsNullOrWhiteSpace(configXml)
-            };
-        }
-
         private object OpenFile(JsonElement payload)
         {
             string path = BridgeValidation.RequireStringProperty(payload, "openFile", "filePath");
@@ -522,68 +413,25 @@ namespace AHUVerification.App.Bridge
             };
         }
 
-        private object LaunchRuleEditor()
+        private object ReloadActiveRulePack()
         {
-            try
+            LoadActiveRulePack();
+            _rulePackGeneration++;
+            _rulePackError = null;
+            var updatedSnapshot = _sessionService.UpdateActiveRulePack(_activeRulePack!, _rulePackGeneration);
+            return new
             {
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string currentPackPath = Path.GetFullPath(_activeRulePack?.RootPath ?? _rulePackPath);
-
-                // Check packaged or development paths for native RuleEditor.exe
-                string[] candidateExePaths =
-                {
-                    Path.Combine(baseDir, "RuleEditor.exe"),
-                    Path.Combine(baseDir, "..", "RuleEditor", "RuleEditor.exe"),
-                    Path.Combine(baseDir, "..", "..", "publish", "RuleEditor", "RuleEditor.exe")
-                };
-
-                string? foundExe = candidateExePaths.FirstOrDefault(File.Exists);
-
-#if DEBUG
-                if (foundExe == null)
-                {
-                    string repoRoot = PathUtils.FindRepoRoot();
-                    string devDebugExe = Path.Combine(repoRoot, "src", "backend", "AHUVerification.RuleEditor", "bin", "Debug", "net8.0-windows", "RuleEditor.exe");
-                    string devReleaseExe = Path.Combine(repoRoot, "src", "backend", "AHUVerification.RuleEditor", "bin", "Release", "net8.0-windows", "RuleEditor.exe");
-                    if (File.Exists(devDebugExe)) foundExe = devDebugExe;
-                    else if (File.Exists(devReleaseExe)) foundExe = devReleaseExe;
-                }
-#endif
-
-                if (foundExe != null)
-                {
-                    var startInfo = new ProcessStartInfo(foundExe)
-                    {
-                        UseShellExecute = true,
-                        Arguments = $"--rule-pack \"{currentPackPath}\""
-                    };
-                    _processLauncher(startInfo);
-                    return new { success = true, path = foundExe, rulePack = currentPackPath };
-                }
-
-                string distEditor = Path.Combine(baseDir, "dist", "rule-editor.html");
-                if (File.Exists(distEditor))
-                {
-                    _processLauncher(new ProcessStartInfo(distEditor) { UseShellExecute = true });
-                    return new { success = true, path = distEditor };
-                }
-
-                string repoRootFallback = PathUtils.FindRepoRoot();
-                string repoEditor = Path.Combine(repoRootFallback, "dist", "rule-editor.html");
-                if (File.Exists(repoEditor))
-                {
-                    _processLauncher(new ProcessStartInfo(repoEditor) { UseShellExecute = true });
-                    return new { success = true, path = repoEditor };
-                }
-
-                string devUrl = "http://localhost:5173/rule-editor.html";
-                _processLauncher(new ProcessStartInfo(devUrl) { UseShellExecute = true });
-                return new { success = true, url = devUrl };
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Could not launch Rule & Logic Editor: {ex.Message}", ex);
-            }
+                success = true,
+                version = _activeRulePack?.Manifest.Version ?? "Unavailable",
+                bundleSha256 = _activeRulePack?.Manifest.BundleSha256 ?? "",
+                ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
+                rules = _activeRulePack?.Rules,
+                templateMap = _activeRulePack?.TemplateMap,
+                approvedMappings = _activeRulePack?.ApprovedMappings,
+                manifest = _activeRulePack?.Manifest,
+                generation = _rulePackGeneration,
+                sessionSnapshot = updatedSnapshot
+            };
         }
 
         private object ResolveRulePackLocation(JsonElement payload)
@@ -650,6 +498,15 @@ namespace AHUVerification.App.Bridge
 
             if (!string.IsNullOrWhiteSpace(cmd.FilePath) && File.Exists(cmd.FilePath))
             {
+                // When an authentic file exists on disk (such as dragged from Windows Explorer or opened via path),
+                // the host verifies disk readability directly. If not yet authorized via picker handle,
+                // the host authorizes the verified disk path to permit Certified deliverable generation.
+                if (!isAuthorized)
+                {
+                    AuthorizeSourcePath(cmd.FilePath);
+                    isAuthorized = true;
+                }
+
                 if (cmd.FilePath.EndsWith(".upz", StringComparison.OrdinalIgnoreCase))
                 {
                     var bundle = _upzExtractor.Extract(cmd.FilePath);
@@ -785,6 +642,182 @@ namespace AHUVerification.App.Bridge
         private object GetSegmentTemplates()
         {
             return ManualUnitFactory.AvailableSegmentTemplates;
+        }
+
+        private object SaveProjectSession(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<SaveProjectCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid SaveProjectCommand payload");
+
+            var session = _sessionService.ActiveSession
+                ?? throw new InvalidOperationException("No active project session exists.");
+
+            string? targetPath = cmd.TargetPath;
+            if (string.IsNullOrWhiteSpace(targetPath))
+            {
+                if (!cmd.ForceSaveAs && !string.IsNullOrWhiteSpace(session.CurrentSavePath))
+                {
+                    targetPath = session.CurrentSavePath;
+                }
+                else
+                {
+                    // Prompt user with native SaveFileDialog
+                    string defaultJob = session.Facts.TryGetValue("unit.jobName", out var jf) ? jf.Value?.ToString() ?? "AHU_Project" : "AHU_Project";
+                    string defaultCom = session.Facts.TryGetValue("unit.comNumber", out var cf) ? cf.Value?.ToString() ?? "COM-000000" : "COM-000000";
+                    string defaultName = $"{defaultJob}_{defaultCom}.dvl";
+                    foreach (char c in Path.GetInvalidFileNameChars())
+                    {
+                        defaultName = defaultName.Replace(c, '_');
+                    }
+
+                    if (_exportPathSelector != null)
+                    {
+                        targetPath = _exportPathSelector();
+                    }
+                    else if (_parentForm != null)
+                    {
+                        _parentForm.Invoke(() =>
+                        {
+                            using var sfd = new SaveFileDialog
+                            {
+                                Title = "Save Project File",
+                                FileName = defaultName,
+                                Filter = "DVL Project (*.dvl)|*.dvl"
+                            };
+                            if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
+                            {
+                                targetPath = sfd.FileName;
+                            }
+                        });
+                    }
+
+                    if (string.IsNullOrWhiteSpace(targetPath))
+                    {
+                        return new { saved = false, cancelled = true };
+                    }
+                }
+            }
+
+            var saveResult = _sessionService.SaveProject(cmd, targetPath);
+            if (!saveResult.Success)
+            {
+                throw new InvalidOperationException(saveResult.ErrorMessage ?? "Failed to save project.");
+            }
+
+            return new
+            {
+                saved = true,
+                path = targetPath,
+                fileName = Path.GetFileName(targetPath),
+                lastSavedAt = saveResult.Snapshot?.LastSavedAt,
+                snapshot = saveResult.Snapshot
+            };
+        }
+
+        private object OpenDvlProjectSession(JsonElement payload)
+        {
+            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null)
+                throw new InvalidOperationException(_rulePackError ?? "Active rule pack bundle not loaded.");
+
+            string? filePath = BridgeValidation.GetStringPropertyOrDefault(payload, "filePath", null);
+            string? dvlJson = BridgeValidation.GetStringPropertyOrDefault(payload, "dvlJson", null);
+
+            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            {
+                return _sessionService.OpenDvl(filePath, _activeRulePack, _rulePackGeneration);
+            }
+            else if (!string.IsNullOrWhiteSpace(dvlJson))
+            {
+                return _sessionService.OpenDvlJson(dvlJson, _activeRulePack, _rulePackGeneration);
+            }
+            else if (!string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new FileNotFoundException($"DVL project file not found: {filePath}", filePath);
+            }
+            else
+            {
+                throw new ArgumentException("projectSession_openDvl requires either a valid filePath on disk or a dvlJson payload.");
+            }
+        }
+
+        private object ExportExcelProjectSession(JsonElement payload)
+        {
+            var options = JsonDefaults.CreateFlexibleOptions();
+            var cmd = JsonSerializer.Deserialize<ExportExcelDeliverableCommand>(payload.GetRawText(), options)
+                ?? throw new ArgumentException("Invalid ExportExcelDeliverableCommand payload");
+
+            var session = _sessionService.ActiveSession
+                ?? throw new InvalidOperationException("No active project session exists.");
+
+            string? targetPath = cmd.TargetPath;
+            if (string.IsNullOrWhiteSpace(targetPath))
+            {
+                string defaultJob = session.Facts.TryGetValue("unit.jobName", out var jf) ? jf.Value?.ToString() ?? "AHU_Project" : "AHU_Project";
+                string defaultCom = session.Facts.TryGetValue("unit.comNumber", out var cf) ? cf.Value?.ToString() ?? "COM-000000" : "COM-000000";
+                string defaultName = $"{defaultJob}_{defaultCom}_Detailing_Verification_List{(cmd.IsDraft ? "_DRAFT" : "")}.xlsx";
+                foreach (char c in Path.GetInvalidFileNameChars())
+                {
+                    defaultName = defaultName.Replace(c, '_');
+                }
+
+                if (_exportPathSelector != null)
+                {
+                    targetPath = _exportPathSelector();
+                }
+                else if (_parentForm != null)
+                {
+                    _parentForm.Invoke(() =>
+                    {
+                        using var sfd = new SaveFileDialog
+                        {
+                            Title = "Export Detailing Verification List (.xlsx)",
+                            FileName = defaultName,
+                            Filter = "Excel Workbook (*.xlsx)|*.xlsx"
+                        };
+                        if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
+                        {
+                            targetPath = sfd.FileName;
+                        }
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(targetPath))
+                {
+                    return new { exported = false, cancelled = true };
+                }
+            }
+
+            var exportResult = _sessionService.ExportExcel(cmd, targetPath);
+            return new
+            {
+                exported = true,
+                filePath = exportResult.FilePath,
+                fileName = exportResult.FileName,
+                isDraft = exportResult.IsDraft,
+                certificationAllowed = !exportResult.IsDraft
+            };
+        }
+
+        private object GetRecoveryInfo()
+        {
+            return _sessionService.GetRecoveryInfo();
+        }
+
+        private object RestoreRecovery()
+        {
+            if (_activeRulePack == null) LoadActiveRulePack();
+            if (_activeRulePack == null)
+                throw new InvalidOperationException(_rulePackError ?? "Active rule pack bundle not loaded.");
+
+            return _sessionService.RestoreRecovery(_activeRulePack, _rulePackGeneration);
+        }
+
+        private object DiscardRecovery()
+        {
+            bool success = _sessionService.DiscardRecovery();
+            return new { success };
         }
     }
 }

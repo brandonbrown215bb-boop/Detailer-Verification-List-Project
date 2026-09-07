@@ -55,6 +55,10 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("rawManifestXml")]
         public string? RawManifestXml { get; set; }
+
+        [JsonPropertyName("isTrusted")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IsTrusted { get; set; }
     }
 
     public class DvlIntegrityInfo
@@ -108,6 +112,10 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("templateEmbedded")]
         public bool TemplateEmbedded { get; set; }
+
+        [JsonPropertyName("templateBytesBase64")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TemplateBytesBase64 { get; set; }
 
         [JsonPropertyName("reproducibility")]
         public string Reproducibility { get; set; } = "snapshot-without-template";

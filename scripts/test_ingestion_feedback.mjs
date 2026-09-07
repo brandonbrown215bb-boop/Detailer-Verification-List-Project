@@ -40,24 +40,18 @@ console.log('===================================================================
 console.log('[Suite 1/4] Ingestion Schema Validation & Descriptive Exceptions...');
 
 const xmlParserPath = path.join(srcDir, 'services', 'xmlParser.ts');
-assert(fs.existsSync(xmlParserPath), 'xmlParser.ts exists in src/services/');
-
-const xmlParserSource = fs.readFileSync(xmlParserPath, 'utf8');
-assert(xmlParserSource.includes('Empty XML input received'), 'xmlParser.ts traps empty XML strings with descriptive exception');
-assert(xmlParserSource.includes('DOMParser'), 'xmlParser.ts utilizes DOMParser for structural validation');
+assert(!fs.existsSync(xmlParserPath), 'xmlParser.ts deleted from src/services/ in CE5 (C# authoritative engine)');
 
 // ---------------------------------------------------------------------------
-// Suite 2: Desktop Bridge Rule Editor Process Launch Handler
+// Suite 2: Desktop Bridge Rule Editor Process Launch Handler (Gutted in CE4)
 // ---------------------------------------------------------------------------
-console.log('\n[Suite 2/4] Desktop Bridge Rule Editor Launch Handler...');
+console.log('\n[Suite 2/4] Desktop Bridge Rule Editor Launch Handler (Gutted in CE4)...');
 
 const desktopBridgePath = path.join(srcDir, 'services', 'desktopBridge.ts');
 assert(fs.existsSync(desktopBridgePath), 'desktopBridge.ts exists in src/services/');
 
 const desktopBridgeSource = fs.readFileSync(desktopBridgePath, 'utf8');
-assert(desktopBridgeSource.includes('launchRuleEditor'), 'desktopBridge.ts defines launchRuleEditor method');
-assert(desktopBridgeSource.includes("this.sendRequest('launchRuleEditor')"), 'desktopBridge.ts routes launchRuleEditor to WebView2 host');
-assert(desktopBridgeSource.includes('/rule-editor.html'), 'desktopBridge.ts provides browser preview fallback');
+assert(!desktopBridgeSource.includes('launchRuleEditor'), 'desktopBridge.ts does not define gutted launchRuleEditor method');
 
 // ---------------------------------------------------------------------------
 // Suite 3: HomePage Durable Error Banners & Loading Progress State
@@ -79,26 +73,21 @@ assert(homePageSource.includes('Create Manually'), 'HomePage.tsx provides fallba
 assert(homePageSource.includes('Loader2') || homePageSource.includes('animate-spin'), 'HomePage.tsx displays animated loading spinner during ingestion');
 
 // ---------------------------------------------------------------------------
-// Suite 4: SettingsModal Rule Editor Feedback & C# Bridge Handler
+// Suite 4: SettingsModal Rule Editor Feedback & C# Bridge Handler (Gutted in CE4)
 // ---------------------------------------------------------------------------
-console.log('\n[Suite 4/4] SettingsModal Action Feedback & Backend Bridge...');
+console.log('\n[Suite 4/4] SettingsModal Action Feedback & Backend Bridge (Gutted in CE4)...');
 
 const settingsModalPath = path.join(srcDir, 'components', 'SettingsModal.tsx');
 assert(fs.existsSync(settingsModalPath), 'SettingsModal.tsx exists in src/components/');
 
 const settingsModalSource = fs.readFileSync(settingsModalPath, 'utf8');
-assert(settingsModalSource.includes('handleLaunchRuleEditor'), 'SettingsModal.tsx implements handleLaunchRuleEditor handler');
-assert(settingsModalSource.includes('launchStatus'), 'SettingsModal.tsx tracks launchStatus (idle | launching | success | error)');
-assert(settingsModalSource.includes('launchMessage'), 'SettingsModal.tsx renders dynamic feedback toast message');
-assert(settingsModalSource.includes('desktopBridge.launchRuleEditor'), 'SettingsModal.tsx delegates launch to desktopBridge');
+assert(!settingsModalSource.includes('handleLaunchRuleEditor'), 'SettingsModal.tsx removed handleLaunchRuleEditor handler');
+assert(!settingsModalSource.includes('launchRuleEditor'), 'SettingsModal.tsx does not reference launchRuleEditor');
 
 const bridgeHandlerCsPath = path.join(srcDir, 'backend', 'AHUVerification.App', 'Bridge', 'BridgeHandler.cs');
 if (fs.existsSync(bridgeHandlerCsPath)) {
   const bridgeHandlerCsSource = fs.readFileSync(bridgeHandlerCsPath, 'utf8');
-  assert(bridgeHandlerCsSource.includes('"launchRuleEditor" => LaunchRuleEditor()'), 'BridgeHandler.cs handles launchRuleEditor action');
-  assert(bridgeHandlerCsSource.includes('LaunchRuleEditor()'), 'BridgeHandler.cs implements LaunchRuleEditor method');
-} else {
-  console.log('  - Note: BridgeHandler.cs path checked');
+  assert(!bridgeHandlerCsSource.includes('"launchRuleEditor" =>'), 'BridgeHandler.cs does not route gutted launchRuleEditor');
 }
 
 // Summary

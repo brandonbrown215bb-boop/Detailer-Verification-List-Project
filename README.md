@@ -105,7 +105,7 @@ The licensed native decompressor binaries are maintained under `src/backend/AHUV
    - **Rule & Logic Editor Studio**: `http://localhost:5173/rule-editor.html`
 3. Any changes saved in `src/` will hot-reload instantly.
 
-Browser preview has no WebView2 bridge: native file dialogs, UPZ extraction, and the official OpenXML export are desktop-host features. Browser storage and SheetJS download fallbacks are noncertifying preview/test-harness behavior, not a second product delivery target.
+The application requires the native Windows WebView2 desktop host (`AHUVerification.App.exe` or `RuleEditor.exe`) for all project processing, parsing, evaluation, persistence, and Excel deliverable export. When loaded in an external browser outside WebView2, the application displays a `DesktopHostRequiredScreen` with diagnostic information.
 
 ### 2. Developing Desktop Hosts & .NET Backend
 1. Double-click [`launch-app.bat`](launch-app.bat) to launch the desktop application in Debug mode.
@@ -127,10 +127,14 @@ Run [`run-tests.bat`](run-tests.bat) before submitting changes. This executes:
   - `FactRegistryTests`: Provenance tracking, confidence states, and strict weight semantics.
   - `AstEvaluatorTests`: Scoped rule predicate execution across Unit, Skid, Segment, and Component scopes.
   - `RulePackManagerTests`: Tamper detection, LF-normalization, missing artifact rejection, and atomic sync.
-  - `DvlProjectTests`: `.dvl` project file roundtrip persistence and atomic file replacement.
+  - `DvlProjectTests`: `.dvl` project file roundtrip persistence, hashing, and atomic file replacement.
   - `OpenXmlPatcherTests`: Dynamic category pruning, dynamic skid row synthesis, and formula adaptation.
-- **Node.js AST Converter Tests**:
-  - Predicate generation, roundtrip AST conversion, and required fact derivation.
+  - `ProjectSessionBridgeTests`: Session commands, monotonic revision checks, and bounds validation.
+  - `ProjectSessionCe3Tests`: Native DVL open/save, crash recovery, and OpenXML deliverable export.
+  - `RuleEditorBridgeTests`: Sandbox simulation, dynamic Excel coordinate mapping, and draft workflows.
+  - `CanonicalParityAcceptanceTests`: Canonical JSON specification and semantic fingerprinting in C#.
+- **Node.js Frontend Tests**:
+  - Component copy linting, WCAG contrast verification, AST converter, and desktop-only bridge guards (`test_ce5_desktop_only.mjs`).
 
 Shared test helpers include `TestGraphFactory`, `TestPipelineContext`, and `TestPathHelper`.
 

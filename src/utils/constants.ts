@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   DETAILER_NAME: 'dvl_detailer_name',
+  DETAILER_INITIALS: 'dvl_detailer_initials',
   SHARED_EXPORT_PATH: 'dvl_shared_export_path',
   CENTRAL_RULEPACK_PATH: 'dvl_central_rulepack_path',
   AUTO_SYNC_RULEPACK: 'dvl_auto_sync_rulepack',
@@ -13,6 +14,7 @@ export const FACT_KEYS = {
   ORDER_NUMBER: 'unit.orderNumber',
   TAG: 'unit.tag',
   DETAILER: 'unit.detailer',
+  DETAILER_INITIALS: 'unit.detailerInitials',
   DATE: 'unit.date',
   BASE_HEIGHT: 'unit.baseHeight',
   CURBREST: 'unit.curbrest',

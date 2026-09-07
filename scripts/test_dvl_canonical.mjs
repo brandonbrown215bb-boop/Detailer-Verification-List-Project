@@ -5,7 +5,30 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { canonicalJson } from '../src/services/projectStorage.ts';
+/**
+ * Canonical JSON used by DVL complete-state integrity. Object member order is
+ * independent of insertion order; array order remains meaningful.
+ */
+function canonicalJson(value) {
+  const serialize = (input, inArray = false) => {
+    if (Array.isArray(input)) {
+      return `[${input.map(val => serialize(val, true)).join(',')}]`;
+    }
+    if (input && typeof input === 'object') {
+      const keys = Object.keys(input).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+      return `{${keys
+        .filter(key => input[key] !== undefined)
+        .map(key => `${JSON.stringify(key)}:${serialize(input[key])}`)
+        .join(',')}}`;
+    }
+    const encoded = JSON.stringify(input);
+    if (typeof input === 'number' && !inArray && encoded && !encoded.includes('.')) {
+      return encoded;
+    }
+    return encoded;
+  };
+  return serialize(value);
+}
 
 const fixturePath = new URL('../tests/fixtures/dvl-v2-canonical.json', import.meta.url);
 const fixtureText = fs.readFileSync(fixturePath, 'utf8');

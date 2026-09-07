@@ -12,7 +12,7 @@ scope:
 
 ## Purpose
 
-The **AHU Detailing Verification** system is a Windows desktop application (.NET 8 + WebView2) designed for Air Handling Unit (AHU) detailers. Each job selects one source file: an `.upz` unit package is preferred, with standalone `Config.xml` as the fallback. The native host and `AHUVerification.Core` own certified parsing, fact extraction, evaluation, and final workbook authorization; the retained browser path is a noncertifying preview/test harness.
+The **AHU Detailing Verification** system is a Windows desktop application (.NET 8 + WebView2) designed for Air Handling Unit (AHU) detailers. Each job selects one source file: an `.upz` unit package is preferred, with standalone `Config.xml` as the fallback. C# `AHUVerification.Core` is the sole authoritative engine for all project processing—including unit parsing, fact extraction, AST rule evaluation, checklist state transitions, Special Quote management, project persistence/recovery, and Excel deliverable synthesis. The React/TypeScript application inside WebView2 is strictly a presentation and interaction layer. Outside the native desktop host, the frontend displays a dedicated `DesktopHostRequiredScreen` rather than offering a client-side fallback.
 
 ## Boundaries
 
@@ -77,9 +77,12 @@ flowchart TD
 
 ### 3. Desktop Host & Typed Asynchronous IPC Bridge
 - **Responsibility**: C#/.NET 8 hosting Edge WebView2 interface.
-- **Typed Asynchronous IPC Bridge**: Main-host actions are `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `verifySource`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, `selectFolderDialog`, and `launchRuleEditor`. The native host retains the trusted imported source and active Rule Pack context for certified verification and export. The Rule Editor has its own bridge: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, and `selectFolderDialog`.
+- **Typed Asynchronous IPC Bridge**:
+  - Main Host: `getAppInfo`, `getRulePack`, `openFileDialog`, `saveFileDialog`, `extractUpz`, `saveDvl`, `exportExcelDeliverable`, `openFile`, `showInExplorer`, `checkRulePackUpdate`, `syncRulePack`, `selectFolderDialog`, `projectSession_dispatchCommand`, `projectSession_save`, `projectSession_openDvl`, `projectSession_exportExcel`, `getRecoveryInfo`, `restoreRecovery`, `discardRecovery`, `getSegmentTemplates`.
+  - Rule Editor Host: `getAppInfo`, `getRulePack`, `publishRulePack`, `openFileDialog`, `selectFolderDialog`, `saveDraft`, `openDraft`, `evaluateRuleSandbox`.
+  - Staged/Monotonic Session State: `ProjectSession` tracks monotonic revisions. Command mutations require an expected revision, preventing race conditions or stale updates.
 - **Single Source of Truth**: `.dvl` JSON file storing source XML, extracted facts, manual overrides, SQ entries, checklist completion states, full source XML SHA-256, and pinned Rule Pack bundle identity.
-- **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file.
+- **Save Contract**: First Save chooses a path, later Save reuses it, Save As chooses a new path, and the host replaces files atomically through a sibling temporary file. Dirty mutations trigger background crash recovery snapshots.
 
 ### 4. Dynamic OpenXML Deliverable Synthesis
 - **Responsibility**: Generates the final `Detailing Verification List.xlsx` workbook using `DocumentFormat.OpenXml` (v3.1.1+).
@@ -97,14 +100,15 @@ flowchart TD
 - **Navigation**: Skid-centric tabs (`General Unit`, `Skid 1..N`) with real-time completion badges.
 - **Fact Resolution**: Inline quick-resolve popovers + global Resolution Center modal.
 - **Pre-Flight Export**: Verification audit with jump links and Draft vs Final deliverable modes.
-- **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and dynamic unbounded SQ manager (detailer-managed from MAPICS).
+- **Productivity**: Global search (`Ctrl+K`), full keyboard navigation, and a detailer-managed Special Quote (SQ) manager with up to 22 workbook-backed slots.
 
 ### 7. Rule & Logic Editor Desktop Studio (`RuleEditor.exe`)
 - **Responsibility**: Dedicated standalone application for engineering team leads to maintain, edit, and archive verification rules.
 - **Visual AST Condition Builder**: No-code visual condition trees with Fact selectors, comparison operators, and compound AND/OR groups.
 - **Fact Dictionary Catalog**: Built-in catalog of domain facts across Unit, Skid, Segment, Component, and Opening scopes.
-- **Live Test Sandbox**: Real-time simulation of rule logic against live fact tweaks or imported sample XML models.
-- **Publishing Engine**: Canonical LF-normalized SHA-256 hash generation and automatic `manifest.json` updating.
+- **Live Test Sandbox**: Real-time simulation of rule logic against live fact tweaks or imported sample XML models powered directly by C# `evaluateRuleSandbox` via `AstRuleEvaluator.cs`.
+- **Dynamic Excel Mapping & Validation**: Fact contract validator verifies rule schemas and dynamically computes Excel cell coordinates (`S{row}`, `T{row}`, etc.) with strict field error mapping.
+- **Draft Management & Publishing Engine**: Windows file dialogs for native draft save/open; canonical LF-normalized SHA-256 hash generation and automatic `manifest.json` updating on publish.
 
 ## Invariants and Sharp Edges
 
@@ -121,7 +125,7 @@ flowchart TD
 5. **Local-First & Offline Resilience**:
    - Application must function 100% offline with pinned local rule packs if remote network shares are unavailable.
 6. **Artifact Completeness**:
-   - A release is incomplete unless `dist/index.html`, every manifest-declared baseline Rule Pack artifact in `resources/rulepack/`, and native decompression binaries (`unpack32.exe` / `ywunpack.dll` in `resources/bin/`) are present beside the executable in the publish folder.
+   - The main application release is incomplete unless `dist/index.html`, every manifest-declared baseline Rule Pack artifact in `resources/rulepack/`, and native decompression binaries (`unpack32.exe` / `ywunpack.dll` in `resources/bin/`) are present beside its executable in the publish folder. The Rule Editor does not use the UPZ decompression binaries.
 
 ## Validation
 
@@ -131,5 +135,5 @@ flowchart TD
 - **Rule Pack Integrity**: Unit tests reject missing or tampered members and accept JSON line-ending conversion without weakening content hashes.
 - **UPZ Decompression**: Automated unit tests verify native extraction of XML artifacts and order metadata parsing.
 - **E2E & Accessibility Smoke Suite**: Automated Playwright smoke tests verify WCAG 2.2 AA accessibility compliance (zero serious/critical violations), focus trap management, keyboard shortcuts (`Ctrl+K`, `Escape`), and durable error handling across responsive viewports.
-- **Cross-Engine Parity & IPC Bridge Hardening**: Node.js and C# test suites verify strict semantic parity across dual XML parsers, typed message contract validation, and WebView2 IPC isolation.
+- **Desktop-Only IPC Bridge & Domain Hardening**: The C# xUnit suite covers domain parsing, extraction, evaluation, persistence, and bridge contracts. Frontend integration suites enforce zero-duplicate-engine dependencies, DesktopHostRequiredScreen guard behavior, and snapshot contract adherence.
 

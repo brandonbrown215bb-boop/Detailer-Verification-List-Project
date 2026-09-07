@@ -21,14 +21,21 @@ export interface VisualConditionLeaf {
   value: any;
 }
 
+export interface VisualConditionUnsupported {
+  type: 'unsupported';
+  id: string;
+  rawPredicate: ASTPredicate;
+  diagnostic: string;
+}
+
 export interface VisualConditionGroup {
   type: 'group';
   id: string;
   logicalOperator: 'and' | 'or';
-  children: Array<VisualConditionLeaf | VisualConditionGroup>;
+  children: VisualConditionNode[];
 }
 
-export type VisualConditionNode = VisualConditionLeaf | VisualConditionGroup;
+export type VisualConditionNode = VisualConditionLeaf | VisualConditionGroup | VisualConditionUnsupported;
 
 export interface FactFieldDefinition {
   key: string;

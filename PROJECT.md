@@ -1,17 +1,20 @@
-# Project: Detailer Verification List Project Remediation
+# Project: Detailer Verification List System
 
 ## Architecture
-The repository is an AHU (Air Handling Unit) Detailing Verification desktop and web application built with a dual architecture:
-- **Frontend**: TypeScript, React 18, Tailwind CSS, Vite. Located in `src/`. Provides interactive checklist verification, skid visualization, fact overrides, manual unit creation, and a rule editor.
-- **Backend Core**: .NET 8 C# Class Library in `src/backend/AHUVerification.Core/`. Provides authoritative XML parsing (`NormalizedXmlParser`), fact extraction (`FactExtractor`), AST predicate rule evaluation (`AstRuleEvaluator`), OpenXML Excel deliverable synthesis (`OpenXmlTemplatePatcher`), UPZ archive decompression (`UpzBundleExtractor`), and atomic project persistence (`DvlProjectManager`).
+The repository is an AHU (Air Handling Unit) Detailing Verification desktop application built with a C# authoritative engine architecture:
+- **Backend Core**: .NET 8 C# Class Library in `src/backend/AHUVerification.Core/`. The single authoritative engine for XML parsing (`NormalizedXmlParser`), fact/provenance extraction (`FactExtractor`), AST predicate rule evaluation (`AstRuleEvaluator`), session management (`ProjectSession`), OpenXML Excel deliverable synthesis (`OpenXmlTemplatePatcher`), UPZ archive decompression (`UpzBundleExtractor`), and atomic project persistence/recovery (`DvlProjectManager`).
 - **Backend Host Applications**: Windows Forms + Microsoft Edge WebView2 hosts in `src/backend/AHUVerification.App/` and `src/backend/AHUVerification.RuleEditor/`. Bridge messages via `BridgeHandler.cs` and `RuleEditorBridgeHandler.cs`.
+- **Frontend**: TypeScript, React 18, Tailwind CSS, Vite in `src/`. Pure presentation, input collection, and buffer layer inside WebView2. Renders `DesktopHostRequiredScreen` with environment diagnostics when run outside the desktop host.
 - **Rule Pack Subsystem**: JSON-based rule pack in `resources/rulepack/` managed and fingerprinted via SHA-256 by `scripts/build_rulepack.mjs` and verified at runtime by `RulePackManager.cs`.
 - **Testing Pyramid**:
-  - Backend xUnit tests in `tests/AHUVerification.Tests/`.
-  - Frontend Node unit and property/adversarial test scripts in `scripts/`.
+  - Backend xUnit tests in `tests/AHUVerification.Tests/` with a coverlet code coverage gate.
+  - Frontend Node unit and contract integration test suites in `scripts/` and `tests/`.
   - Playwright E2E and axe-core accessibility smoke test suite in `tests/e2e/`.
 
 ## Feature Inventory
+
+This is the historical modernization inventory, not the current roadmap. In particular, Features 5–9 record the former dual-engine approach and were superseded by [ADR 0012](docs/decisions/0012-csharp-authoritative-engine-and-browser-engine-retirement.md): browser processing and C#/TypeScript parity are no longer supported product behavior.
+
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
 | 1 | .gitignore Test Artifact Exclusions | Exclude `TestResults/`, `playwright-report/`, `test-results/`, `.playwright/` to prevent dirty git status after tests | M1 | Survey (Explorer 1) |
@@ -34,6 +37,9 @@ The repository is an AHU (Air Handling Unit) Detailing Verification desktop and 
 | 18 | Acceptance Gate 1 & 2 Validation | Full validation of Gate 1 (CI & workflow integrity) and Gate 2 (Architecture & contract verification) | M6 | ORIGINAL_REQUEST Acceptance Criteria |
 
 ## Milestones
+
+These milestone statuses are historical. Use the current remediation plan and its accepted evidence—not this table—to decide whether the present working tree is ready to release.
+
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | M1 | Phase 1: Unblock & Harden Codex Verification Loop | Features 1, 2, 3, 4 (.gitignore, build_rulepack.mjs, package.json, CI workflow) | none | DONE |
@@ -71,18 +77,28 @@ The repository is an AHU (Air Handling Unit) Detailing Verification desktop and 
   - `extractUpz`: Extracts UPZ archive to temp workspace.
   - `saveDvl`: Persists `.dvl` project bundle atomically.
   - `exportExcelDeliverable`: Generates OpenXML deliverable from `template.xlsx`.
+  - `projectSession_dispatchCommand`: Dispatches validated domain mutations to active C# session.
+  - `projectSession_save`: Saves `.dvl` project file with monotonic revision check.
+  - `projectSession_openDvl`: Opens existing `.dvl` and resumes active C# session.
+  - `projectSession_exportExcel`: Exports OpenXML deliverable from active C# session.
+  - `getRecoveryInfo`: Queries background crash recovery availability.
+  - `restoreRecovery`: Resumes in-flight session from crash recovery snapshot.
+  - `discardRecovery`: Discards pending crash recovery snapshot.
+  - `getSegmentTemplates`: Retrieves available segment presets for manual unit wizard.
   - `openFile`: Opens file with default system handler.
   - `showInExplorer`: Selects file in Windows File Explorer.
   - `checkRulePackUpdate`: Checks remote UNC/SharePoint staged rule pack.
   - `syncRulePack`: Atomic sync with LKG rollback.
   - `selectFolderDialog`: Opens folder browser dialog.
-  - `launchRuleEditor`: Spawns RuleEditor executable.
+  - `saveDraft` (RuleEditor only): Saves rule pack draft via native SaveFileDialog.
+  - `openDraft` (RuleEditor only): Opens rule pack draft via native OpenFileDialog.
+  - `evaluateRuleSandbox` (RuleEditor only): Evaluates rule AST logic against live sandbox facts in C#.
   - `publishRulePack` (RuleEditor only): Publishes edited rule pack with integrity verification.
 
 ### XML Parser & Fact Registry Semantic Contract
 - Missing numeric fields (`cabLength`, `cabHeight`, `cabWidth`, `unitWeight`, `totalStaticPressure`) strictly default to `0`.
 - `thermalBreak` boolean rule: `rawStyle.Contains("ThermalBreak") || !rawStyle.Equals("Standard")` (case-insensitive).
-- Override provenance: User overrides maintain timestamp, author, previous value, and audit trail across both engines.
+- Override provenance: User overrides maintain timestamp, author, previous value, and audit trail in C# Core.
 
 ## Code Layout
 - Frontend: `src/` (Components, Services, Utils, RuleEditor)

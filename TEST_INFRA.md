@@ -10,9 +10,9 @@ Run commands from the repository root. Use the Node version specified by `packag
 | Node readiness, reducer, AST, and contract tests | Unit/regression | Execute domain functions against fixed and adversarial inputs. |
 | Node copy, layout, and source-pattern checks | Structural lint | Inspect source text or color mathematics; do not prove rendered accessibility, IPC, or end-to-end behavior. |
 | `dotnet test AHUVerification.sln` | Unit and service integration | Real C# parsing, fact extraction, evaluation, DVL persistence, Rule Pack validation, and OpenXML workbook assertions. Windows is required for host-referencing tests. |
-| `CanonicalParityAcceptanceTests` | Cross-runtime integration | Launch Node and compare production TypeScript canonical payloads/fingerprints with production C#. Missing Node/dependencies fail the test. |
+| `CanonicalParityAcceptanceTests` | C# Canonical Specification | Validates canonical JSON formatting, semantic fingerprinting, full-state persistence hash integrity, and sparse source parsing in pure C#. |
 | `GoldenProductionPathTests` | Native service integration | UPZ extraction through host processing, persistence, and workbook generation. Calling services directly is not a WebView2 user journey. |
-| `npx playwright test` | Rendered browser integration | Keyboard, focus, axe, and browser-preview behavior. Release verification must serve built output. Browser preview cannot certify desktop exports. |
+| `npx playwright test` | Rendered browser integration | Keyboard, focus, axe, and modal navigation behavior against built presentation assets. Desktop host is required for live processing. |
 | Publish asset checks | Packaging validation | Required files and local asset references are present. File presence does not prove application startup or installation. |
 | `npm run test:coverage` | Measured Core regression gate | Runs the full C# suite with coverlet and enforces the named line/branch floors in [`docs/operations/coverage-baseline.json`](docs/operations/coverage-baseline.json). It does not waive failing tests or certify the native desktop lifecycle. |
 

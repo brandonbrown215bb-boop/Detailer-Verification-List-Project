@@ -2,7 +2,13 @@ import React from 'react';
 import { RuleDefinition, RuleScope } from '../../types';
 import { VisualConditionBuilder } from './VisualConditionBuilder';
 import { RuleTestSandbox } from './RuleTestSandbox';
-import { Archive, Copy, Sparkles, BookOpen, FileSpreadsheet, ShieldAlert, CheckSquare } from 'lucide-react';
+import { Archive, Copy, Sparkles, BookOpen, CheckSquare, Trash2, AlertTriangle } from 'lucide-react';
+
+export interface FormValidationError {
+  ruleId?: string;
+  field?: string;
+  message: string;
+}
 
 interface RuleFormViewProps {
   rule: RuleDefinition;
@@ -10,6 +16,8 @@ interface RuleFormViewProps {
   onUpdate: (updated: RuleDefinition, originalId?: string) => void;
   onClone: (rule: RuleDefinition) => void;
   onToggleArchive: (ruleId: string) => void;
+  onDeleteRule?: (ruleId: string) => void;
+  validationErrors?: FormValidationError[];
 }
 
 export const RuleFormView: React.FC<RuleFormViewProps> = ({
@@ -17,7 +25,9 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
   isNew = false,
   onUpdate,
   onClone,
-  onToggleArchive
+  onToggleArchive,
+  onDeleteRule,
+  validationErrors
 }) => {
   const categories = [
     'Base',
@@ -53,10 +63,43 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
 
   const isInternalCategory = rule.category === 'Internal' || rule.category === 'Internals';
 
+  const getFieldError = (fieldName: string): string | null => {
+    if (!validationErrors || validationErrors.length === 0) return null;
+    const match = validationErrors.find(
+      e => (!e.ruleId || e.ruleId === rule.id) && e.field === fieldName
+    );
+    return match ? match.message : null;
+  };
+
+  const idError = getFieldError('id');
+  const semanticKeyError = getFieldError('semanticKey');
+  const excelRowError = getFieldError('excelRow');
+  const categoryError = getFieldError('category');
+  const scopeError = getFieldError('scope');
+  const verificationModeError = getFieldError('verificationMode');
+  const textError = getFieldError('text');
+  const predicateError = getFieldError('predicate') || getFieldError('requiredFacts');
+
+  const generalRuleErrors = validationErrors?.filter(
+    e => (!e.ruleId || e.ruleId === rule.id) && (!e.field || !['id', 'semanticKey', 'excelRow', 'category', 'scope', 'verificationMode', 'text', 'predicate', 'requiredFacts'].includes(e.field))
+  );
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 h-full">
       {/* Main Form (Left 2 cols) */}
       <div className="xl:col-span-2 space-y-6 overflow-y-auto pr-2">
+        {/* General Rule Errors Banner */}
+        {generalRuleErrors && generalRuleErrors.length > 0 && (
+          <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl space-y-1">
+            {generalRuleErrors.map((err, i) => (
+              <p key={i} className="text-xs text-red-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{err.message}</span>
+              </p>
+            ))}
+          </div>
+        )}
+
         {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-xl">
           <div className="flex items-center gap-3">
@@ -69,7 +112,9 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                   type="text"
                   value={rule.id}
                   onChange={e => onUpdate({ ...rule, id: e.target.value.toUpperCase() }, rule.id)}
-                  className="text-base font-bold text-slate-100 bg-slate-950 border border-slate-700 rounded px-2.5 py-0.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+                  className={`text-base font-bold text-slate-100 bg-slate-950 border rounded px-2.5 py-0.5 font-mono focus:outline-none focus:ring-1 w-36 ${
+                    idError ? 'border-red-500 focus:ring-red-500 bg-red-950/30 ring-1 ring-red-500' : 'border-slate-700 focus:ring-blue-500'
+                  }`}
                   placeholder="RULE-ID"
                 />
                 {rule.isArchived && (
@@ -78,6 +123,11 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                   </span>
                 )}
               </div>
+              {idError && (
+                <p className="text-[11px] text-red-400 font-normal mt-0.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" /> {idError}
+                </p>
+              )}
               <p className="text-xs text-slate-400 mt-0.5">
                 Category: <strong className="text-slate-200">{rule.category}</strong>
                 {rule.subgroup && (
@@ -111,6 +161,21 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               <Archive className="w-3.5 h-3.5" />
               {rule.isArchived ? 'Restore Rule' : 'Archive Rule'}
             </button>
+            {onDeleteRule && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Are you sure you want to permanently delete rule "${rule.id}"? This will also remove its dynamic Excel cell mappings.`)) {
+                    onDeleteRule(rule.id);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-300 bg-red-950/80 hover:bg-red-900 border border-red-800 rounded-lg transition-colors"
+                title="Permanently delete rule"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete Rule
+              </button>
+            )}
           </div>
         </div>
 
@@ -127,9 +192,12 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 Category
               </label>
               <select
+                aria-label="Category"
                 value={rule.category}
                 onChange={e => onUpdate({ ...rule, category: e.target.value }, rule.id)}
-                className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={`w-full text-xs bg-slate-950 border rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 ${
+                  categoryError ? 'border-red-500 focus:ring-red-500 bg-red-950/30' : 'border-slate-700 focus:ring-blue-500'
+                }`}
               >
                 {categories.map(cat => (
                   <option key={cat} value={cat}>
@@ -137,6 +205,11 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                   </option>
                 ))}
               </select>
+              {categoryError && (
+                <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" /> {categoryError}
+                </p>
+              )}
             </div>
 
             {/* Subgroup (for Internals) */}
@@ -146,6 +219,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                   Internal Subgroup
                 </label>
                 <select
+                  aria-label="Internal Subgroup"
                   value={rule.subgroup || ''}
                   onChange={e => onUpdate({ ...rule, subgroup: e.target.value || undefined }, rule.id)}
                   className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -166,13 +240,21 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 Scope
               </label>
               <select
+                aria-label="Scope"
                 value={rule.scope}
                 onChange={e => onUpdate({ ...rule, scope: e.target.value as RuleScope }, rule.id)}
-                className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={`w-full text-xs bg-slate-950 border rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 ${
+                  scopeError ? 'border-red-500 focus:ring-red-500 bg-red-950/30' : 'border-slate-700 focus:ring-blue-500'
+                }`}
               >
                 <option value="Unit">Unit (Global)</option>
                 <option value="Skid">Skid (Per Shipping Section)</option>
               </select>
+              {scopeError && (
+                <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" /> {scopeError}
+                </p>
+              )}
             </div>
 
             {/* Verification Mode */}
@@ -181,12 +263,20 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 Verification Mode
               </label>
               <select
+                aria-label="Verification Mode"
                 value={rule.verificationMode}
                 onChange={e => onUpdate({ ...rule, verificationMode: e.target.value as any }, rule.id)}
-                className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={`w-full text-xs bg-slate-950 border rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 ${
+                  verificationModeError ? 'border-red-500 focus:ring-red-500 bg-red-950/30' : 'border-slate-700 focus:ring-blue-500'
+                }`}
               >
                 <option value="ManualCheckbox">Manual Checkbox</option>
               </select>
+              {verificationModeError && (
+                <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" /> {verificationModeError}
+                </p>
+              )}
             </div>
 
             {/* Allow NA */}
@@ -195,6 +285,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 Allow N/A Toggle
               </label>
               <select
+                aria-label="Allow N/A Toggle"
                 value={rule.allowNA ? 'true' : 'false'}
                 onChange={e => onUpdate({ ...rule, allowNA: e.target.value === 'true' }, rule.id)}
                 className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -203,13 +294,39 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
                 <option value="false">Required (Must be checked Pass/Fail)</option>
               </select>
             </div>
+
+            {/* Excel Row */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                Excel Row <span className="text-[10px] text-slate-400">(Dynamic Mapping)</span>
+              </label>
+              <input
+                aria-label="Excel Row"
+                type="number"
+                min={1}
+                value={rule.excelRow ?? ''}
+                onChange={e => {
+                  const val = parseInt(e.target.value, 10);
+                  onUpdate({ ...rule, excelRow: isNaN(val) ? undefined : val }, rule.id);
+                }}
+                className={`w-full text-xs bg-slate-950 border rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 ${
+                  excelRowError ? 'border-red-500 focus:ring-red-500 bg-red-950/30 ring-1 ring-red-500' : 'border-slate-700 focus:ring-blue-500'
+                }`}
+                placeholder="e.g. 29"
+              />
+              {excelRowError && (
+                <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" /> {excelRowError}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Semantic Key */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-medium text-slate-400">
-                Semantic Key <span className="text-[10px] text-slate-500">(Decoupled identifier for Excel map)</span>
+                Semantic Key <span className="text-[10px] text-slate-400">(Decoupled identifier for Excel map)</span>
               </label>
               <button
                 type="button"
@@ -220,12 +337,20 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               </button>
             </div>
             <input
+              aria-label="Semantic Key"
               type="text"
               value={rule.semanticKey}
               onChange={e => onUpdate({ ...rule, semanticKey: e.target.value.toUpperCase().replace(/\s+/g, '_') }, rule.id)}
-              className="w-full text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={`w-full text-xs font-mono bg-slate-950 border rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 ${
+                semanticKeyError ? 'border-red-500 focus:ring-red-500 bg-red-950/30 ring-1 ring-red-500' : 'border-slate-700 focus:ring-blue-500'
+              }`}
               placeholder="CATEGORY_FEATURE_NAME"
             />
+            {semanticKeyError && (
+              <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 shrink-0" /> {semanticKeyError}
+              </p>
+            )}
           </div>
 
           {/* Rule Text */}
@@ -234,12 +359,20 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               Checklist Instruction Text
             </label>
             <textarea
+              aria-label="Checklist Instruction Text"
               rows={3}
               value={rule.text}
               onChange={e => onUpdate({ ...rule, text: e.target.value }, rule.id)}
-              className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed"
+              className={`w-full text-xs bg-slate-950 border rounded-lg p-3 text-slate-200 focus:outline-none focus:ring-1 leading-relaxed ${
+                textError ? 'border-red-500 focus:ring-red-500 bg-red-950/30 ring-1 ring-red-500' : 'border-slate-700 focus:ring-blue-500'
+              }`}
               placeholder="Enter clear, actionable verification instructions for the detailer..."
             />
+            {textError && (
+              <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 shrink-0" /> {textError}
+              </p>
+            )}
           </div>
 
           {/* Reference Spec Document */}
@@ -249,6 +382,7 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
               Standard Reference / Specification Document
             </label>
             <input
+              aria-label="Standard Reference / Specification Document"
               type="text"
               value={rule.reference || ''}
               onChange={e => onUpdate({ ...rule, reference: e.target.value }, rule.id)}
@@ -259,7 +393,13 @@ export const RuleFormView: React.FC<RuleFormViewProps> = ({
         </div>
 
         {/* Visual Condition Builder (AST) */}
-        <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl">
+        <div className={`p-4 bg-slate-900 border rounded-xl ${predicateError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-800'}`}>
+          {predicateError && (
+            <div className="mb-3 p-2.5 bg-red-950/60 border border-red-800 rounded-lg text-xs text-red-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+              <span>{predicateError}</span>
+            </div>
+          )}
           <VisualConditionBuilder
             predicate={rule.predicate}
             scope={rule.scope}

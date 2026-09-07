@@ -41,7 +41,7 @@ Previously, fact extraction and graph normalization captured top-level unit opti
    - Deflection testing (`testingOptions/deflectionTest`) is ingested strictly as an AST rule predicate for structural framing rules (e.g. `BASE_STRUCTURAL_STEEL_DEFLECTION`), not as user-facing general specification display.
 
 7. **Special Quotes (SQ) Policy**:
-   - UPZ embedded SQ nodes (e.g. `baseSQOrderNumber`) are ignored because they lack actionable detailer text. Special quotes are manually entered by detailers from the MAPICS order packet into a dynamic unbounded table.
+   - UPZ embedded SQ nodes (e.g. `baseSQOrderNumber`) are ignored because they lack actionable detailer text. Detailers manually enter Special Quotes from the MAPICS order packet into the workbook-backed table, which supports slots 1 through 22.
 
 ## Consequences
 

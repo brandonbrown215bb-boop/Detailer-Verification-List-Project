@@ -7,6 +7,7 @@ using AHUVerification.App.Bridge;
 using AHUVerification.Core.Bridge;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Services;
+using AHUVerification.Core.Session;
 using AHUVerification.Core.Utils;
 using AHUVerification.RuleEditor.Bridge;
 using Xunit;
@@ -151,241 +152,306 @@ namespace AHUVerification.Tests
             Assert.Contains("rules", json);
         }
 
-        [Fact]
-        public void Handle_SaveDvl_ValidPayload_WritesFileSuccessfully()
-        {
-            var handler = CreateAppHandler();
-            string tempDvl = Path.Combine(Path.GetTempPath(), $"test_project_{Guid.NewGuid():N}.dvl");
-            string tempDvlBad = Path.Combine(Path.GetTempPath(), $"test_project_bad_{Guid.NewGuid():N}.dvl");
-
-            try
-            {
-                var bundle = new RulePackManager().LoadFromDirectory(_rulePackPath);
-                var projectManager = new DvlProjectManager();
-                var project = projectManager.CreateProject(
-                    new NormalizedXmlGraph(),
-                    new Dictionary<string, Fact>
-                    {
-                        ["unit.jobName"] = new Fact { Key = "unit.jobName", Value = "TestHospital" },
-                        ["unit.comNumber"] = new Fact { Key = "unit.comNumber", Value = "COM-999" }
-                    },
-                    new List<SpecialQuote>(),
-                    new List<ChecklistInstance>(),
-                    "<Config />",
-                    bundle,
-                    generalComments: "Bridge Save Test");
-
-                string projectJson = JsonSerializer.Serialize(project, JsonDefaults.CreateFlexibleOptions());
-                string requestJson = JsonSerializer.Serialize(new
-                {
-                    id = "req-save-dvl",
-                    action = "saveDvl",
-                    payload = new
-                    {
-                        filePath = tempDvl,
-                        projectJson = projectJson
-                    }
-                });
-
-                var response = handler.Handle(requestJson);
-
-                Assert.Equal("req-save-dvl", response.Id);
-                Assert.True(response.Success, response.Error);
-                Assert.True(File.Exists(tempDvl));
-
-                string savedContent = File.ReadAllText(tempDvl);
-                Assert.Contains("TestHospital", savedContent);
-                Assert.Contains("COM-999", savedContent);
-
-                // Malformed payload fails without a partial write
-                string malformedRequest = JsonSerializer.Serialize(new
-                {
-                    id = "req-save-dvl-bad",
-                    action = "saveDvl",
-                    payload = new
-                    {
-                        filePath = tempDvlBad,
-                        projectJson = "{\"invalid\": \"payload\"}"
-                    }
-                });
-                var badResponse = handler.Handle(malformedRequest);
-                Assert.Equal("req-save-dvl-bad", badResponse.Id);
-                Assert.False(badResponse.Success);
-                Assert.False(File.Exists(tempDvlBad));
-            }
-            finally
-            {
-                if (File.Exists(tempDvl)) File.Delete(tempDvl);
-                if (File.Exists(tempDvlBad)) File.Delete(tempDvlBad);
-            }
-        }
-        [Fact]
-        public void Handle_VerifySource_ValidXml_ReturnsVerifiedModel()
+        [Theory]
+        [InlineData("saveDvl")]
+        [InlineData("verifySource")]
+        [InlineData("exportExcelDeliverable")]
+        public void Handle_RetiredLegacyActions_AreRejectedWithUnknownAction(string action)
         {
             var handler = CreateAppHandler();
             string requestJson = JsonSerializer.Serialize(new
             {
-                id = "req-verify-source",
-                action = "verifySource",
-                payload = new
-                {
-                    configXml = "<?xml version=\"1.0\"?><root></root>"
-                }
-            });
-            var response = handler.Handle(requestJson);
-            Assert.Equal("req-verify-source", response.Id);
-            Assert.True(response.Success, response.Error);
-            Assert.NotNull(response.Data);
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_WithOutputPath_ExportsWorkbook()
-        {
-            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_export_{Guid.NewGuid():N}.xlsx");
-            var handler = CreateAppHandler(() => tempXlsx);
-
-            try
-            {
-                var facts = new Dictionary<string, Fact>
-                {
-                    ["jobName"] = new Fact { Key = "jobName", Value = "Bridge Test Facility", Category = "General", Status = FactStatus.Known },
-                    ["orderNumber"] = new Fact { Key = "orderNumber", Value = "ORD-777123", Category = "General", Status = FactStatus.Known }
-                };
-
-                // Demonstrating that renderer-supplied outputPath is untrusted and ignored;
-                // destination is governed strictly by the native host selector boundary.
-                string requestJson = JsonSerializer.Serialize(new
-                {
-                    id = "req-export-excel",
-                    action = "exportExcelDeliverable",
-                    payload = new
-                    {
-                        facts = facts,
-                        sqItems = new List<SpecialQuote>(),
-                        checklists = new List<ChecklistInstance>(),
-                        outputPath = "untrusted_renderer_path_ignored.xlsx",
-                        isDraft = true,
-                        generalComments = "Bridge automated test export"
-                    }
-                });
-
-                var response = handler.Handle(requestJson);
-
-                Assert.Equal("req-export-excel", response.Id);
-                Assert.True(response.Success);
-                Assert.NotNull(response.Data);
-
-                string json = JsonSerializer.Serialize(response.Data);
-                Assert.Contains("\"exported\":true", json);
-                Assert.Contains("\"certificationAllowed\":false", json);
-                Assert.True(File.Exists(tempXlsx));
-                Assert.True(new FileInfo(tempXlsx).Length > 0);
-            }
-            finally
-            {
-                if (File.Exists(tempXlsx)) File.Delete(tempXlsx);
-            }
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_WithoutNativeSelector_CancelsAndDoesNotWriteRendererPath()
-        {
-            var handler = CreateAppHandler(); // No selector, no parent form
-            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_untrusted_{Guid.NewGuid():N}.xlsx");
-
-            try
-            {
-                var facts = new Dictionary<string, Fact>
-                {
-                    ["jobName"] = new Fact { Key = "jobName", Value = "Bridge Test Facility", Category = "General", Status = FactStatus.Known }
-                };
-
-                string requestJson = JsonSerializer.Serialize(new
-                {
-                    id = "req-export-cancel",
-                    action = "exportExcelDeliverable",
-                    payload = new
-                    {
-                        facts = facts,
-                        sqItems = new List<SpecialQuote>(),
-                        checklists = new List<ChecklistInstance>(),
-                        outputPath = tempXlsx,
-                        isDraft = true
-                    }
-                });
-
-                var response = handler.Handle(requestJson);
-
-                Assert.Equal("req-export-cancel", response.Id);
-                Assert.True(response.Success);
-                Assert.NotNull(response.Data);
-
-                string json = JsonSerializer.Serialize(response.Data);
-                Assert.Contains("\"cancelled\":true", json);
-                Assert.False(File.Exists(tempXlsx));
-            }
-            finally
-            {
-                if (File.Exists(tempXlsx)) File.Delete(tempXlsx);
-            }
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_InvalidPathFromSelector_ReturnsFailure()
-        {
-            var handler = CreateAppHandler(() => "not_rooted_path.xlsx");
-            string requestJson = JsonSerializer.Serialize(new
-            {
-                id = "req-export-invalid",
-                action = "exportExcelDeliverable",
-                payload = new
-                {
-                    facts = new Dictionary<string, Fact>(),
-                    sqItems = new List<SpecialQuote>(),
-                    checklists = new List<ChecklistInstance>(),
-                    isDraft = true
-                }
+                id = $"req-retired-{action}",
+                action = action,
+                payload = new { }
             });
 
             var response = handler.Handle(requestJson);
-
-            Assert.Equal("req-export-invalid", response.Id);
+            Assert.Equal($"req-retired-{action}", response.Id);
             Assert.False(response.Success);
-            Assert.Contains("Target path must be an absolute path ending in .xlsx", response.Error);
+            Assert.Contains("Unknown bridge action", response.Error);
         }
 
         [Fact]
-        public void Handle_ExportExcelDeliverable_FinalExportWithoutTrustedSource_FailsClosed()
+        public void Handle_ProjectSession_RawXml_WithoutDiskPath_IsUntrusted_AndFinalExportFailsClosed()
         {
-            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_final_{Guid.NewGuid():N}.xlsx");
+            string tempXlsx = Path.Combine(Path.GetTempPath(), $"test_ps_final_{Guid.NewGuid():N}.xlsx");
             var handler = CreateAppHandler(() => tempXlsx);
 
             try
             {
-                string requestJson = JsonSerializer.Serialize(new
+                string rawXml = @"<?xml version=""1.0""?><unitRevision><unitWeight>5000</unitWeight></unitRevision>";
+
+                // 1. Open session with raw XML and no valid disk path; client attempts to inject isTrusted = true
+                string openReq = JsonSerializer.Serialize(new
                 {
-                    id = "req-export-final-nobound",
-                    action = "exportExcelDeliverable",
+                    id = "req-ps-open-raw",
+                    action = "projectSession_open",
                     payload = new
                     {
-                        facts = new Dictionary<string, Fact>(),
-                        sqItems = new List<SpecialQuote>(),
-                        checklists = new List<ChecklistInstance>(),
+                        configXml = rawXml,
+                        isTrusted = true // client-injected trust must be ignored and set to false
+                    }
+                });
+
+                var openRes = handler.Handle(openReq);
+                Assert.True(openRes.Success, openRes.Error);
+
+                var options = JsonDefaults.CreateFlexibleOptions();
+                var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(
+                    JsonSerializer.Serialize(openRes.Data), options);
+                Assert.NotNull(snapshot);
+                Assert.False(snapshot.Source.IsTrusted);
+                Assert.False(snapshot.Readiness.IsReadyForFinal);
+                Assert.Contains("Project source is not an authentic native UPZ/Config.xml", snapshot.Readiness.Blockers);
+
+                // 2. Attempt final export on untrusted session -> must fail closed
+                string finalExportReq = JsonSerializer.Serialize(new
+                {
+                    id = "req-ps-export-final",
+                    action = "projectSession_exportExcel",
+                    payload = new
+                    {
+                        sessionId = snapshot.SessionId,
+                        expectedRevision = snapshot.Revision,
                         isDraft = false
                     }
                 });
 
-                var response = handler.Handle(requestJson);
-
-                Assert.Equal("req-export-final-nobound", response.Id);
-                Assert.False(response.Success);
-                Assert.Contains("Final export requires the trusted raw Config.xml source", response.Error);
+                var finalExportRes = handler.Handle(finalExportReq);
+                Assert.False(finalExportRes.Success);
+                Assert.Contains("Final export requires a verified authentic source", finalExportRes.Error);
                 Assert.False(File.Exists(tempXlsx));
+
+                // 3. Draft export on untrusted session -> succeeds
+                string draftExportReq = JsonSerializer.Serialize(new
+                {
+                    id = "req-ps-export-draft",
+                    action = "projectSession_exportExcel",
+                    payload = new
+                    {
+                        sessionId = snapshot.SessionId,
+                        expectedRevision = snapshot.Revision,
+                        isDraft = true
+                    }
+                });
+
+                var draftExportRes = handler.Handle(draftExportReq);
+                Assert.True(draftExportRes.Success, draftExportRes.Error);
+                Assert.True(File.Exists(tempXlsx));
             }
             finally
             {
                 if (File.Exists(tempXlsx)) File.Delete(tempXlsx);
             }
+        }
+
+        [Fact]
+        public void Handle_ProjectSession_ExportExcel_Cancellation_ReturnsCancelledWithoutWritingFile()
+        {
+            var handler = CreateAppHandler(() => null); // Selector returns null (cancelled)
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+
+            string openReq = JsonSerializer.Serialize(new
+            {
+                id = "req-ps-open-cancel",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    configXml,
+                    isUpz = false
+                }
+            });
+            var openRes = handler.Handle(openReq);
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(
+                JsonSerializer.Serialize(openRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+
+            string exportReq = JsonSerializer.Serialize(new
+            {
+                id = "req-ps-export-cancelled",
+                action = "projectSession_exportExcel",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = snapshot.Revision,
+                    isDraft = true
+                }
+            });
+
+            var exportRes = handler.Handle(exportReq);
+            Assert.True(exportRes.Success, exportRes.Error);
+            string json = JsonSerializer.Serialize(exportRes.Data);
+            Assert.Contains("\"cancelled\":true", json);
+        }
+
+        [Fact]
+        public void Handle_ProjectSession_UpdateChecklist_ValidatesAllowedTransitions()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+
+            string openReq = JsonSerializer.Serialize(new
+            {
+                id = "req-ps-open-cl",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    configXml,
+                    isUpz = false
+                }
+            });
+            var openRes = handler.Handle(openReq);
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(
+                JsonSerializer.Serialize(openRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+
+            var check = snapshot.Checklists.First();
+
+            // 1. Invalid status value (out of enum range)
+            string invalidStatusReq = JsonSerializer.Serialize(new
+            {
+                id = "req-ps-cl-invalid-status",
+                action = "projectSession_updateChecklist",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = snapshot.Revision,
+                    checkId = check.InstanceKey,
+                    status = 999
+                }
+            });
+            var invalidRes = handler.Handle(invalidStatusReq);
+            Assert.True(invalidRes.Success);
+            var invalidCmdResult = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(invalidRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+            Assert.False(invalidCmdResult.Success);
+            Assert.Contains("Invalid checklist status", invalidCmdResult.ErrorMessage);
+
+            // 2. Find a rule where AllowNA is false
+            var bundle = new RulePackManager().LoadFromDirectory(_rulePackPath);
+            var nonNaRule = bundle.Rules.FirstOrDefault(r => r.AllowNA == false);
+            if (nonNaRule != null)
+            {
+                var nonNaCheck = snapshot.Checklists.FirstOrDefault(c => c.RuleId == nonNaRule.Id);
+                if (nonNaCheck != null)
+                {
+                    string naReq = JsonSerializer.Serialize(new
+                    {
+                        id = "req-ps-cl-na-not-allowed",
+                        action = "projectSession_updateChecklist",
+                        payload = new
+                        {
+                            sessionId = snapshot.SessionId,
+                            expectedRevision = snapshot.Revision,
+                            checkId = nonNaCheck.InstanceKey,
+                            status = (int)CheckStatus.NA
+                        }
+                    });
+                    var naRes = handler.Handle(naReq);
+                    Assert.True(naRes.Success);
+                    var naCmdResult = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(naRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+                    Assert.False(naCmdResult.Success);
+                    Assert.Contains("does not allow N/A status", naCmdResult.ErrorMessage);
+                }
+            }
+        }
+
+        [Fact]
+        public void Handle_ProjectSession_ReorderSpecialQuotes_ValidatesBoundsAndDuplicates()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+
+            string openReq = JsonSerializer.Serialize(new
+            {
+                id = "req-ps-open-sq",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = configXmlPath,
+                    configXml,
+                    isUpz = false
+                }
+            });
+            var openRes = handler.Handle(openReq);
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(
+                JsonSerializer.Serialize(openRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+
+            // Add 2 special quotes
+            var sq1Res = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-ps-add-sq1",
+                action = "projectSession_updateSpecialQuote",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = snapshot.Revision,
+                    specialQuote = new SpecialQuote { Id = "sq-1", Slot = 1, Text = "SQ 1" }
+                }
+            }));
+            Assert.True(sq1Res.Success);
+            var snap1 = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(sq1Res.Data), JsonDefaults.CreateFlexibleOptions())!.Snapshot!;
+
+            var sq2Res = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-ps-add-sq2",
+                action = "projectSession_updateSpecialQuote",
+                payload = new
+                {
+                    sessionId = snap1.SessionId,
+                    expectedRevision = snap1.Revision,
+                    specialQuote = new SpecialQuote { Id = "sq-2", Slot = 2, Text = "SQ 2" }
+                }
+            }));
+            Assert.True(sq2Res.Success);
+            var snap2 = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(sq2Res.Data), JsonDefaults.CreateFlexibleOptions())!.Snapshot!;
+
+            // 1. Slot out of bounds (slot 0 or 23)
+            var outOfBoundsRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-ps-reorder-oob",
+                action = "projectSession_reorderSpecialQuotes",
+                payload = new
+                {
+                    sessionId = snap2.SessionId,
+                    expectedRevision = snap2.Revision,
+                    assignments = new[]
+                    {
+                        new { quoteId = "sq-1", slot = 0 }
+                    }
+                }
+            }));
+            Assert.True(outOfBoundsRes.Success);
+            var outOfBoundsCmd = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(outOfBoundsRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+            Assert.False(outOfBoundsCmd.Success);
+            Assert.Contains("Invalid slot", outOfBoundsCmd.ErrorMessage);
+
+            // 2. Duplicate slots
+            var duplicateRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-ps-reorder-dup",
+                action = "projectSession_reorderSpecialQuotes",
+                payload = new
+                {
+                    sessionId = snap2.SessionId,
+                    expectedRevision = snap2.Revision,
+                    assignments = new[]
+                    {
+                        new { quoteId = "sq-1", slot = 5 },
+                        new { quoteId = "sq-2", slot = 5 }
+                    }
+                }
+            }));
+            Assert.True(duplicateRes.Success);
+            var dupCmd = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(duplicateRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+            Assert.False(dupCmd.Success);
+            Assert.Contains("duplicate slot numbers", dupCmd.ErrorMessage);
         }
 
         [Fact]
@@ -440,7 +506,6 @@ namespace AHUVerification.Tests
 
         [Theory]
         [InlineData("extractUpz", "filePath")]
-        [InlineData("saveDvl", "filePath")]
         [InlineData("openFile", "filePath")]
         [InlineData("showInExplorer", "filePath")]
         [InlineData("checkRulePackUpdate", "remotePath")]
@@ -461,93 +526,6 @@ namespace AHUVerification.Tests
             Assert.False(response.Success);
             Assert.NotNull(response.Error);
             Assert.Contains(missingProp, response.Error);
-        }
-
-        [Fact]
-        public void Handle_SaveDvl_MissingProjectJson_ReturnsDescriptiveError()
-        {
-            var handler = CreateAppHandler();
-            string requestJson = JsonSerializer.Serialize(new
-            {
-                id = "req-save-missing-json",
-                action = "saveDvl",
-                payload = new
-                {
-                    filePath = "C:\\test\\file.dvl"
-                }
-            });
-
-            var response = handler.Handle(requestJson);
-
-            Assert.Equal("req-save-missing-json", response.Id);
-            Assert.False(response.Success);
-            Assert.Contains("projectJson", response.Error);
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_MissingFacts_ReturnsDescriptiveError()
-        {
-            var handler = CreateAppHandler();
-            string requestJson = JsonSerializer.Serialize(new
-            {
-                id = "req-export-missing-facts",
-                action = "exportExcelDeliverable",
-                payload = new
-                {
-                    sqItems = new List<SpecialQuote>(),
-                    checklists = new List<ChecklistInstance>()
-                }
-            });
-
-            var response = handler.Handle(requestJson);
-
-            Assert.Equal("req-export-missing-facts", response.Id);
-            Assert.False(response.Success);
-            Assert.Contains("facts", response.Error);
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_MissingSqItems_ReturnsDescriptiveError()
-        {
-            var handler = CreateAppHandler();
-            string requestJson = JsonSerializer.Serialize(new
-            {
-                id = "req-export-missing-sq",
-                action = "exportExcelDeliverable",
-                payload = new
-                {
-                    facts = new Dictionary<string, Fact>(),
-                    checklists = new List<ChecklistInstance>()
-                }
-            });
-
-            var response = handler.Handle(requestJson);
-
-            Assert.Equal("req-export-missing-sq", response.Id);
-            Assert.False(response.Success);
-            Assert.Contains("sqItems", response.Error);
-        }
-
-        [Fact]
-        public void Handle_ExportExcelDeliverable_MissingChecklists_ReturnsDescriptiveError()
-        {
-            var handler = CreateAppHandler();
-            string requestJson = JsonSerializer.Serialize(new
-            {
-                id = "req-export-missing-cl",
-                action = "exportExcelDeliverable",
-                payload = new
-                {
-                    facts = new Dictionary<string, Fact>(),
-                    sqItems = new List<SpecialQuote>()
-                }
-            });
-
-            var response = handler.Handle(requestJson);
-
-            Assert.Equal("req-export-missing-cl", response.Id);
-            Assert.False(response.Success);
-            Assert.Contains("checklists", response.Error);
         }
 
         [Fact]
@@ -1046,21 +1024,27 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
-        public void Handle_LaunchRuleEditor_CapturesProcessLaunchWithRulePackContext()
+        public void Handle_LaunchRuleEditor_IsGuttedAndReturnsUnsupportedAction()
         {
-            ProcessStartInfo? capturedPsi = null;
-            var handler = CreateAppHandler(processLauncher: psi => capturedPsi = psi);
+            var handler = CreateAppHandler();
 
             var response = handler.Handle("{\"id\":\"req-launch-re\",\"action\":\"launchRuleEditor\"}");
 
             Assert.Equal("req-launch-re", response.Id);
+            Assert.False(response.Success);
+            Assert.Contains("Unknown bridge action: 'launchRuleEditor'", response.Error);
+        }
+
+        [Fact]
+        public void Handle_ReloadActiveRulePack_ReloadsAndReturnsPackAndSnapshot()
+        {
+            var handler = CreateAppHandler();
+
+            var response = handler.Handle("{\"id\":\"req-reload-rp\",\"action\":\"reloadActiveRulePack\"}");
+
+            Assert.Equal("req-reload-rp", response.Id);
             Assert.True(response.Success, response.Error);
-            Assert.NotNull(capturedPsi);
-            Assert.True(capturedPsi.UseShellExecute);
-            if (!string.IsNullOrEmpty(capturedPsi.Arguments))
-            {
-                Assert.Contains("--rule-pack", capturedPsi.Arguments);
-            }
+            Assert.NotNull(response.Data);
         }
 
         [Fact]

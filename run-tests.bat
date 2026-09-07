@@ -14,7 +14,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM 1. Run C# xUnit Test Suite and the measured Core coverage gate
-echo [1/12] Running C# xUnit Verification Tests and Core coverage gate...
+echo [1/13] Running C# xUnit Verification Tests and Core coverage gate...
 call npm run test:coverage
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -23,9 +23,9 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 2. Run Node.js AST Converter Tests
+REM 2. Run Node.js fact-contract parity Tests
 echo.
-echo [2/12] Running Node.js fact-contract parity Tests...
+echo [2/13] Running Node.js fact-contract parity Tests...
 node scripts/test_fact_contract.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -36,7 +36,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM 3. Run canonical DVL contract tests
 echo.
-echo [3/12] Running Node.js canonical DVL contract Tests...
+echo [3/13] Running Node.js canonical DVL contract Tests...
 node scripts/test_dvl_canonical.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -47,7 +47,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM 4. Run Node.js AST Converter Tests
 echo.
-echo [4/12] Running Node.js AST Converter Tests...
+echo [4/13] Running Node.js AST Converter Tests...
 node scripts/test_ast_converter.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -56,20 +56,9 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 3. Run State Reducers & Domain Logic Unit Tests
+REM 5. Run Live Readiness Predicate Validation Tests
 echo.
-echo [5/12] Running State Reducers ^& Domain Logic Unit Tests...
-node scripts/test_reducers.mjs
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] State reducers and domain logic unit tests failed.
-    pause
-    exit /b %ERRORLEVEL%
-)
-
-REM 4. Run Live Readiness Predicate Validation Tests
-echo.
-echo [6/12] Running Live Readiness Predicate Tests...
+echo [5/13] Running Live Readiness Predicate Tests...
 node scripts/test_readiness.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -78,20 +67,9 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 5. Run Adversarial Stress Tests
-echo.
-echo [7/12] Running Adversarial Stress Tests...
-node scripts/stress_test_readiness_adversarial.mjs
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] Adversarial stress tests failed.
-    pause
-    exit /b %ERRORLEVEL%
-)
-
 REM 6. Run Modal & Keyboard Accessibility Tests
 echo.
-echo [8/12] Running Modal ^& Keyboard Accessibility Tests...
+echo [6/13] Running Modal ^& Keyboard Accessibility Tests...
 node scripts/test_modal_accessibility.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -102,7 +80,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM 7. Run File Ingestion & Action Feedback Tests
 echo.
-echo [9/12] Running File Ingestion ^& Action Feedback Tests...
+echo [7/13] Running File Ingestion ^& Action Feedback Tests...
 node scripts/test_ingestion_feedback.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -113,7 +91,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM 8. Run Copywriting & Terminology Linter
 echo.
-echo [10/12] Running Copywriting ^& Terminology Linter...
+echo [8/13] Running Copywriting ^& Terminology Linter...
 node scripts/test_copy_linter.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -124,7 +102,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM 9. Run Responsive Layout & Contrast Tests
 echo.
-echo [11/12] Running Responsive Layout ^& Contrast Tests...
+echo [9/13] Running Responsive Layout ^& Contrast Tests...
 node scripts/test_responsive_contrast.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -133,13 +111,46 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM 10. Run Cross-Engine Parity & Bridge Tests
+REM 10. Run CE2-A ProjectSession Bridge Tests
 echo.
-echo [12/12] Running Cross-Engine Parity ^& Bridge Tests...
-node scripts/test_m2_parity_and_bridge.mjs
+echo [10/13] Running CE2-A ProjectSession Bridge Tests...
+node scripts/test_ce2a_session_bridge.mjs
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [ERROR] Cross-engine parity and bridge tests failed.
+    echo [ERROR] CE2-A session bridge tests failed.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+REM 11. Run CE2-B Manual & Pack Tests
+echo.
+echo [11/13] Running CE2-B Manual ^& Pack Tests...
+node scripts/test_ce2b_manual_and_pack.mjs
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] CE2-B manual and pack tests failed.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+REM 12. Run CE3 Persistence & Export Tests
+echo.
+echo [12/13] Running CE3 Persistence ^& Export Tests...
+node scripts/test_ce3_persistence_and_export.mjs
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] CE3 persistence and export tests failed.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+REM 13. Run CE5 Desktop-Only Verification Tests
+echo.
+echo [13/13] Running CE5 Desktop-Only Verification Tests...
+node scripts/test_ce5_desktop_only.mjs
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] CE5 desktop-only verification tests failed.
     pause
     exit /b %ERRORLEVEL%
 )
@@ -150,4 +161,3 @@ echo  [SUCCESS] All unit tests and verification checks passed!
 echo  The clean-checkout gate runs separately in CI after test outputs settle.
 echo ======================================================================
 pause
-

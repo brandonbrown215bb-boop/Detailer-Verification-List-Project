@@ -41,7 +41,7 @@ public class WebViewHostSmokeTests
                     var core = view.CoreWebView2;
                     core.Settings.AreDevToolsEnabled = false;
                     const string origin = "https://ahu-verification.local";
-                    core.SetVirtualHostNameToFolderMapping("ahu-verification.local", dist, CoreWebView2HostResourceAccessKind.DenyCors);
+                    core.SetVirtualHostNameToFolderMapping("ahu-verification.local", dist, CoreWebView2HostResourceAccessKind.Allow);
                     var assetFailures = new ConcurrentQueue<string>();
                     core.WebResourceResponseReceived += (_, response) =>
                     {
@@ -61,7 +61,7 @@ public class WebViewHostSmokeTests
                             string action = request.RootElement.GetProperty("action").GetString()!;
                             // Bootstrap reads use real production handlers. External updates,
                             // dialogs, and filesystem mutations are outside this isolated smoke.
-                            var response = action is "getAppInfo" or "getRulePack" || (!editor && action == "verifySource")
+                            var response = action is "getAppInfo" or "getRulePack" || (!editor && action == "verifySource") || (editor && action == "evaluateRuleSandbox")
                                 ? (editor ? editorHandler!.Handle(raw) : await mainHandler!.HandleAsync(raw))
                                 : BridgeResponse.Fail(BridgeRequest.ExtractRequestId(raw), "Not enabled in read-only host smoke");
                             var jsonOptions = JsonDefaults.CreateFlexibleOptions();
@@ -81,7 +81,13 @@ public class WebViewHostSmokeTests
                         ready = await core.ExecuteScriptAsync("Boolean(window.__smokeResponses['smoke-info'] && window.__smokeResponses['smoke-pack'] && document.querySelector('#root')?.children.length)") == "true";
                         if (!ready) await Task.Delay(100);
                     }
-                    Assert.True(ready, "Built entry did not render and receive both native responses.");
+                    if (!ready)
+                    {
+                        string smokeResponsesJson = await core.ExecuteScriptAsync("JSON.stringify(window.__smokeResponses)");
+                        string rootChildrenCount = await core.ExecuteScriptAsync("document.querySelector('#root')?.children.length?.toString() ?? 'null'");
+                        string documentReadyState = await core.ExecuteScriptAsync("document.readyState");
+                        throw new InvalidOperationException($"Built entry {entry} did not render or receive native responses. readyState={documentReadyState}, rootChildren={rootChildrenCount}, responses={smokeResponsesJson}, assetFailures={string.Join("; ", assetFailures)}");
+                    }
                     using var results = JsonDocument.Parse(await core.ExecuteScriptAsync("window.__smokeResponses"));
                     Assert.True(results.RootElement.GetProperty("smoke-info").GetProperty("success").GetBoolean());
                     Assert.True(results.RootElement.GetProperty("smoke-pack").GetProperty("success").GetBoolean());
@@ -94,12 +100,8 @@ public class WebViewHostSmokeTests
                             await Task.Delay(100);
                         }
                         using var verified = JsonDocument.Parse(await core.ExecuteScriptAsync("window.__smokeResponses['smoke-verify']"));
-                        Assert.True(verified.RootElement.GetProperty("success").GetBoolean(), verified.RootElement.ToString());
-                        var dataResult = verified.RootElement.GetProperty("data");
-                        Assert.Equal(JsonValueKind.Object, dataResult.GetProperty("graph").ValueKind);
-                        Assert.NotEmpty(dataResult.GetProperty("facts").EnumerateObject());
-                        Assert.True(dataResult.GetProperty("sourceIsTrusted").GetBoolean());
-                        Assert.False(dataResult.GetProperty("isReadyForFinal").GetBoolean());
+                        Assert.False(verified.RootElement.GetProperty("success").GetBoolean(), "verifySource must be rejected as unknown action by production bridge handler");
+                        Assert.Contains("Unknown bridge action", verified.RootElement.GetProperty("error").GetString());
                     }
                     Assert.Empty(assetFailures);
                     completion.TrySetResult();

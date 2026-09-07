@@ -69,7 +69,7 @@ flowchart TD
 - To run the desktop host directly, first build the Vite bundle, then run `dotnet run --project src/backend/AHUVerification.RuleEditor/AHUVerification.RuleEditor.csproj`.
 - For browser development, run `npm run dev` and open `http://localhost:5173/rule-editor.html`. Vite is configured with `rule-editor.html` as a separate Rollup entry point.
 
-The web page is an authoring preview, not a local publishing host. It loads bundled rule-pack JSON and can export/import a draft JSON array. Only the WebView2 desktop host supplies `getRulePack`, folder selection, and `publishRulePack` bridge actions. In browser mode, **Publish Release** updates the in-memory editor baseline and displays a success notification, but it does not write a bundle or download one; use **Export Draft JSON** for handoff.
+The desktop studio host (`RuleEditor.exe`) supplies native file dialogs for saving and opening drafts (`saveDraft`, `openDraft`), C# live AST simulation via Core `evaluateRuleSandbox`, and verified bundle publishing via `publishRulePack`. In browser mode (`http://localhost:5173/rule-editor.html`), the interface serves as an authoring layout preview without native IPC dialogs or C# evaluation.
 
 ---
 
@@ -417,12 +417,16 @@ Located on the left pane:
 Located in the center pane:
 - **Auto-Generate Key**: Generates a clean `CATEGORY_FEATURE_NAME` semantic key.
 - **Visual / JSON AST Toggle**: Switch seamlessly between no-code visual condition blocks and raw JSON AST editing with live syntax validation.
-- **Auto-Derivation of `requiredFacts`**: Adding or modifying condition leaves automatically extracts and indexes referenced fact keys.
+- **Auto-Derivation of `requiredFacts`**: Adding or modifying condition leaves automatically extracts and indexes referenced fact keys from leaves, variable-to-variable comparisons, and nested structures.
+- **Operand Direction & Fidelity**: Automatically inverts relational operators when `{ var }` is on the right-hand side (e.g. `4000 > skid.weight` roundtrips to `skid.weight < 4000`), preserving identical truth outcomes below, at, and above the threshold. Supports variable-to-variable comparisons directly.
+- **Lossless Unsupported Condition Preservation**: Complex or custom AST constructs not natively supported by the visual tree are preserved losslessly as read-only preview nodes (`type: 'unsupported'`) rather than being dropped or corrupted.
+- **Dynamic Excel Row Mapping**: Automatically computes and assigns physical cell coordinates (`S{row}`, `T{row}`, `V{row}`, `Y{row}`, `Z{row}`) with C# fact contract validation.
 
 ### 5.3 Live Simulation Sandbox
 Located on the right pane:
 - **Profile Presets**: Test against preconfigured models (e.g. *Standard 2-Skid Outdoor Unit*, *Heavy 4-Skid Washdown & Seismic Unit*).
 - **Interactive Fact Tweakers**: Adjust numbers, toggles, or enums with immediate live recalculation of applicability outcomes and step-by-step logic traces.
+- **Authoritative C# AST Evaluation**: Simulation evaluates the condition tree in C# Core via `evaluateRuleSandbox` (`AstRuleEvaluator.cs`), debounced at 50ms, guaranteeing identical logic semantics to the main application and surfacing rule syntax errors or unconfirmed facts.
 
 ---
 

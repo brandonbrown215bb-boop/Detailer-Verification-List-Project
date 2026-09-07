@@ -5,7 +5,7 @@ import {
   type ManualSegmentItem,
   type ManualSkidItem,
   type ManualUnitConfig
-} from '../services/manualUnitFactory';
+} from '../types/manual';
 
 export type ManualWizardStep = 'general' | 'skids' | 'segments' | 'review';
 

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using AHUVerification.Core.Models;
 using AHUVerification.Core.Services;
 using AHUVerification.Core.Session;
@@ -227,6 +230,134 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
+        public void UpdateChecklist_StatusOnly_PreservesExistingCommentAndInitials()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var initial = service.OpenSource(new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsTrusted = true
+            }, _activePack, 1);
+            var firstCheck = initial.Checklists[0];
+
+            // 1. Set initial comment
+            service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                CheckId = firstCheck.InstanceKey,
+                Comment = "Initial note",
+                DetailerInitials = "BB"
+            });
+
+            // 2. Status-only update (Status provided, Comment is null)
+            var res = service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 2,
+                CheckId = firstCheck.InstanceKey,
+                Status = CheckStatus.Passed
+            });
+
+            Assert.True(res.Success);
+            var updated = res.Snapshot!.Checklists[0];
+            Assert.Equal(CheckStatus.Passed, updated.Status);
+            Assert.Equal("Initial note", updated.DetailerComment);
+            Assert.Equal("BB", updated.DetailerInitials);
+        }
+
+        [Fact]
+        public void UpdateChecklist_CommentOnly_PreservesExistingStatusAndInitials()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var initial = service.OpenSource(new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsTrusted = true
+            }, _activePack, 1);
+            var firstCheck = initial.Checklists[0];
+
+            // 1. Set status to Passed
+            service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                CheckId = firstCheck.InstanceKey,
+                Status = CheckStatus.Passed,
+                DetailerInitials = "BB"
+            });
+
+            // 2. Comment-only update (Status is null, Comment provided)
+            var res = service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 2,
+                CheckId = firstCheck.InstanceKey,
+                Comment = "Updated verification detail"
+            });
+
+            Assert.True(res.Success);
+            var updated = res.Snapshot!.Checklists[0];
+            Assert.Equal(CheckStatus.Passed, updated.Status);
+            Assert.Equal("Updated verification detail", updated.DetailerComment);
+            Assert.Equal("BB", updated.DetailerInitials);
+        }
+
+        [Fact]
+        public void UpdateChecklist_SequentialOrderPreservation_RetainsBothStatusAndComment()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var initial = service.OpenSource(new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsTrusted = true
+            }, _activePack, 1);
+            var firstCheck = initial.Checklists[0];
+
+            // Sequence A: Comment then Status
+            service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                CheckId = firstCheck.InstanceKey,
+                Comment = "Seq A comment"
+            });
+            var resA = service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 2,
+                CheckId = firstCheck.InstanceKey,
+                Status = CheckStatus.Flagged
+            });
+            Assert.Equal(CheckStatus.Flagged, resA.Snapshot!.Checklists[0].Status);
+            Assert.Equal("Seq A comment", resA.Snapshot!.Checklists[0].DetailerComment);
+
+            // Sequence B: Status then Comment
+            service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 3,
+                CheckId = firstCheck.InstanceKey,
+                Status = CheckStatus.Passed
+            });
+            var resB = service.UpdateChecklist(new UpdateChecklistCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 4,
+                CheckId = firstCheck.InstanceKey,
+                Comment = "Seq B revised comment"
+            });
+            Assert.Equal(CheckStatus.Passed, resB.Snapshot!.Checklists[0].Status);
+            Assert.Equal("Seq B revised comment", resB.Snapshot!.Checklists[0].DetailerComment);
+        }
+
+        [Fact]
         public void SpecialQuote_AddAndUpdateAndDelete_ManagesQuotesAndRevisions()
         {
             var service = new ProjectSessionService();
@@ -428,6 +559,49 @@ namespace AHUVerification.Tests
             Assert.Equal(1, reorderResult.Snapshot.SpecialQuotes[0].Slot);
             Assert.Equal("sq-1", reorderResult.Snapshot.SpecialQuotes[1].Id);
             Assert.Equal(2, reorderResult.Snapshot.SpecialQuotes[1].Slot);
+        }
+
+        [Fact]
+        public void ReorderSpecialQuotes_SlotCollisionWithUnassignedQuote_FailsWithoutMutatingState()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var initial = service.OpenSource(new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false
+            }, _activePack, 1);
+
+            service.UpdateSpecialQuote(new UpdateSpecialQuoteCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 1,
+                SpecialQuote = new SpecialQuote { Id = "sq-1", Slot = 1, Text = "First SQ" }
+            });
+            service.UpdateSpecialQuote(new UpdateSpecialQuoteCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 2,
+                SpecialQuote = new SpecialQuote { Id = "sq-2", Slot = 2, Text = "Second SQ" }
+            });
+
+            // Attempt to move sq-1 to slot 2 without reassigning sq-2
+            var reorderResult = service.ReorderSpecialQuotes(new ReorderSpecialQuotesCommand
+            {
+                SessionId = initial.SessionId,
+                ExpectedRevision = 3,
+                Assignments = new System.Collections.Generic.List<SpecialQuoteSlotAssignment>
+                {
+                    new SpecialQuoteSlotAssignment { QuoteId = "sq-1", Slot = 2 }
+                }
+            });
+
+            Assert.False(reorderResult.Success);
+            Assert.Contains("duplicate slot numbers", reorderResult.ErrorMessage);
+            Assert.Equal(3, reorderResult.Revision);
+            Assert.Equal(1, reorderResult.Snapshot!.SpecialQuotes.First(s => s.Id == "sq-1").Slot);
+            Assert.Equal(2, reorderResult.Snapshot.SpecialQuotes.First(s => s.Id == "sq-2").Slot);
         }
 
         [Fact]
@@ -653,6 +827,120 @@ namespace AHUVerification.Tests
             Assert.Equal("Persisted comment", check.CheckerComment);
             // Untrusted session can never be ready for final export
             Assert.False(session.CreateSnapshot().Readiness.IsReadyForFinal);
+        }
+
+        [Fact]
+        public void OpenDvl_PinnedToOlderPack_RestoresTrustAndUsesPinnedRulesAndTemplate()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true
+            };
+            var snap = service.OpenSource(openCmd, _activePack, 1);
+            string dvlPath = Path.Combine(Path.GetTempPath(), $"test_pinned_{Guid.NewGuid():N}.dvl");
+            try
+            {
+                var saveResult = service.SaveProject(new SaveProjectCommand
+                {
+                    SessionId = snap.SessionId,
+                    ExpectedRevision = snap.Revision
+                }, dvlPath);
+                Assert.True(saveResult.Success);
+
+                var packB = new RulePackBundle
+                {
+                    Manifest = new RulePackManifest
+                    {
+                        Version = "2.0.0",
+                        BundleSha256 = new string('b', 64)
+                    },
+                    Rules = new List<RuleDefinition>(_activePack.Rules),
+                    TemplateMap = _activePack.TemplateMap,
+                    ApprovedMappings = _activePack.ApprovedMappings,
+                    FactContract = _activePack.FactContract,
+                    IsValid = true
+                };
+
+                // Reopen under host with pack B installed
+                var service2 = new ProjectSessionService();
+                var snap2 = service2.OpenDvl(dvlPath, packB, packGeneration: 1);
+
+                Assert.True(snap2.Source.IsTrusted);
+                Assert.Equal(_activePack.Manifest.Version, snap2.RulePack.Version);
+                Assert.Equal("pack-mismatch", snap2.IntegrityState);
+                Assert.NotNull(snap2.IntegrityWarning);
+                Assert.Contains("pinned to Rule Pack", snap2.IntegrityWarning);
+                Assert.Equal(Path.GetFileName(_configXmlPath), snap2.Source.FileName);
+                Assert.Equal(dvlPath, snap2.CurrentProjectPath);
+
+                // Explicitly adopting pack B advances revision and marks dirty
+                var snap3 = service2.UpdateActiveRulePack(packB, packGeneration: 2);
+                Assert.NotNull(snap3);
+                Assert.Equal("2.0.0", snap3.RulePack.Version);
+                Assert.True(snap3.IsDirty);
+                Assert.Equal("complete", snap3.IntegrityState);
+                Assert.Null(snap3.IntegrityWarning);
+            }
+            finally
+            {
+                if (File.Exists(dvlPath)) File.Delete(dvlPath);
+            }
+        }
+
+        [Fact]
+        public void Save_Reopen_Save_PreservesSourceMetadataFidelity()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true
+            };
+            var snap = service.OpenSource(openCmd, _activePack, 1);
+            string dvlPath1 = Path.Combine(Path.GetTempPath(), $"test_source_meta1_{Guid.NewGuid():N}.dvl");
+            string dvlPath2 = Path.Combine(Path.GetTempPath(), $"test_source_meta2_{Guid.NewGuid():N}.dvl");
+            try
+            {
+                service.SaveProject(new SaveProjectCommand
+                {
+                    SessionId = snap.SessionId,
+                    ExpectedRevision = snap.Revision
+                }, dvlPath1);
+
+                var service2 = new ProjectSessionService();
+                var reopened = service2.OpenDvl(dvlPath1, _activePack, 1);
+                Assert.Equal(Path.GetFileName(_configXmlPath), reopened.Source.FileName);
+                Assert.Equal(dvlPath1, reopened.CurrentProjectPath);
+                Assert.True(reopened.Source.IsTrusted);
+
+                // Save As to second path
+                var saveAsResult = service2.SaveProject(new SaveProjectCommand
+                {
+                    SessionId = reopened.SessionId,
+                    ExpectedRevision = reopened.Revision
+                }, dvlPath2);
+                Assert.True(saveAsResult.Success);
+
+                // Reopen second file and verify source metadata is still preserved
+                var service3 = new ProjectSessionService();
+                var reopened2 = service3.OpenDvl(dvlPath2, _activePack, 1);
+                Assert.Equal(Path.GetFileName(_configXmlPath), reopened2.Source.FileName);
+                Assert.Equal(dvlPath2, reopened2.CurrentProjectPath);
+                Assert.True(reopened2.Source.IsTrusted);
+            }
+            finally
+            {
+                if (File.Exists(dvlPath1)) File.Delete(dvlPath1);
+                if (File.Exists(dvlPath2)) File.Delete(dvlPath2);
+            }
         }
     }
 }

@@ -26,18 +26,25 @@ namespace AHUVerification.Core.Services
             bool? isUpzBundle = null,
             OrderRevisionData? orderRevision = null,
             string? rawOrderRevisionXml = null,
-            string? rawManifestXml = null)
+            string? rawManifestXml = null,
+            bool? isTrusted = null)
         {
             if (bundle == null) throw new ArgumentNullException(nameof(bundle));
             bundle.Manifest.Files.TryGetValue("template.xlsx", out var templateEntry);
             bundle.Manifest.Files.TryGetValue("template_map.json", out var mapEntry);
             bundle.Manifest.Files.TryGetValue("approved_mappings.json", out var mappingsEntry);
 
+            string? templateSha = templateEntry?.Sha256;
+            if (string.IsNullOrEmpty(templateSha) && !string.IsNullOrEmpty(bundle.TemplatePath) && File.Exists(bundle.TemplatePath))
+            {
+                templateSha = CryptoUtils.ComputeFileSha256(bundle.TemplatePath);
+            }
+
             var provenance = new RulePackInfo
             {
                 Version = bundle.Manifest.Version,
                 Sha256 = bundle.Manifest.BundleSha256,
-                TemplateSha256 = templateEntry?.Sha256,
+                TemplateSha256 = templateSha,
                 TemplateMapSha256 = mapEntry?.Sha256,
                 ApprovedMappingsSha256 = mappingsEntry?.Sha256,
                 TemplateRetrievable = File.Exists(bundle.TemplatePath)
@@ -60,7 +67,8 @@ namespace AHUVerification.Core.Services
                 rawOrderRevisionXml,
                 rawManifestXml,
                 provenance,
-                snapshot);
+                snapshot,
+                isTrusted);
         }
 
         public DvlProjectFile CreateProject(
@@ -78,7 +86,8 @@ namespace AHUVerification.Core.Services
             string? rawOrderRevisionXml = null,
             string? rawManifestXml = null,
             RulePackInfo? rulePackProvenance = null,
-            DvlRulePackSnapshot? rulePackSnapshot = null)
+            DvlRulePackSnapshot? rulePackSnapshot = null,
+            bool? isTrusted = null)
         {
             if (string.IsNullOrWhiteSpace(rulePackVersion))
                 throw new ArgumentException("A Rule Pack version is required.", nameof(rulePackVersion));
@@ -124,6 +133,7 @@ namespace AHUVerification.Core.Services
                     SchemaVersion = graph.DocumentVersion,
                     RawXml = rawXml,
                     IsUpzBundle = isUpzBundle,
+                    IsTrusted = isTrusted,
                     OrderRevision = orderRevision,
                     RawOrderRevisionXml = rawOrderRevisionXml,
                     RawManifestXml = rawManifestXml
@@ -199,14 +209,22 @@ namespace AHUVerification.Core.Services
             }
         }
 
+        public DvlProjectFile LoadFromJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                throw new ArgumentException("DVL project JSON cannot be empty.", nameof(json));
+
+            return JsonSerializer.Deserialize<DvlProjectFile>(json, JsonOptions)
+                ?? throw new InvalidOperationException("Failed to deserialize DVL project JSON.");
+        }
+
         public DvlProjectFile LoadFromFile(string filePath)
         {
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("DVL project file not found.", filePath);
 
             string json = File.ReadAllText(filePath, Encoding.UTF8);
-            return JsonSerializer.Deserialize<DvlProjectFile>(json, JsonOptions)
-                ?? throw new InvalidOperationException("Failed to deserialize DVL project file.");
+            return LoadFromJson(json);
         }
 
         public DvlIntegrityValidationResult ValidateIntegrity(DvlProjectFile project, RulePackInfo? activeRulePack = null)
@@ -233,13 +251,12 @@ namespace AHUVerification.Core.Services
             if (!string.Equals(ComputeCompleteStateSha256(project), project.Integrity.CompleteStateSha256, StringComparison.OrdinalIgnoreCase))
                 problems.Add("the complete saved state hash does not match its contents");
 
-            if (activeRulePack != null && (!string.Equals(project.RulePack.Version, activeRulePack.Version, StringComparison.Ordinal)
+            bool isPackMismatch = activeRulePack != null && (!string.Equals(project.RulePack.Version, activeRulePack.Version, StringComparison.Ordinal)
                 || !string.Equals(project.RulePack.Sha256, activeRulePack.Sha256, StringComparison.OrdinalIgnoreCase)
                 || (activeRulePack.RuleSemanticFingerprint != null && !string.Equals(project.RulePack.RuleSemanticFingerprint, activeRulePack.RuleSemanticFingerprint, StringComparison.OrdinalIgnoreCase))
                 || (activeRulePack.TemplateSha256 != null && !string.Equals(project.RulePack.TemplateSha256, activeRulePack.TemplateSha256, StringComparison.OrdinalIgnoreCase))
                 || (activeRulePack.TemplateMapSha256 != null && !string.Equals(project.RulePack.TemplateMapSha256, activeRulePack.TemplateMapSha256, StringComparison.OrdinalIgnoreCase))
-                || (activeRulePack.ApprovedMappingsSha256 != null && !string.Equals(project.RulePack.ApprovedMappingsSha256, activeRulePack.ApprovedMappingsSha256, StringComparison.OrdinalIgnoreCase))))
-                problems.Add($"the project is pinned to Rule Pack {project.RulePack.Version}, not the active {activeRulePack.Version}");
+                || (activeRulePack.ApprovedMappingsSha256 != null && !string.Equals(project.RulePack.ApprovedMappingsSha256, activeRulePack.ApprovedMappingsSha256, StringComparison.OrdinalIgnoreCase)));
 
             if (project.RulePackSnapshot == null
                 || !string.Equals(project.RulePackSnapshot.Version, project.RulePack.Version, StringComparison.Ordinal)
@@ -252,19 +269,94 @@ namespace AHUVerification.Core.Services
                 || (!project.RulePackSnapshot.TemplateEmbedded && !project.RulePackSnapshot.TemplateRetrievable))
                 problems.Add("the immutable Rule Pack snapshot or retrievable template artifact is unavailable");
 
-            return problems.Count == 0
-                ? new DvlIntegrityValidationResult { IsVerified = true, CertificationAllowed = true, State = "complete" }
-                : new DvlIntegrityValidationResult
+            if (project.RulePackSnapshot?.TemplateEmbedded == true)
+            {
+                if (string.IsNullOrWhiteSpace(project.RulePackSnapshot.TemplateBytesBase64))
+                {
+                    problems.Add("the embedded template artifact bytes are missing");
+                }
+                else
+                {
+                    try
+                    {
+                        byte[] templateBytes = Convert.FromBase64String(project.RulePackSnapshot.TemplateBytesBase64);
+                        string templateSha = CryptoUtils.ComputeSha256(templateBytes);
+                        if (!string.Equals(templateSha, project.RulePack.TemplateSha256, StringComparison.OrdinalIgnoreCase))
+                        {
+                            problems.Add("the embedded template artifact hash does not match its contents");
+                        }
+                    }
+                    catch
+                    {
+                        problems.Add("the embedded template artifact cannot be decoded");
+                    }
+                }
+            }
+
+            if (problems.Count > 0)
+            {
+                return new DvlIntegrityValidationResult
                 {
                     IsVerified = false,
                     CertificationAllowed = false,
-                    State = problems.Any(p => p.Contains("not the active", StringComparison.Ordinal))
-                        ? "pack-mismatch"
-                        : problems.Any(p => p.Contains("snapshot", StringComparison.Ordinal) || p.Contains("template artifact", StringComparison.Ordinal))
-                            ? "artifact-unavailable"
-                            : "tampered",
+                    State = problems.Any(p => p.Contains("snapshot", StringComparison.Ordinal) || p.Contains("template artifact", StringComparison.Ordinal))
+                        ? "artifact-unavailable"
+                        : "tampered",
                     Message = $"This project is unverified because {string.Join(" and ", problems)}."
                 };
+            }
+
+            if (isPackMismatch)
+            {
+                return new DvlIntegrityValidationResult
+                {
+                    IsVerified = true,
+                    CertificationAllowed = true,
+                    State = "pack-mismatch",
+                    Message = $"This project is pinned to Rule Pack {project.RulePack.Version}, not the active {activeRulePack!.Version}."
+                };
+            }
+
+            return new DvlIntegrityValidationResult
+            {
+                IsVerified = true,
+                CertificationAllowed = true,
+                State = "complete",
+                Message = null
+            };
+        }
+
+        public static byte[]? GetTemplateBytes(DvlProjectFile project, RulePackBundle? activeBundle = null)
+        {
+            string? expectedSha = project.RulePackSnapshot?.TemplateSha256 ?? project.RulePack?.TemplateSha256;
+            if (project.RulePackSnapshot?.TemplateEmbedded == true && !string.IsNullOrWhiteSpace(project.RulePackSnapshot.TemplateBytesBase64))
+            {
+                try
+                {
+                    byte[] bytes = Convert.FromBase64String(project.RulePackSnapshot.TemplateBytesBase64);
+                    string hash = CryptoUtils.ComputeSha256(bytes);
+                    if (string.IsNullOrEmpty(expectedSha) || string.Equals(hash, expectedSha, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return bytes;
+                    }
+                }
+                catch
+                {
+                    // Fall through
+                }
+            }
+
+            if (activeBundle != null && !string.IsNullOrWhiteSpace(activeBundle.TemplatePath) && File.Exists(activeBundle.TemplatePath))
+            {
+                byte[] bytes = File.ReadAllBytes(activeBundle.TemplatePath);
+                string hash = CryptoUtils.ComputeSha256(bytes);
+                if (string.IsNullOrEmpty(expectedSha) || string.Equals(hash, expectedSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    return bytes;
+                }
+            }
+
+            return null;
         }
 
         public static string ComputeSha256(string content) => CryptoUtils.ComputeSha256(content);
@@ -545,7 +637,7 @@ namespace AHUVerification.Core.Services
                     || (isCompleteState && !CryptoUtils.IsValidSha256(project.RulePack.TemplateSha256))
                     || (isCompleteState && !CryptoUtils.IsValidSha256(project.RulePackSnapshot.TemplateSha256))
                     || (isCompleteState && !string.Equals(project.RulePackSnapshot.TemplateSha256, project.RulePack.TemplateSha256, StringComparison.OrdinalIgnoreCase))
-                    || (project.RulePackSnapshot.TemplateEmbedded && string.IsNullOrWhiteSpace(project.RulePackSnapshot.Reproducibility)))
+                    || (project.RulePackSnapshot.TemplateEmbedded && (string.IsNullOrWhiteSpace(project.RulePackSnapshot.Reproducibility) || string.IsNullOrWhiteSpace(project.RulePackSnapshot.TemplateBytesBase64))))
                 {
                     throw new ArgumentException("DVL v2 Rule Pack snapshot is invalid; unavailable template artifacts remain non-certifying.", nameof(project));
                 }

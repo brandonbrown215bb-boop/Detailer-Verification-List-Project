@@ -103,8 +103,6 @@ namespace AHUVerification.Tests
         [InlineData("openFileDialog")]
         [InlineData("saveFileDialog")]
         [InlineData("extractUpz")]
-        [InlineData("saveDvl")]
-        [InlineData("exportExcelDeliverable")]
         [InlineData("openFile")]
         [InlineData("showInExplorer")]
         [InlineData("checkRulePackUpdate")]
@@ -126,8 +124,6 @@ namespace AHUVerification.Tests
 
         [Theory]
         [InlineData("extractUpz")]
-        [InlineData("saveDvl")]
-        [InlineData("exportExcelDeliverable")]
         [InlineData("openFile")]
         [InlineData("showInExplorer")]
         [InlineData("checkRulePackUpdate")]
@@ -167,7 +163,6 @@ namespace AHUVerification.Tests
 
         [Theory]
         [InlineData("extractUpz", "filePath")]
-        [InlineData("saveDvl", "filePath")]
         [InlineData("openFile", "filePath")]
         [InlineData("showInExplorer", "filePath")]
         [InlineData("checkRulePackUpdate", "remotePath")]
@@ -199,35 +194,12 @@ namespace AHUVerification.Tests
         }
 
         [Theory]
-        // Invalid Facts (array instead of dictionary object)
-        [InlineData("{\"sqItems\":[], \"checklists\":[]}", "facts")]
-        [InlineData("{\"facts\":[1,2,3], \"sqItems\":[], \"checklists\":[]}", "facts")]
-        [InlineData("{\"facts\": \"invalid_str\", \"sqItems\":[], \"checklists\":[]}", "facts")]
-        // Invalid sqItems (object instead of array)
-        [InlineData("{\"facts\":{}, \"checklists\":[]}", "sqItems")]
-        [InlineData("{\"facts\":{}, \"sqItems\":{}, \"checklists\":[]}", "sqItems")]
-        [InlineData("{\"facts\":{}, \"sqItems\":\"invalid\", \"checklists\":[]}", "sqItems")]
-        // Invalid checklists (object instead of array)
-        [InlineData("{\"facts\":{}, \"sqItems\":[]}", "checklists")]
-        [InlineData("{\"facts\":{}, \"sqItems\":[], \"checklists\":{}}", "checklists")]
-        [InlineData("{\"facts\":{}, \"sqItems\":[], \"checklists\":123}", "checklists")]
-        public void AppBridgeHandler_ExportExcelDeliverable_MalformedPayloadStructures_FailsGracefully(string payloadJson, string expectedErrorKey)
-        {
-            var handler = CreateAppHandler();
-            string req = $"{{\"id\":\"req-adv-export\",\"action\":\"exportExcelDeliverable\",\"payload\":{payloadJson}}}";
-
-            var res = handler.Handle(req);
-
-            Assert.Equal("req-adv-export", res.Id);
-            Assert.False(res.Success);
-            Assert.NotNull(res.Error);
-            Assert.Contains(expectedErrorKey, res.Error, StringComparison.OrdinalIgnoreCase);
-        }
-
-        [Theory]
         [InlineData("")]
         [InlineData("   ")]
         [InlineData("nonExistentBridgeAction123")]
+        [InlineData("saveDvl")]
+        [InlineData("verifySource")]
+        [InlineData("exportExcelDeliverable")]
         [InlineData("DROP TABLE USERS; --")]
         [InlineData("<script>alert('xss')</script>")]
         [InlineData("getAppInfo; shutdown -s")]

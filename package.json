@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run test:version && npm run test:fact && npm run test:dvl && node scripts/test_readiness.mjs && node scripts/stress_test_readiness_adversarial.mjs && node scripts/test_ast_converter.mjs && node scripts/test_reducers.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs && node scripts/test_m2_parity_and_bridge.mjs && node scripts/test_ce2a_session_bridge.mjs && node scripts/test_ce2b_manual_and_pack.mjs",
+    "test": "npm run test:version && npm run test:fact && npm run test:dvl && node scripts/test_readiness.mjs && node scripts/test_ast_converter.mjs && node scripts/test_modal_accessibility.mjs && node scripts/test_ingestion_feedback.mjs && node scripts/test_copy_linter.mjs && node scripts/test_responsive_contrast.mjs && node scripts/test_ce2a_session_bridge.mjs && node scripts/test_ce2b_manual_and_pack.mjs && node scripts/test_ce3_persistence_and_export.mjs && node scripts/test_ce5_desktop_only.mjs",
     "test:version": "node scripts/verify_version.mjs && node scripts/test_version_consistency.mjs",
     "test:fact": "node scripts/test_fact_contract.mjs",
     "test:dvl": "node scripts/test_dvl_canonical.mjs",
@@ -19,26 +19,21 @@
     "test:coverage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_core_coverage.ps1",
     "test:graph": "node scripts/measure_bundle_graph.mjs",
     "test:readiness": "node scripts/test_readiness.mjs",
-    "test:stress": "node scripts/stress_test_readiness_adversarial.mjs",
     "test:ast": "node scripts/test_ast_converter.mjs",
-    "test:reducers": "node scripts/test_reducers.mjs",
     "test:accessibility": "node scripts/test_modal_accessibility.mjs",
     "test:ingestion": "node scripts/test_ingestion_feedback.mjs",
     "test:copy": "node scripts/test_copy_linter.mjs",
     "test:contrast": "node scripts/test_responsive_contrast.mjs",
-    "test:m2": "node scripts/test_m2_parity_and_bridge.mjs"
+    "test:ce5": "node scripts/test_ce5_desktop_only.mjs"
   },
   "dependencies": {
-    "file-saver": "^2.0.5",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
     "@playwright/test": "^1.55.0",
-    "@types/file-saver": "^2.0.7",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

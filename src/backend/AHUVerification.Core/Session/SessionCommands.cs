@@ -130,7 +130,7 @@ namespace AHUVerification.Core.Session
         public string CheckId { get; set; } = "";
 
         [JsonPropertyName("status")]
-        public CheckStatus Status { get; set; }
+        public CheckStatus? Status { get; set; }
 
         [JsonPropertyName("comment")]
         public string? Comment { get; set; }
@@ -231,6 +231,90 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("requestId")]
         public string? RequestId { get; set; }
+    }
+
+    public class SaveProjectCommand
+    {
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = "";
+
+        [JsonPropertyName("targetPath")]
+        public string? TargetPath { get; set; }
+
+        [JsonPropertyName("forceSaveAs")]
+        public bool ForceSaveAs { get; set; }
+
+        [JsonPropertyName("expectedRevision")]
+        public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+    }
+
+    public class OpenDvlCommand
+    {
+        [JsonPropertyName("filePath")]
+        public string FilePath { get; set; } = "";
+    }
+
+    public class ExportExcelDeliverableCommand
+    {
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = "";
+
+        [JsonPropertyName("isDraft")]
+        public bool IsDraft { get; set; }
+
+        [JsonPropertyName("targetPath")]
+        public string? TargetPath { get; set; }
+
+        [JsonPropertyName("expectedRevision")]
+        public long ExpectedRevision { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+    }
+
+    public class RecoveryInfo
+    {
+        [JsonPropertyName("hasRecovery")]
+        public bool HasRecovery { get; set; }
+
+        [JsonPropertyName("jobName")]
+        public string? JobName { get; set; }
+
+        [JsonPropertyName("comNumber")]
+        public string? ComNumber { get; set; }
+
+        [JsonPropertyName("author")]
+        public string? Author { get; set; }
+
+        [JsonPropertyName("lastSavedAt")]
+        public string? LastSavedAt { get; set; }
+
+        [JsonPropertyName("sourceFileName")]
+        public string? SourceFileName { get; set; }
+
+        [JsonPropertyName("isTrusted")]
+        public bool IsTrusted { get; set; }
+
+        [JsonPropertyName("recoveryFilePath")]
+        public string? RecoveryFilePath { get; set; }
+    }
+
+    public class ExportDeliverableResult
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("filePath")]
+        public string FilePath { get; set; } = "";
+
+        [JsonPropertyName("fileName")]
+        public string FileName { get; set; } = "";
+
+        [JsonPropertyName("isDraft")]
+        public bool IsDraft { get; set; }
     }
 
     public class SessionCommandResult

@@ -154,7 +154,8 @@ namespace AHUVerification.Tests
                     rulePack,
                     resolvedFacts,
                     fullSqItems,
-                    resolvedChecklists
+                    resolvedChecklists,
+                    isTrusted: true
                 );
 
                 Assert.Equal(0, certifiedResult.UnconfirmedFactsCount);

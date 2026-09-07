@@ -3,6 +3,7 @@ import type { ThemeMode } from './types';
 import { desktopBridge } from './services/desktopBridge';
 import { useProjectSession } from './hooks/useProjectSession';
 import { useRulePackSession } from './hooks/useRulePackSession';
+import { STORAGE_KEYS } from './utils/constants';
 
 import { HomePage } from './components/HomePage';
 import { ManualUnitModal } from './components/ManualUnitModal';
@@ -17,6 +18,7 @@ import { ResolutionCenterModal } from './components/ResolutionCenterModal';
 import { PreFlightModal } from './components/PreFlightModal';
 import { OmniSearchModal } from './components/OmniSearchModal';
 import { SettingsModal } from './components/SettingsModal';
+import { DesktopHostRequiredScreen } from './components/DesktopHostRequiredScreen';
 import { AlertCircle, RefreshCw, CheckCircle2, FileSpreadsheet, Folder, DownloadCloud } from 'lucide-react';
 
 interface ErrorBoundaryProps {
@@ -137,6 +139,8 @@ export const AppContent: React.FC = () => {
     handleUpdateGeneralComments,
     handleSaveDvl,
     handleExportExcel,
+    applySessionSnapshot,
+    sessionSnapshot,
     dismissExportNotice,
     dismissExportError
   } = useProjectSession({
@@ -146,6 +150,25 @@ export const AppContent: React.FC = () => {
     onRequestComNumber: requestComNumber,
     onSessionLoaded: resetActiveTab
   });
+
+  const handleReloadAndReverify = useCallback(async () => {
+    try {
+      const res = await desktopBridge.reloadActiveRulePack();
+      if (res && res.success) {
+        const bundle = res.rulePack || res;
+        if (bundle.rules) {
+          handleRulePackUpdated(bundle);
+        }
+        const snapshot = res.sessionSnapshot || res.snapshot;
+        if (snapshot) {
+          applySessionSnapshot(snapshot);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to reload active rule pack:', err);
+    }
+  }, [handleRulePackUpdated, applySessionSnapshot]);
+
   const handleBatchResolveDefaultsAndClose = useCallback(() => {
     handleBatchResolveDefaults();
     setIsResolutionOpen(false);
@@ -292,11 +315,13 @@ export const AppContent: React.FC = () => {
         <DetailerNameModal
           isOpen={isDetailerModalOpen}
           onClose={() => setIsDetailerModalOpen(false)}
-          currentName={localStorage.getItem('dvl_detailer_name') || ''}
-          onSaveName={(name) => {
-            localStorage.setItem('dvl_detailer_name', name);
+          currentName={localStorage.getItem(STORAGE_KEYS.DETAILER_NAME) || ''}
+          currentInitials={localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) || ''}
+          onSaveName={(name, initials) => {
+            localStorage.setItem(STORAGE_KEYS.DETAILER_NAME, name);
+            if (initials) localStorage.setItem(STORAGE_KEYS.DETAILER_INITIALS, initials);
           }}
-          isFirstLaunch={!localStorage.getItem('dvl_detailer_name')}
+          isFirstLaunch={!localStorage.getItem(STORAGE_KEYS.DETAILER_NAME)}
         />
       </div>
     );
@@ -364,16 +389,6 @@ export const AppContent: React.FC = () => {
           onImportXml={loadXmlData}
         />
 
-        {/* Browser Mode Warning */}
-        {!desktopBridge.isRunningInDesktop() && (
-          <div className="bg-amber-100 dark:bg-amber-950/80 border-b border-amber-300 dark:border-amber-700/50 px-6 py-1.5 flex items-center justify-center">
-            <span className="text-xs text-amber-900 dark:text-amber-200 font-medium flex items-center gap-2">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Browser Mode (Non-Certifying Preview / Draft). Final export is disabled.
-            </span>
-          </div>
-        )}
-
         {projectIntegrityWarning && (
           <div className="bg-amber-100 dark:bg-amber-950/90 border-b border-amber-300 dark:border-amber-700/60 px-6 py-2 flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -388,7 +403,15 @@ export const AppContent: React.FC = () => {
         )}
         {desktopBridge.isRunningInDesktop() && !sourceIsTrusted && !projectIntegrityWarning && (
           <div role="status" className="px-6 py-2 text-xs bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            This session can produce drafts. Final export requires a verified source opened through the desktop file picker.
+            {sessionSnapshot?.source?.fileName === 'Manual Unit Configuration.xml' ? (
+              <span>
+                <strong>Manual Unit (Draft Only):</strong> This manually synthesized unit is uncertified. Official final certification requires an authentic .upz or Config.xml package.
+              </span>
+            ) : (
+              <span>
+                <strong>Draft Mode:</strong> This session produces draft deliverables. Official final certification requires a verified source (.upz or Config.xml) opened through the desktop file picker.
+              </span>
+            )}
           </div>
         )}
 
@@ -399,12 +422,23 @@ export const AppContent: React.FC = () => {
               <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>{rulePackNotice}</span>
             </div>
-            <button
-              onClick={dismissRulePackNotice}
-              className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
-            >
-              Dismiss
-            </button>
+            <div className="flex items-center gap-2">
+              {isProjectLoaded && desktopBridge.isRunningInDesktop() && (
+                <button
+                  type="button"
+                  onClick={handleReloadAndReverify}
+                  className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow transition-colors"
+                >
+                  Reload & Re-verify Project
+                </button>
+              )}
+              <button
+                onClick={dismissRulePackNotice}
+                className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
@@ -597,10 +631,15 @@ export const AppContent: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         themeMode={themeMode}
         onSetThemeMode={setThemeMode}
-        detailerName={String(facts['unit.detailer']?.value || localStorage.getItem('dvl_detailer_name') || 'Detailer')}
+        detailerName={String(facts['unit.detailer']?.value || localStorage.getItem(STORAGE_KEYS.DETAILER_NAME) || 'Detailer')}
         onUpdateDetailerName={(name) => {
-          localStorage.setItem('dvl_detailer_name', name);
+          localStorage.setItem(STORAGE_KEYS.DETAILER_NAME, name);
           handleUpdateFact('unit.detailer', name);
+        }}
+        detailerInitials={String(facts['unit.detailerInitials']?.value || localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) || '')}
+        onUpdateDetailerInitials={(initials) => {
+          localStorage.setItem(STORAGE_KEYS.DETAILER_INITIALS, initials);
+          handleUpdateFact('unit.detailerInitials', initials);
         }}
         rulePackVersion={rulePackIdentity.version}
         ruleCount={activeRules.filter(r => !r.isArchived).length}
@@ -615,10 +654,15 @@ export const AppContent: React.FC = () => {
       <DetailerNameModal
         isOpen={isDetailerModalOpen}
         onClose={() => setIsDetailerModalOpen(false)}
-        currentName={String(facts['unit.detailer']?.value || localStorage.getItem('dvl_detailer_name') || '')}
-        onSaveName={(name) => {
-          localStorage.setItem('dvl_detailer_name', name);
+        currentName={String(facts['unit.detailer']?.value || localStorage.getItem(STORAGE_KEYS.DETAILER_NAME) || '')}
+        currentInitials={String(facts['unit.detailerInitials']?.value || localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) || '')}
+        onSaveName={(name, initials) => {
+          localStorage.setItem(STORAGE_KEYS.DETAILER_NAME, name);
           handleUpdateFact('unit.detailer', name);
+          if (initials) {
+            localStorage.setItem(STORAGE_KEYS.DETAILER_INITIALS, initials);
+            handleUpdateFact('unit.detailerInitials', initials);
+          }
         }}
       />
 
@@ -636,6 +680,10 @@ export const AppContent: React.FC = () => {
 };
 
 export const App: React.FC = () => {
+  if (!desktopBridge.isDesktopHost()) {
+    return <DesktopHostRequiredScreen />;
+  }
+
   return (
     <ErrorBoundary>
       <AppContent />

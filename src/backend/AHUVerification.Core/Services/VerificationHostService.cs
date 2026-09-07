@@ -39,7 +39,8 @@ namespace AHUVerification.Core.Services
             RulePackBundle activePack,
             Dictionary<string, Fact>? manualOverrides = null,
             List<SpecialQuote>? sqItems = null,
-            List<ChecklistInstance>? existingChecklists = null)
+            List<ChecklistInstance>? existingChecklists = null,
+            bool isTrusted = false)
         {
             if (string.IsNullOrWhiteSpace(configXml))
                 throw new ArgumentException("A trusted Config.xml source is required.", nameof(configXml));
@@ -88,8 +89,8 @@ namespace AHUVerification.Core.Services
                 CompletedChecksCount = completedChecksCount,
                 ActiveRulePackVersion = activePack.Manifest?.Version ?? "",
                 ActiveRulePackSha256 = activePack.Manifest?.BundleSha256 ?? "",
-                SourceIsTrusted = true,
-                IsReadyForFinal = isReadyForFinal
+                SourceIsTrusted = isTrusted,
+                IsReadyForFinal = isReadyForFinal && isTrusted
             };
         }
 
@@ -175,7 +176,7 @@ namespace AHUVerification.Core.Services
                 var effectiveOverrides = manualOverrides ?? rendererFacts
                     .Where(pair => pair.Value?.Status == FactStatus.ManuallyOverridden)
                     .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-                var verifiedModel = VerifySource(configXml, orderRevXml, manifestXml, activePack, effectiveOverrides, sqItems, userChecklists);
+                var verifiedModel = VerifySource(configXml, orderRevXml, manifestXml, activePack, effectiveOverrides, sqItems, userChecklists, isTrusted: !isDraft);
 
                 if (!isDraft && !verifiedModel.IsReadyForFinal)
                 {

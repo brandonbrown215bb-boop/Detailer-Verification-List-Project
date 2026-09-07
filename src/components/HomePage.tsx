@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { DvlProjectFile, UpzBundle } from '../types';
 import { desktopBridge } from '../services/desktopBridge';
-import { RULES_CATALOG, RULE_PACK_IDENTITY } from '../services/rulesCatalog';
 
 export interface ImportErrorState {
   fileName?: string;
@@ -46,8 +45,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenDvl,
   onOpenManualModal,
   onLoadSample,
-  rulePackVersion = RULE_PACK_IDENTITY.version,
-  ruleCount = RULES_CATALOG.filter(rule => !rule.isArchived).length
+  rulePackVersion = '1.0.0',
+  ruleCount = 0
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -58,15 +57,15 @@ export const HomePage: React.FC<HomePageProps> = ({
   const processFile = async (file: File) => {
     setImportError(null);
     setIsProcessing(true);
+    const filePath = (file as any).path || (file as any).webkitRelativePath || undefined;
 
     if (file.name.toLowerCase().endsWith('.upz')) {
       setProcessingMessage(`Unpacking UPZ bundle: ${file.name}...`);
-      const filePath = (file as any).path;
       if (desktopBridge.isRunningInDesktop() && filePath) {
         try {
           const res = await desktopBridge.extractUpz(filePath);
           setProcessingMessage(`Ingesting extracted configuration: ${res.fileName}...`);
-          await onImportXml(res.content, res.bundle, res.fileName);
+          await onImportXml(res.content, res.bundle, res.fileName, filePath);
           setIsProcessing(false);
           return;
         } catch (err: any) {
@@ -87,11 +86,11 @@ export const HomePage: React.FC<HomePageProps> = ({
         setIsProcessing(false);
         setImportError({
           fileName: file.name,
-          title: 'Desktop App Required for UPZ Bundles',
-          message: 'Direct .upz bundle extraction requires the desktop application runtime.',
+          title: 'File Path Unavailable',
+          message: 'Native UPZ bundle extraction requires an accessible file system path.',
           recoverySteps: [
-            'In browser preview mode, import standalone Config.xml or .dvl project files.',
-            'Launch the application via the desktop executable (AHUVerification.App.exe) for automated native UPZ extraction.'
+            'Select the .upz file using the native file picker or drag it directly from Windows Explorer.',
+            'Alternatively, extract Config.xml manually or configure the unit using Manual Unit Setup.'
           ]
         });
         return;
@@ -115,7 +114,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         try {
           setProcessingMessage(`Validating project file: ${file.name}...`);
           const project = JSON.parse(text);
-          await onOpenDvl(project, text);
+          await onOpenDvl(project, text, filePath);
           setIsProcessing(false);
         } catch (err: any) {
           setIsProcessing(false);
@@ -132,7 +131,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       } else {
         try {
           setProcessingMessage(`Parsing AHU configuration: ${file.name}...`);
-          await onImportXml(text, undefined, file.name);
+          await onImportXml(text, undefined, file.name, filePath);
           setIsProcessing(false);
         } catch (err: any) {
           setIsProcessing(false);

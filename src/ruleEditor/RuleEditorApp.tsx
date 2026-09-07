@@ -1,50 +1,56 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { RuleDefinition, TemplateMap, RulePackManifest } from '../types';
-import { RuleDiffItem, RuleChangeType } from './types';
+import { RuleDiffItem } from './types';
 import { Header } from './components/Header';
 import { RuleListView } from './components/RuleListView';
-import { RuleFormView } from './components/RuleFormView';
+import { RuleFormView, FormValidationError } from './components/RuleFormView';
 import { PublishModal } from './components/PublishModal';
+import { DesktopHostRequiredScreen } from '../components/DesktopHostRequiredScreen';
 import { desktopBridge } from '../services/desktopBridge';
-import { normalizeRuleDefinition, validateRulePackData } from '../services/factContract';
 
-// Baseline fallback rule pack imports for web / development
-import initialRules from '../../resources/rulepack/rules.json';
-import initialTemplateMap from '../../resources/rulepack/template_map.json';
-import initialApprovedMappings from '../../resources/rulepack/approved_mappings.json';
-import initialManifest from '../../resources/rulepack/manifest.json';
-
-const EDITOR_SCOPES = new Set(['Unit', 'Skid']);
-const EDITOR_MODES = new Set(['ManualCheckbox']);
 const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
-function validateEditorRuleSupport(ruleSet: RuleDefinition[]): void {
-  const unsupported = ruleSet.filter(rule => !EDITOR_SCOPES.has(rule.scope) || !EDITOR_MODES.has(rule.verificationMode));
-  if (unsupported.length > 0) {
-    const details = unsupported.map(rule => `${rule.id} (${rule.scope}/${rule.verificationMode})`).join(', ');
-    throw new Error(`Rule Editor cannot publish unsupported scope or verification mode: ${details}.`);
-  }
-}
+const defaultTemplateMap: TemplateMap = {
+  templateVersion: '1.0',
+  generalFields: {},
+  sqRange: { sheet: 'Skid 1', startRow: 1, endRow: 50, slotCol: 'A', textCol: 'B' },
+  ruleCellMappings: {}
+};
 
-export const RuleEditorApp: React.FC = () => {
-  const [baselineRules, setBaselineRules] = useState<RuleDefinition[]>(() => initialRules as RuleDefinition[]);
-  const [rules, setRules] = useState<RuleDefinition[]>(() => initialRules as RuleDefinition[]);
-  const [templateMap, setTemplateMap] = useState<TemplateMap>(() => initialTemplateMap as any);
-  const [approvedMappings, setApprovedMappings] = useState<any>(() => initialApprovedMappings as any);
-  const [manifest, setManifest] = useState<RulePackManifest>(() => initialManifest as RulePackManifest);
+const defaultManifest: RulePackManifest = {
+  name: 'AHU Detailing Verification Rules',
+  version: '1.0.0',
+  generatedAt: '',
+  bundleSha256: '',
+  files: {}
+};
 
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(() => rules[0]?.id || null);
+export const RuleEditorAppContent: React.FC = () => {
+  const [baselineRules, setBaselineRules] = useState<RuleDefinition[]>([]);
+  const [rules, setRules] = useState<RuleDefinition[]>([]);
+  const [templateMap, setTemplateMap] = useState<TemplateMap>(defaultTemplateMap);
+  const [approvedMappings, setApprovedMappings] = useState<any>({});
+  const [manifest, setManifest] = useState<RulePackManifest>(defaultManifest);
+
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived' | 'modified'>('all');
   const [isPublishModalOpen, setIsPublishModalOpen] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [validationErrors, setValidationErrors] = useState<FormValidationError[]>([]);
+  const [activeDraftName, setActiveDraftName] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Load from Desktop IPC bridge if available
+  // Load from Desktop IPC bridge
   useEffect(() => {
     async function loadFromHost() {
       try {
+        setIsLoading(true);
+        setLoadError(null);
         const pack = await desktopBridge.getRulePack();
         if (pack && pack.rules && pack.rules.length > 0) {
           setBaselineRules(JSON.parse(JSON.stringify(pack.rules)));
@@ -53,9 +59,13 @@ export const RuleEditorApp: React.FC = () => {
           if (pack.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(pack.approvedMappings)));
           if (pack.manifest) setManifest(pack.manifest);
           if (pack.rules[0]?.id) setSelectedRuleId(pack.rules[0].id);
+        } else {
+          setLoadError('Failed to load active Rule Pack: Rule Pack contains no rules or is empty.');
         }
-      } catch (e) {
-        console.warn('Native desktop bridge unavailable, using local rule pack assets.', e);
+      } catch (e: any) {
+        setLoadError(e?.message || 'Failed to load active Rule Pack from desktop host.');
+      } finally {
+        setIsLoading(false);
       }
     }
     loadFromHost();
@@ -154,6 +164,18 @@ export const RuleEditorApp: React.FC = () => {
     return { dirtyRuleIds: dirtyIds, diffs: diffList };
   }, [rules, baselineMap]);
 
+  // Warn on tab/window close if there are unsaved draft changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtyRuleIds.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [dirtyRuleIds.size]);
+
   const selectedRule = useMemo(() => {
     return rules.find(r => r.id === selectedRuleId) || rules[0] || null;
   }, [rules, selectedRuleId]);
@@ -171,6 +193,9 @@ export const RuleEditorApp: React.FC = () => {
     setRules(prev => prev.map(r => (r.id === (originalId || updated.id) ? updated : r)));
     if (originalId && updated.id !== originalId) {
       setSelectedRuleId(updated.id);
+    }
+    if (validationErrors.length > 0) {
+      setValidationErrors(prev => prev.filter(e => e.ruleId !== (originalId || updated.id)));
     }
   };
 
@@ -273,54 +298,102 @@ export const RuleEditorApp: React.FC = () => {
     }
   };
 
-  // Handler: Export Draft JSON
-  const handleExportJson = () => {
-    const dataStr = JSON.stringify({
-      rules,
-      templateMap,
-      approvedMappings,
-      manifest
-    }, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rules_draft_v${manifest.version}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showNotification('Exported rules draft as JSON', 'success');
+  // Handler: Delete rule permanently
+  const handleDeleteRule = (ruleId: string) => {
+    const target = rules.find(r => r.id === ruleId);
+    if (!target) return;
+
+    setRules(prev => prev.filter(r => r.id !== ruleId));
+    if (target.semanticKey && templateMap?.ruleCellMappings?.[target.semanticKey]) {
+      setTemplateMap(prev => {
+        const copy = JSON.parse(JSON.stringify(prev));
+        if (copy.ruleCellMappings) {
+          delete copy.ruleCellMappings[target.semanticKey];
+        }
+        return copy;
+      });
+    }
+    setValidationErrors(prev => prev.filter(e => e.ruleId !== ruleId));
+    if (selectedRuleId === ruleId) {
+      const remaining = rules.filter(r => r.id !== ruleId);
+      setSelectedRuleId(remaining[0]?.id || null);
+    }
+    showNotification(`Permanently deleted rule ${ruleId}`, 'info');
   };
 
-  // Handler: Import Draft JSON
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = evt => {
-      try {
-        const imported = JSON.parse(evt.target?.result as string);
-        const importedRules = Array.isArray(imported) ? imported : imported?.rules;
-        if (!Array.isArray(importedRules)) throw new Error('expected an array of rule definitions or a rule-pack draft object');
-        const normalizedRules = importedRules.map((rule: RuleDefinition) => normalizeRuleDefinition(rule));
-        const importedMap = Array.isArray(imported) ? templateMap : imported.templateMap;
-        if (!importedMap || typeof importedMap !== 'object') throw new Error('templateMap is required for a canonical rule-pack draft');
-        validateRulePackData(normalizedRules, importedMap);
-        validateEditorRuleSupport(normalizedRules);
-        setRules(JSON.parse(JSON.stringify(normalizedRules)));
-        if (!Array.isArray(imported) && imported.approvedMappings) {
-          setApprovedMappings(JSON.parse(JSON.stringify(imported.approvedMappings)));
+  // Handler: Save Draft JSON via native SaveFileDialog
+  const handleSaveDraft = async () => {
+    try {
+      const payload = {
+        rules,
+        templateMap,
+        approvedMappings,
+        manifest
+      };
+      const res = await desktopBridge.saveDraft(payload);
+      if (res && res.success) {
+        setValidationErrors([]);
+        if (res.rules) {
+          setRules(JSON.parse(JSON.stringify(res.rules)));
+          setBaselineRules(JSON.parse(JSON.stringify(res.rules)));
+        } else {
+          setBaselineRules(JSON.parse(JSON.stringify(rules)));
         }
-        if (!Array.isArray(imported) && imported.manifest) setManifest(imported.manifest);
-        if (!Array.isArray(imported)) setTemplateMap(JSON.parse(JSON.stringify(importedMap)));
-        if (normalizedRules[0]?.id) setSelectedRuleId(normalizedRules[0].id);
-        showNotification(`Successfully imported and validated ${normalizedRules.length} rules!`, 'success');
-      } catch (err: any) {
-        showNotification(`Failed to parse JSON: ${err.message}`, 'error');
+        if (res.templateMap) setTemplateMap(JSON.parse(JSON.stringify(res.templateMap)));
+        const name = res.fileName || (res.filePath ? res.filePath.split(/[\\/]/).pop() : 'Draft.json');
+        setActiveDraftName(name || 'Draft.json');
+        showNotification(`Draft saved successfully to ${res.filePath || res.fileName || 'file'}!`, 'success');
+      } else if (res && res.cancelled) {
+        // User cancelled Save dialog
+      } else {
+        const errorList: FormValidationError[] = Array.isArray(res?.errors)
+          ? res.errors.map((e: any) => typeof e === 'string' ? { message: e } : e)
+          : [{ message: res?.error || 'Validation failed when saving draft.' }];
+        setValidationErrors(errorList);
+        const offending = errorList.find(e => e.ruleId);
+        if (offending?.ruleId && rules.some(r => r.id === offending.ruleId)) {
+          setSelectedRuleId(offending.ruleId);
+        }
+        showNotification(res?.error || 'Draft rejected due to validation errors. Please review highlighted fields.', 'error');
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+    } catch (err: any) {
+      showNotification(`Failed to save draft: ${err.message}`, 'error');
+    }
+  };
+
+  // Handler: Open Draft JSON via native OpenFileDialog with unsaved changes guard
+  const handleOpenDraft = async () => {
+    if (dirtyRuleIds.size > 0) {
+      const confirmed = window.confirm(
+        `You have ${dirtyRuleIds.size} unsaved change${dirtyRuleIds.size > 1 ? 's' : ''} in your current draft. Discard these changes and open another draft?`
+      );
+      if (!confirmed) return;
+    }
+
+    try {
+      const res = await desktopBridge.openDraft();
+      if (res && res.cancelled) return;
+      if (res && res.success && res.rules) {
+        setRules(JSON.parse(JSON.stringify(res.rules)));
+        setBaselineRules(JSON.parse(JSON.stringify(res.rules)));
+        if (res.templateMap) setTemplateMap(JSON.parse(JSON.stringify(res.templateMap)));
+        if (res.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(res.approvedMappings)));
+        if (res.manifest) setManifest(res.manifest);
+        setValidationErrors([]);
+        if (res.rules[0]?.id) setSelectedRuleId(res.rules[0].id);
+        const name = res.fileName || (res.filePath ? res.filePath.split(/[\\/]/).pop() : 'Draft.json');
+        setActiveDraftName(name || 'Draft.json');
+        showNotification(`Draft opened successfully from ${res.filePath || res.fileName || 'file'}!`, 'success');
+      } else {
+        const errorList: FormValidationError[] = Array.isArray(res?.errors)
+          ? res.errors.map((e: any) => typeof e === 'string' ? { message: e } : e)
+          : [{ message: res?.error || 'Failed to open draft.' }];
+        setValidationErrors(errorList);
+        showNotification(res?.error || 'Failed to open draft.', 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Error opening draft: ${err.message}`, 'error');
+    }
   };
 
   // Handler: Publish release
@@ -329,75 +402,76 @@ export const RuleEditorApp: React.FC = () => {
     if (!RELEASE_VERSION_PATTERN.test(normalizedVersion)) {
       throw new Error(`Invalid release version '${newVersion}'. Use SemVer such as 1.2.3 or 1.2.3-rc1.`);
     }
-    validateEditorRuleSupport(rules);
-
-    // 1. Synchronize templateMap with rule cell mappings
-    const updatedTemplateMap: TemplateMap = JSON.parse(JSON.stringify(templateMap));
-    const liveRuleKeys = new Set(rules.map(rule => rule.semanticKey));
-    for (const key of Object.keys(updatedTemplateMap.ruleCellMappings || {})) {
-      if (!liveRuleKeys.has(key)) delete updatedTemplateMap.ruleCellMappings[key];
-    }
-    rules.forEach(r => {
-      if (r.excelRow) {
-        const existing = updatedTemplateMap.ruleCellMappings[r.semanticKey];
-        if (existing) {
-          // Semantic keys are the stable Excel identity. An ID rename updates
-          // the identity carried by the mapping without moving its cells.
-          existing.ruleId = r.id;
-        } else {
-          updatedTemplateMap.ruleCellMappings[r.semanticKey] = {
-            ruleId: r.id,
-            row: r.excelRow,
-            naCell: `S${r.excelRow}`,
-            detailerCell: `T${r.excelRow}`,
-            checkerCell: `V${r.excelRow}`,
-            commentsCell: `Y${r.excelRow}`,
-            initialsCell: `Z${r.excelRow}`
-          };
-        }
-      }
-    });
-    validateRulePackData(rules, updatedTemplateMap);
 
     const payload = {
       version: normalizedVersion,
       rules,
-      templateMap: updatedTemplateMap,
+      templateMap,
       approvedMappings,
       releaseNotes,
       targetPath
     };
 
-    // If running in desktop host WebView2, use native bridge IPC
-    if (desktopBridge.isRunningInDesktop()) {
-      const res = await desktopBridge.publishRulePack(payload);
-      if (res && (res as any).success === false) {
-        throw new Error((res as any).error || 'Desktop publish failed');
+    const res = await desktopBridge.publishRulePack(payload);
+    if (res && res.success === false) {
+      if (Array.isArray(res.errors)) {
+        const errorList: FormValidationError[] = res.errors.map((e: any) =>
+          typeof e === 'string' ? { message: e } : e
+        );
+        setValidationErrors(errorList);
+        const offending = errorList.find(e => e.ruleId);
+        if (offending?.ruleId && rules.some(r => r.id === offending.ruleId)) {
+          setSelectedRuleId(offending.ruleId);
+        }
       }
-      // Read the pack back through the native bridge. This verifies the editor
-      // is showing the bundle that was actually promoted to the active path.
-      const reloaded = await desktopBridge.getRulePack();
-      if (!reloaded?.rules || !reloaded.templateMap || !reloaded.manifest) {
-        throw new Error('Native publish completed without a readable published Rule Pack.');
-      }
-      const reloadedRules = reloaded.rules.map((rule: RuleDefinition) => normalizeRuleDefinition(rule));
-      validateRulePackData(reloadedRules, reloaded.templateMap);
-      validateEditorRuleSupport(reloadedRules);
-      setRules(JSON.parse(JSON.stringify(reloadedRules)));
-      setBaselineRules(JSON.parse(JSON.stringify(reloadedRules)));
-      setTemplateMap(JSON.parse(JSON.stringify(reloaded.templateMap)));
-      if (reloaded.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(reloaded.approvedMappings)));
-      setManifest(reloaded.manifest);
-      if (reloadedRules[0]?.id) setSelectedRuleId(reloadedRules[0].id);
-    } else {
-      showNotification('Native Rule Pack publishing is unavailable in browser preview. Downloading a validated draft JSON instead.', 'info');
-      handleExportJson();
-      setIsPublishModalOpen(false);
-      return;
+      throw new Error(res.error || 'Desktop publish failed');
     }
+
+    // Read the pack back through the native bridge. This verifies the editor
+    // is showing the bundle that was actually promoted to the active path.
+    const reloaded = await desktopBridge.getRulePack();
+    if (!reloaded?.rules || !reloaded.templateMap || !reloaded.manifest) {
+      throw new Error('Native publish completed without a readable published Rule Pack.');
+    }
+
+    setRules(JSON.parse(JSON.stringify(reloaded.rules)));
+    setBaselineRules(JSON.parse(JSON.stringify(reloaded.rules)));
+    setTemplateMap(JSON.parse(JSON.stringify(reloaded.templateMap)));
+    if (reloaded.approvedMappings) setApprovedMappings(JSON.parse(JSON.stringify(reloaded.approvedMappings)));
+    setManifest(reloaded.manifest);
+    setValidationErrors([]);
+    if (reloaded.rules[0]?.id) setSelectedRuleId(reloaded.rules[0].id);
+    setActiveDraftName(null);
 
     showNotification(`Successfully published and reloaded Rule Pack v${normalizedVersion}!`, 'success');
   };
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="p-6 bg-red-950/60 border border-red-800 rounded-2xl max-w-lg mb-4 text-red-200 shadow-2xl space-y-2">
+          <AlertCircle className="w-10 h-10 mx-auto text-red-400" />
+          <h2 className="text-lg font-bold text-white">Rule Pack Unavailable</h2>
+          <p className="text-xs text-red-300 font-mono break-all leading-relaxed">{loadError}</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl flex items-center gap-2 text-xs font-semibold transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" /> Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 select-none">
+        <RefreshCw className="w-6 h-6 animate-spin mb-3 text-amber-400" />
+        <p className="text-xs font-medium">Loading active Rule Pack from desktop host...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
@@ -405,9 +479,10 @@ export const RuleEditorApp: React.FC = () => {
       <Header
         version={manifest.version}
         dirtyCount={dirtyRuleIds.size}
+        draftName={activeDraftName}
         onOpenPublish={() => setIsPublishModalOpen(true)}
-        onExportJson={handleExportJson}
-        onImportJson={handleImportJson}
+        onSaveDraft={handleSaveDraft}
+        onOpenDraft={handleOpenDraft}
       />
 
       {/* Notification Toast */}
@@ -446,6 +521,7 @@ export const RuleEditorApp: React.FC = () => {
             onReorder={handleReorder}
             onClone={handleCloneRule}
             onToggleArchive={handleToggleArchive}
+            onDeleteRule={handleDeleteRule}
           />
         </div>
 
@@ -458,9 +534,11 @@ export const RuleEditorApp: React.FC = () => {
               onUpdate={handleUpdateRule}
               onClone={handleCloneRule}
               onToggleArchive={handleToggleArchive}
+              onDeleteRule={handleDeleteRule}
+              validationErrors={validationErrors}
             />
           ) : (
-            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+            <div className="h-full flex items-center justify-center text-slate-400 text-sm">
               Select a rule from the left panel or click "New" to create one.
             </div>
           )}
@@ -477,4 +555,12 @@ export const RuleEditorApp: React.FC = () => {
       />
     </div>
   );
+};
+
+export const RuleEditorApp: React.FC = () => {
+  if (!desktopBridge.isDesktopHost()) {
+    return <DesktopHostRequiredScreen />;
+  }
+
+  return <RuleEditorAppContent />;
 };

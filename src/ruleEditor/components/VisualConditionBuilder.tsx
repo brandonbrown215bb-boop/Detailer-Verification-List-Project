@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Code2, Layers, AlertCircle, HelpCircle } from 'lucide-react';
-import { VisualConditionGroup, VisualConditionLeaf, VisualConditionNode, ComparisonOperator } from '../types';
+import { VisualConditionGroup, VisualConditionLeaf, VisualConditionNode, VisualConditionUnsupported, ComparisonOperator } from '../types';
 import { FACT_DICTIONARY, getFactDefinition, getFactsByScope } from './FactDictionaryCatalog';
 import { generateNodeId, visualTreeToAst, astToVisualTree } from '../services/astConverter';
 import { ASTPredicate, RuleScope } from '../../types';
@@ -294,7 +294,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
         </div>
 
         {group.children.length === 0 ? (
-          <div className="py-4 text-center text-xs text-slate-500 bg-slate-950/40 rounded border border-dashed border-slate-800">
+          <div className="py-4 text-center text-xs text-slate-400 bg-slate-950/40 rounded border border-dashed border-slate-800">
             {isRoot ? (
               <>
                 No conditions in this group. Rule is <strong className="text-emerald-400">Always Applicable (Standard Check)</strong>.
@@ -310,12 +310,42 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
             {group.children.map(child => {
               if (child.type === 'condition') {
                 return renderLeaf(child);
+              } else if (child.type === 'unsupported') {
+                return renderUnsupported(child);
               } else {
                 return renderGroup(child, false);
               }
             })}
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderUnsupported = (node: VisualConditionUnsupported) => {
+    return (
+      <div
+        key={node.id}
+        className="flex items-center justify-between gap-3 p-2.5 rounded bg-slate-950/90 border border-amber-800/60 text-xs"
+      >
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-amber-400">Complex Rule Logic (Read-Only)</span>
+            <span className="text-[11px] text-slate-400">Preserved in AST</span>
+          </div>
+          <code className="text-[11px] font-mono text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 block truncate">
+            {JSON.stringify(node.rawPredicate)}
+          </code>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleRemoveNode(node.id)}
+          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-950/40 rounded transition-colors shrink-0"
+          title="Delete condition"
+          aria-label="Delete condition"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     );
   };
@@ -332,6 +362,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
         {/* Fact Selector */}
         <div className="flex-1 min-w-[200px]">
           <select
+            aria-label="Condition fact"
             value={leaf.factKey}
             onChange={e => handleUpdateCondition(leaf.id, { factKey: e.target.value })}
             className="w-full text-xs bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-blue-500 focus:outline-none"
@@ -351,6 +382,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
         {/* Operator Selector */}
         <div className="w-[140px]">
           <select
+            aria-label="Condition operator"
             value={leaf.operator}
             onChange={e => handleUpdateCondition(leaf.id, { operator: e.target.value as ComparisonOperator })}
             className="w-full text-xs bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-blue-500 focus:outline-none"
@@ -389,6 +421,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
             </div>
           ) : factDef?.dataType === 'enum' && leaf.operator === '===' ? (
             <select
+              aria-label="Condition enum value"
               value={leaf.value}
               onChange={e => handleUpdateCondition(leaf.id, { value: e.target.value })}
               className="w-full text-xs bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-blue-500 focus:outline-none"
@@ -402,6 +435,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
           ) : dataType === 'number' ? (
             <div className="relative">
               <input
+                aria-label="Condition numeric value"
                 type="number"
                 step="any"
                 value={leaf.value ?? ''}
@@ -410,13 +444,14 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
                 className="w-full text-xs bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-blue-500 focus:outline-none"
               />
               {factDef?.unit && (
-                <span className="absolute right-2 top-1.5 text-[10px] text-slate-500 font-medium pointer-events-none">
+                <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-medium pointer-events-none">
                   {factDef.unit}
                 </span>
               )}
             </div>
           ) : leaf.operator === 'in' ? (
             <input
+              aria-label="Condition comma-separated values"
               type="text"
               value={Array.isArray(leaf.value) ? leaf.value.join(', ') : leaf.value ?? ''}
               onChange={e => handleUpdateCondition(leaf.id, { value: e.target.value })}
@@ -425,6 +460,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
             />
           ) : (
             <input
+              aria-label="Condition target value"
               type="text"
               value={leaf.value ?? ''}
               onChange={e => handleUpdateCondition(leaf.id, { value: e.target.value })}
@@ -455,7 +491,7 @@ export const VisualConditionBuilder: React.FC<VisualConditionBuilderProps> = ({
           <label className="text-xs font-semibold text-slate-300">
             Applicability Predicate Logic
           </label>
-          <span className="text-[11px] text-slate-500">
+          <span className="text-[11px] text-slate-400">
             (Determines when this rule is Applicable vs Not Applicable)
           </span>
         </div>

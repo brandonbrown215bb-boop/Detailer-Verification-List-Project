@@ -30,6 +30,8 @@ interface SettingsModalProps {
   onSetThemeMode: (mode: ThemeMode) => void;
   detailerName: string;
   onUpdateDetailerName: (name: string) => void;
+  detailerInitials?: string;
+  onUpdateDetailerInitials?: (initials: string) => void;
   rulePackVersion: string;
   ruleCount: number;
   lastAutosavedAt?: string;
@@ -49,6 +51,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSetThemeMode,
   detailerName,
   onUpdateDetailerName,
+  detailerInitials,
+  onUpdateDetailerInitials,
   rulePackVersion,
   ruleCount,
   lastAutosavedAt,
@@ -68,8 +72,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'updated' | 'uptodate' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [launchStatus, setLaunchStatus] = useState<'idle' | 'launching' | 'success' | 'error'>('idle');
-  const [launchMessage, setLaunchMessage] = useState<string | null>(null);
   const [isResetConfirming, setIsResetConfirming] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
@@ -169,28 +171,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleLaunchRuleEditor = async () => {
-    setLaunchStatus('launching');
-    setLaunchMessage('Launching Rule & Logic Editor...');
-    try {
-      const res = await desktopBridge.launchRuleEditor();
-      if (res.success) {
-        setLaunchStatus('success');
-        setLaunchMessage('Rule & Logic Editor launched successfully in a new window.');
-        setTimeout(() => {
-          setLaunchStatus('idle');
-          setLaunchMessage(null);
-        }, 4000);
-      } else {
-        setLaunchStatus('error');
-        setLaunchMessage(res.error || 'Failed to launch Rule & Logic Editor.');
-      }
-    } catch (err: any) {
-      setLaunchStatus('error');
-      setLaunchMessage(err?.message || 'Failed to launch Rule & Logic Editor.');
-    }
-  };
-
   return (
     <ModalShell
       isOpen={isOpen}
@@ -283,8 +263,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full px-3.5 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
+              <div>
+                <label htmlFor="settings-detailer-initials" className="block text-[11px] font-mono text-slate-600 dark:text-slate-400 mb-1">
+                  Sign-off Initials (editable override):
+                </label>
+                <input
+                  id="settings-detailer-initials"
+                  aria-label="Detailer Sign-off Initials"
+                  type="text"
+                  maxLength={5}
+                  value={detailerInitials || ''}
+                  onChange={(e) => onUpdateDetailerInitials?.(e.target.value.toUpperCase())}
+                  placeholder={
+                    detailerName.trim()
+                      ? detailerName.trim().split(/\s+/).length === 1
+                        ? (detailerName.trim().length >= 2 ? detailerName.trim().slice(0, 2).toUpperCase() : detailerName.trim().toUpperCase())
+                        : detailerName.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 4).toUpperCase()
+                      : 'TD'
+                  }
+                  className="w-24 font-mono font-bold uppercase px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-blue-600 dark:text-blue-400 placeholder-slate-400 outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                Initials will be auto-derived ({detailerName ? detailerName.slice(0, 2).toUpperCase() : 'TD'}) and written to cell Z of the Excel Verification List sheet.
+                Initials ({
+                  detailerInitials || (detailerName.trim()
+                    ? (detailerName.trim().split(/\s+/).length === 1
+                        ? (detailerName.trim().length >= 2 ? detailerName.trim().slice(0, 2).toUpperCase() : detailerName.trim().toUpperCase())
+                        : detailerName.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 4).toUpperCase())
+                    : 'TD')
+                }) will be written to cell Z of the Excel Verification List sheet for completed checks and logged in the hidden audit sheet.
               </p>
             </div>
           </div>
@@ -395,38 +402,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>{statusMessage}</span>
                   </div>
                 )}
-              </div>
-
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex-1">
-                  {launchMessage && (
-                    <div className={`text-xs p-2 rounded flex items-center gap-1.5 ${
-                      launchStatus === 'success'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                        : launchStatus === 'error'
-                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
-                        : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                    }`}>
-                      {launchStatus === 'launching' && <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />}
-                      {launchStatus === 'success' && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-                      {launchStatus === 'error' && <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
-                      <span>{launchMessage}</span>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={launchStatus === 'launching'}
-                  onClick={handleLaunchRuleEditor}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
-                >
-                  {launchStatus === 'launching' ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Shield className="w-3.5 h-3.5" />
-                  )}
-                  <span>{launchStatus === 'launching' ? 'Launching Editor...' : 'Launch Rule & Logic Editor'}</span>
-                </button>
               </div>
             </div>
           </div>

@@ -17,7 +17,7 @@ import {
   User
 } from 'lucide-react';
 import { Fact, ChecklistInstance, ThemeMode, DvlProjectFile, UpzBundle } from '../types';
-import { UnitReadiness, computeUnitReadiness } from '../utils/readiness';
+import { UnitReadiness, EMPTY_READINESS } from '../utils/readiness';
 import { desktopBridge } from '../services/desktopBridge';
 
 interface HeaderProps {
@@ -82,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derive centralized readiness predicate (no weight fact exclusions)
-  const unitReadiness = readiness || computeUnitReadiness(facts, checklists || []);
+  const unitReadiness = readiness || EMPTY_READINESS;
   const { unconfirmedFactsCount, blockedChecksCount } = unitReadiness;
   const totalPendingActionCount = unconfirmedFactsCount + blockedChecksCount;
 

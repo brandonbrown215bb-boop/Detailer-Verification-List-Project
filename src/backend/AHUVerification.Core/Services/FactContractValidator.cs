@@ -116,28 +116,42 @@ namespace AHUVerification.Core.Services
 
         public static void Validate(JsonElement contract, JsonElement rules, JsonElement templateMap)
         {
-            if (contract.ValueKind != JsonValueKind.Object)
-                throw new InvalidOperationException("Rule pack fact_contract.json must be a JSON object.");
+            var errors = GetValidationErrors(contract, rules, templateMap);
+            if (errors.Count > 0) throw new InvalidOperationException("Rule pack validation failed:\n" + string.Join("\n", errors));
+        }
 
-            string version = RequiredString(contract, "contractVersion", "fact_contract");
-            if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("Fact contract version is empty.");
+        public static List<string> GetValidationErrors(JsonElement contract, JsonElement rules, JsonElement templateMap)
+        {
+            if (contract.ValueKind != JsonValueKind.Object)
+                return new List<string> { "Rule pack fact_contract.json must be a JSON object." };
+
+            string version = OptionalString(contract, "contractVersion") ?? "";
+            if (string.IsNullOrWhiteSpace(version)) return new List<string> { "Fact contract version is empty." };
 
             var aliases = new Dictionary<string, string>(BuiltInAliases, StringComparer.Ordinal);
             if (contract.TryGetProperty("legacyAliases", out var aliasElement))
             {
-                if (aliasElement.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("fact_contract.legacyAliases must be an object.");
+                if (aliasElement.ValueKind != JsonValueKind.Object) return new List<string> { "fact_contract.legacyAliases must be an object." };
                 foreach (var property in aliasElement.EnumerateObject())
                 {
                     if (property.Value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(property.Value.GetString()))
-                        throw new InvalidOperationException($"fact_contract.legacyAliases.{property.Name} must map to a non-empty string.");
+                        return new List<string> { $"fact_contract.legacyAliases.{property.Name} must map to a non-empty string." };
                     aliases[property.Name] = property.Value.GetString()!;
                 }
             }
 
             var specs = new List<FactSpec>();
-            ReadSpecs(contract, "facts", specs);
-            ReadSpecs(contract, "patterns", specs);
-            if (specs.Count == 0) throw new InvalidOperationException("fact_contract must declare facts or patterns.");
+            try
+            {
+                ReadSpecs(contract, "facts", specs);
+                ReadSpecs(contract, "patterns", specs);
+            }
+            catch (Exception ex)
+            {
+                return new List<string> { ex.Message };
+            }
+
+            if (specs.Count == 0) return new List<string> { "fact_contract must declare facts or patterns." };
 
             var errors = new List<string>();
             if (rules.ValueKind != JsonValueKind.Array || rules.GetArrayLength() == 0) errors.Add("rules.json must be a non-empty array.");
@@ -179,7 +193,7 @@ namespace AHUVerification.Core.Services
             }
 
             ValidateTemplateMap(templateMap, semanticKeys, specs, aliases, errors);
-            if (errors.Count > 0) throw new InvalidOperationException("Rule pack validation failed:\n" + string.Join("\n", errors));
+            return errors;
         }
 
         public static Dictionary<string, JsonElement>? NormalizePredicate(Dictionary<string, JsonElement>? predicate)

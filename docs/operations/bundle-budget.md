@@ -14,21 +14,20 @@ Reference baseline (captured from the built output at the Wave 1 starting point)
 | `index.html` | 1,252,597 bytes | 264,278 bytes | 1,400,000 / 450,000 |
 | `rule-editor.html` | 708,651 bytes | 207,335 bytes | 800,000 / 300,000 |
 
-The largest optional dependency is the `xlsx`/SheetJS path used by browser draft
-export. Phase 4 moved that path behind a dynamic import in the browser bridge.
-The total entry budget still includes the on-demand chunk, while the startup graph
-no longer loads it. The graph measurement is repeatable with `npm run test:graph`.
+The largest historical optional dependency was the `xlsx`/SheetJS path used by prototype browser draft
+export. In CE5, `xlsx`, `file-saver`, and all 8 duplicate TypeScript domain engine modules were completely deleted from the codebase. All Excel deliverables (both draft and final) are generated authoritatively by C# OpenXML in the desktop host.
 
-Phase 4 startup graph measurement:
+Post-CE5/CE6 measurements (desktop-only authoritative engine architecture):
 
-| Entry | Before startup | After startup | On-demand after |
-| --- | ---: | ---: | ---: |
-| `index.html` | 1,360,149 / 290,095 gzip | 1,018,719 / 178,760 gzip | 340,459 / 111,643 gzip |
-| `rule-editor.html` | 749,074 / 216,100 gzip | 407,556 / 104,727 gzip | 340,459 / 111,643 gzip |
+| Entry | Startup Files | Uncompressed | Gzip | On-demand Chunks | Ceiling |
+| --- | :---: | ---: | ---: | :---: | --- |
+| `index.html` | 3 | 901,686 bytes | 148,438 bytes | 0 files (0 bytes) | 1,400,000 / 450,000 |
+| `rule-editor.html` | 3 | 396,041 bytes | 99,517 bytes | 0 files (0 bytes) | 800,000 / 300,000 |
 
-Values are `raw bytes / gzip bytes`. The retained SheetJS chunk is intentional:
-browser draft export still works, while certified Excel synthesis remains owned by
-the native desktop host.
+Net Reduction from Phase 4:
+- `index.html`: **-458,463 bytes** raw (~33.7% reduction), **-141,657 bytes** gzip (~48.8% reduction).
+- `rule-editor.html`: **-353,033 bytes** raw (~47.1% reduction), **-116,583 bytes** gzip (~54.0% reduction).
+- On-demand chunks: completely eliminated (0 bytes). All presentation assets load cleanly at startup with zero lazy chunks.
 
 Bundle size is not a proxy for installer readiness. First-launch/uninstall
 verification and real WebView2 host smoke remain Windows release-environment gates.

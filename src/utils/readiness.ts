@@ -1,8 +1,6 @@
 import type {
   Fact,
   ChecklistInstance,
-  CheckStatus,
-  RuleApplicability,
   ScopeReadiness,
   UnitReadiness,
   DomainFact,
@@ -71,143 +69,43 @@ export function resolveFactForScope(
   return { resolvedKey: factKey, fact: facts ? facts[factKey] : undefined };
 }
 
-/**
- * Computes readiness metrics for a specific scope target ('unit', 'skid-1', 'skid-2', etc.)
- * Supports multiple overloaded signatures for flexibility.
- */
-export function computeScopeReadiness(
-  factsOrChecklists: Record<string, Fact> | ChecklistInstance[],
-  checklistsOrScope: ChecklistInstance[] | string,
-  scopeTargetId?: string,
-  rules: RuleDefinition[] = []
-): ScopeReadiness {
-  let checklists: ChecklistInstance[] = [];
-  let scopeId = '';
+export const EMPTY_SCOPE_READINESS: ScopeReadiness = {
+  scopeTargetId: '',
+  totalChecks: 0,
+  totalChecksCount: 0,
+  applicableChecks: 0,
+  totalApplicableChecksCount: 0,
+  passedChecks: 0,
+  completedChecksCount: 0,
+  incompleteChecks: 0,
+  incompleteChecksCount: 0,
+  blockedChecks: 0,
+  blockedChecksCount: 0,
+  naChecksCount: 0,
+  percentComplete: 0,
+  isComplete: false,
+  isFullyVerified: false,
+  blockedRules: [],
+  incompleteRules: [],
+  passedRules: []
+};
 
-  if (typeof checklistsOrScope === 'string') {
-    checklists = Array.isArray(factsOrChecklists) ? factsOrChecklists : [];
-    scopeId = checklistsOrScope;
-  } else {
-    checklists = Array.isArray(checklistsOrScope) ? checklistsOrScope : [];
-    scopeId = scopeTargetId || '';
-  }
-
-  const scopeChecks = (checklists || []).filter(c => c.scopeTargetId === scopeId);
-  const applicableChecks = scopeChecks.filter(c => c.applicability === 'Applicable');
-  const ruleById = new Map((rules || []).map(rule => [rule.id, rule]));
-  const allowsNA = (item: ChecklistInstance) => ruleById.get(item.ruleId)?.allowNA ?? item.allowNA ?? false;
-  const passedRules = applicableChecks.filter(c => c.status === 'Passed');
-  const naRules = applicableChecks.filter(c => c.status === 'NA' && allowsNA(c));
-  const incompleteRules = applicableChecks.filter(c => c.status !== 'Passed' && (c.status !== 'NA' || !allowsNA(c)));
-  const blockedRules = scopeChecks.filter(isChecklistBlocked);
-
-  const totalChecks = scopeChecks.length;
-  const applicableChecksCount = applicableChecks.length;
-  const passedChecksCount = passedRules.length;
-  const completedChecksCount = passedRules.length + naRules.length;
-  const incompleteChecksCount = incompleteRules.length;
-  const blockedChecksCount = blockedRules.length;
-  const naChecksCount = naRules.length;
-
-  const percentComplete = applicableChecksCount > 0
-    ? Math.round((completedChecksCount / applicableChecksCount) * 100)
-    : 0;
-
-  const isComplete = applicableChecksCount > 0 &&
-    blockedChecksCount === 0 &&
-    incompleteChecksCount === 0;
-
-  return {
-    scopeTargetId: scopeId,
-    totalChecks,
-    totalChecksCount: totalChecks,
-    applicableChecks: applicableChecksCount,
-    totalApplicableChecksCount: applicableChecksCount,
-    passedChecks: passedChecksCount,
-    completedChecksCount,
-    incompleteChecks: incompleteChecksCount,
-    incompleteChecksCount,
-    blockedChecks: blockedChecksCount,
-    blockedChecksCount,
-    naChecksCount,
-    percentComplete,
-    isComplete,
-    isFullyVerified: isComplete,
-    blockedRules,
-    incompleteRules,
-    passedRules
-  };
-}
-
-/**
- * Computes deterministic unit-level and project-level readiness metrics.
- * 
- * Rules:
- * 1. unconfirmedFactsCount includes all facts with status === 'Unknown' or confidence === 'RequiresConfirmation' (including weights).
- * 2. blockedChecksCount includes all checklist instances with applicability === 'NeedsInput'.
- * 3. completedChecksCount includes all applicable rules marked Passed or NA.
- * 4. incompleteChecksCount includes applicable rules not marked Passed or NA.
- * 5. isReadyForFinal is strictly true iff unconfirmedFactsCount === 0 && blockedChecksCount === 0 && incompleteChecksCount === 0 && totalApplicableChecksCount > 0.
- */
-export function computeUnitReadiness(
-  facts: Record<string, Fact> = {},
-  checklists: ChecklistInstance[] = [],
-  rules: RuleDefinition[] = []
-): UnitReadiness {
-  const factList = Object.values(facts || {});
-  const unconfirmedFacts = factList.filter(isFactUnconfirmed);
-  const unconfirmedFactsCount = unconfirmedFacts.length;
-
-  const blockedRules = (checklists || []).filter(isChecklistBlocked);
-  const blockedChecksCount = blockedRules.length;
-
-  const applicableChecks = (checklists || []).filter(c => c.applicability === 'Applicable');
-  const totalApplicableChecksCount = applicableChecks.length;
-
-  const ruleById = new Map((rules || []).map(rule => [rule.id, rule]));
-  const allowsNA = (item: ChecklistInstance) => ruleById.get(item.ruleId)?.allowNA ?? item.allowNA ?? false;
-  const passedRules = applicableChecks.filter(c => c.status === 'Passed');
-  const naRules = applicableChecks.filter(c => c.status === 'NA' && allowsNA(c));
-  const completedChecksCount = passedRules.length + naRules.length;
-
-  const incompleteRules = applicableChecks.filter(c => c.status !== 'Passed' && (c.status !== 'NA' || !allowsNA(c)));
-  const incompleteChecksCount = incompleteRules.length;
-
-  const totalChecksCount = (checklists || []).length;
-
-  const percentComplete = totalApplicableChecksCount > 0
-    ? Math.round((completedChecksCount / totalApplicableChecksCount) * 100)
-    : 0;
-
-  const isReadyForFinal = totalApplicableChecksCount > 0 &&
-    unconfirmedFactsCount === 0 &&
-    blockedChecksCount === 0 &&
-    incompleteChecksCount === 0;
-
-  // Build per-scope readiness map
-  const scopeIds = Array.from(new Set((checklists || []).map(c => c.scopeTargetId)));
-  const scopeReadinessMap: Record<string, ScopeReadiness> = {};
-  scopeIds.forEach(scopeId => {
-    scopeReadinessMap[scopeId] = computeScopeReadiness(facts, checklists, scopeId, rules);
-  });
-
-  return {
-    unconfirmedFactsCount,
-    blockedChecksCount,
-    incompleteChecksCount,
-    completedChecksCount,
-    naChecksCount: naRules.length,
-    totalApplicableChecksCount,
-    totalChecksCount,
-    percentComplete,
-    isReadyForFinal,
-    blockedRules,
-    unconfirmedFacts,
-    incompleteRules,
-    passedRules,
-    scopeReadinessMap
-  };
-}
+export const EMPTY_READINESS: UnitReadiness = {
+  unconfirmedFactsCount: 0,
+  blockedChecksCount: 0,
+  incompleteChecksCount: 0,
+  completedChecksCount: 0,
+  naChecksCount: 0,
+  totalApplicableChecksCount: 0,
+  totalChecksCount: 0,
+  percentComplete: 0,
+  isReadyForFinal: false,
+  blockedRules: [],
+  unconfirmedFacts: [],
+  incompleteRules: [],
+  passedRules: [],
+  scopeReadinessMap: {}
+};
 
 /**
  * Projects authoritative readiness directly from a C# ProjectSessionSnapshot.

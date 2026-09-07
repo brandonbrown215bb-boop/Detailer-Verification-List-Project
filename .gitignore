@@ -44,6 +44,10 @@ TestResults/
 *.suo
 .vs/
 
+# User-created Verification List exports. Keep the checked-in workbook templates tracked.
+*_Detailing_Verification_List.xlsx
+*_Detailing_Verification_List_DRAFT.xlsx
+
 # Environment / Secrets
 .env
 .env*.local

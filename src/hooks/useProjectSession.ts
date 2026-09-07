@@ -14,27 +14,37 @@ import type {
   BatchFactOverrideItem,
   ProjectSessionSnapshot,
   SessionCommandResult,
-  SpecialQuoteSlotAssignment
+  SpecialQuoteSlotAssignment,
+  RecoveryInfo
 } from '../types/session';
-import {
-  extractBrowserPreviewFacts,
-  parseBrowserPreviewAhuXml,
-  parseBrowserPreviewOrderRevXml
-} from '../services/browserPreviewIngestion';
-import { normalizePersistedFactRegistry, overrideFact, revertFact } from '../services/factRegistry';
-import { generateChecklists } from '../services/ruleEvaluator';
-import { createDvlProject, inspectDvlIntegrity, saveDvlToFile, autosaveToLocal, loadAutosave } from '../services/projectStorage';
-import { createManualUnit, type ManualUnitConfig } from '../services/manualUnitFactory';
 import { desktopBridge } from '../services/desktopBridge';
 import { parseFactInput } from '../services/factContract';
 import { SAMPLE_CONFIG_XML } from '../fixtures/sampleConfigXml';
 import {
-  manualOverridesFromFacts,
   sourceMetadataFromBundle,
   type ActiveRulePackArtifacts,
   type SourceMetadata
 } from '../orchestration/projectSession';
-import { computeUnitReadiness, projectSessionReadiness, type UnitReadiness } from '../utils/readiness';
+import { projectSessionReadiness, type UnitReadiness } from '../utils/readiness';
+import type { ManualUnitConfig } from '../types/manual';
+import { STORAGE_KEYS } from '../utils/constants';
+
+const EMPTY_READINESS: UnitReadiness = {
+  unconfirmedFactsCount: 0,
+  blockedChecksCount: 0,
+  incompleteChecksCount: 0,
+  completedChecksCount: 0,
+  naChecksCount: 0,
+  totalApplicableChecksCount: 0,
+  totalChecksCount: 0,
+  percentComplete: 0,
+  isReadyForFinal: false,
+  blockedRules: [],
+  unconfirmedFacts: [],
+  incompleteRules: [],
+  passedRules: [],
+  scopeReadinessMap: {}
+};
 
 export interface ExportNotice {
   fileName: string;
@@ -57,6 +67,7 @@ export interface UseProjectSessionResult {
   checklists: ChecklistInstance[];
   generalComments: string;
   autosavedProject: DvlProjectFile | null;
+  recoveryInfo: RecoveryInfo | null;
   projectIntegrityWarning: string | null;
   sourceIsTrusted: boolean;
   pendingVerifications: number;
@@ -64,6 +75,7 @@ export interface UseProjectSessionResult {
   exportNotice: ExportNotice | null;
   exportError: string | null;
   sessionSnapshot: ProjectSessionSnapshot | null;
+  applySessionSnapshot: (snapshot: ProjectSessionSnapshot) => void;
   readiness: UnitReadiness;
   setSqItems: Dispatch<SetStateAction<SpecialQuote[]>>;
   setGeneralComments: Dispatch<SetStateAction<string>>;
@@ -104,7 +116,8 @@ export function useProjectSession({
   const [sqItems, setSqItems] = useState<SpecialQuote[]>([]);
   const [checklists, setChecklists] = useState<ChecklistInstance[]>([]);
   const [rawXml, setRawXml] = useState<string>('');
-  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(() => loadAutosave());
+  const [autosavedProject, setAutosavedProject] = useState<DvlProjectFile | null>(null);
+  const [recoveryInfo, setRecoveryInfo] = useState<RecoveryInfo | null>(null);
   const [generalComments, setGeneralComments] = useState<string>(
     'Verification performed in accordance with standard factory detailing guidelines and BOM requirements.'
   );
@@ -166,6 +179,18 @@ export function useProjectSession({
     if (snapshot.rawConfigXml !== undefined) {
       setRawXml(snapshot.rawConfigXml);
       latestRawXml.current = snapshot.rawConfigXml;
+    }
+    if (snapshot.currentProjectPath !== undefined) {
+      setCurrentProjectPath(snapshot.currentProjectPath || null);
+    }
+    if (snapshot.lastSavedAt !== undefined) {
+      setLastSavedAt(snapshot.lastSavedAt || null);
+    }
+    if (snapshot.integrityWarning !== undefined) {
+      setProjectIntegrityWarning(snapshot.integrityWarning || null);
+    }
+    if (snapshot.integrityState !== undefined) {
+      setProjectIntegrityClassification(snapshot.integrityState || null);
     }
     const currentPrevMetadata = latestSourceMetadata.current;
     const nextMetadata: SourceMetadata = snapshot.source ? {
@@ -254,14 +279,13 @@ export function useProjectSession({
     return chained;
   }, [syncFromSnapshot]);
 
-  // Derived readiness: Authoritative projection from C# ProjectSession when active,
-  // falling back to computeUnitReadiness in standalone web preview / test environments.
+  // Derived readiness: Authoritative projection from C# ProjectSession
   const readiness = useMemo<UnitReadiness>(() => {
     if (sessionSnapshot) {
       return projectSessionReadiness(sessionSnapshot);
     }
-    return computeUnitReadiness(facts, checklists, activeRules);
-  }, [sessionSnapshot, facts, checklists, activeRules]);
+    return EMPTY_READINESS;
+  }, [sessionSnapshot]);
 
   // Startup and Settings pack changes share this migration boundary. Every
   // applied pack change invalidates old asynchronous verification work.
@@ -270,11 +294,7 @@ export function useProjectSession({
     previousPackHash.current = rulePackIdentity.sha256;
     const revision = ++sessionRevision.current;
     if (!graph || !isProjectLoaded) return;
-    const wasTrusted = sourceIsTrusted;
-    setSourceIsTrusted(false);
-    setProjectIntegrityClassification('pack-mismatch');
-    setProjectIntegrityWarning('This project was evaluated with a previous Rule Pack. It must be explicitly recomputed and reviewed before final export.');
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       setPendingVerifications(count => count + 1);
       void desktopBridge.projectSessionGetSnapshot().then(snapshot => {
         if (revision !== sessionRevision.current) return;
@@ -282,87 +302,32 @@ export function useProjectSession({
       }).catch(err => {
         console.warn('Failed to retrieve updated session snapshot after rule pack change:', err);
       }).finally(() => setPendingVerifications(count => count - 1));
-      return;
     }
-    const overrides = manualOverridesFromFacts(latestFacts.current);
-    if (desktopBridge.isRunningInDesktop() && wasTrusted && rawXml) {
-      setPendingVerifications(count => count + 1);
-      void desktopBridge.projectSessionOpen({
-        configXml: rawXml,
-        orderRevXml: sourceMetadata.rawOrderRevisionXml,
-        manifestXml: sourceMetadata.rawManifestXml,
-        filePath: sourceMetadata.fileName || 'Config.xml',
-        isUpz: !!sourceMetadata.isUpzBundle,
-        isTrusted: true,
-        initialOverrides: overrides,
-        initialChecklists: latestChecklists.current,
-        initialSpecialQuotes: sqItems,
-        initialGeneralComments: generalComments
-      }).then(snapshot => {
-        if (revision !== sessionRevision.current) return;
-        syncFromSnapshot(snapshot);
-      }).catch(err => {
-        console.warn('Failed to recompute project after Rule Pack update via session open, trying fallback verify:', err);
-        return desktopBridge.verifySource(
-          rawXml,
-          sourceMetadata.rawOrderRevisionXml,
-          sourceMetadata.rawManifestXml,
-          overrides,
-          sqItems,
-          checklists
-        ).then(verified => {
-          if (revision !== sessionRevision.current) return;
-          setGraph(verified.graph);
-          setFacts(verified.facts);
-          setChecklists(verified.checklists);
-          setSourceIsTrusted(verified.sourceIsTrusted === true);
-        });
-      }).finally(() => setPendingVerifications(count => count - 1));
-    } else {
-      setChecklists(generateChecklists(activeRules, graph, latestFacts.current, latestChecklists.current));
-    }
-  }, [rulePackIdentity.sha256, activeRules, graph, isProjectLoaded, rawXml, sourceMetadata, sqItems, checklists, sourceIsTrusted, generalComments, syncFromSnapshot]);
+  }, [rulePackIdentity.sha256, graph, isProjectLoaded, syncFromSnapshot]);
 
-  // Autosave when active data changes. Project creation is cancellable so a
-  // slower integrity hash cannot publish an older session snapshot.
+  // Check for native recovery session on desktop host startup
   useEffect(() => {
-    if (isProjectLoaded && graph && facts && sqItems && checklists) {
-      let cancelled = false;
-      void createDvlProject(graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata, {
-        rulePackIdentity,
-        activeRules,
-        rulePackSnapshot: {
-          templateMap: activeRulePackArtifacts.templateMap as any,
-          approvedMappings: activeRulePackArtifacts.approvedMappings,
-          rules: activeRules
-        },
-        integrityState: projectIntegrityClassification || undefined
-      })
-        .then(proj => {
-          if (cancelled) return;
-          autosaveToLocal(proj);
-          setAutosavedProject(proj);
-          setLastSavedAt(new Date().toISOString());
-        })
-        .catch(error => console.warn('Autosave project creation failed:', error));
-      return () => {
-        cancelled = true;
-      };
+    if (desktopBridge.isRunningInDesktop()) {
+      desktopBridge.getRecoveryInfo().then(info => {
+        if (info && info.hasRecovery) {
+          setRecoveryInfo(info);
+          setAutosavedProject({
+            jobName: info.jobName || 'Recovered Session',
+            comNumber: info.comNumber || 'COM Pending',
+            author: info.author || 'Detailer',
+            lastSavedAt: info.lastSavedAt || new Date().toISOString()
+          } as any);
+        }
+      }).catch(err => {
+        console.warn('Failed to check native recovery info:', err);
+      });
     }
-  }, [isProjectLoaded, graph, facts, sqItems, checklists, rawXml, generalComments, sourceMetadata, activeRules, rulePackIdentity, activeRulePackArtifacts, projectIntegrityClassification]);
-
-  // Browser Preview fallback for fact editing
-  const applyFactEdit = useCallback((updated: Record<string, Fact>) => {
-    if (!graph) return;
-    latestFacts.current = updated;
-    setFacts(updated);
-    setChecklists(generateChecklists(activeRules, graph, updated, latestChecklists.current));
-  }, [graph, activeRules]);
+  }, []);
 
   const handleUpdateFact = useCallback((key: string, value: any, author: string = 'Detailer', note?: string) => {
     try {
       const typedValue = typeof value === 'string' ? parseFactInput(key, value) : value;
-      if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      if (sessionSnapshotRef.current) {
         void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
           desktopBridge.projectSessionOverrideFact({
             sessionId,
@@ -374,16 +339,14 @@ export function useProjectSession({
             comment: note
           })
         );
-        return;
       }
-      applyFactEdit(overrideFact(latestFacts.current, key, typedValue, author, note));
     } catch (error: any) {
       alert(error.message);
     }
-  }, [applyFactEdit, dispatchSessionCommand]);
+  }, [dispatchSessionCommand]);
 
   const handleRevertFact = useCallback((key: string) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionRevertFact({
           sessionId,
@@ -392,191 +355,97 @@ export function useProjectSession({
           factId: key
         })
       );
-      return;
     }
-    applyFactEdit(revertFact(latestFacts.current, key));
-  }, [applyFactEdit, dispatchSessionCommand]);
+  }, [dispatchSessionCommand]);
 
   const loadXmlData = useCallback(async (xmlString: string, bundle?: UpzBundle, sourceFileName?: string, sourceFilePath?: string, sourceHandle?: string) => {
     const generation = ++sessionLifecycleGeneration.current;
     const revision = ++sessionRevision.current;
     pendingCommandChain.current = Promise.resolve();
-    let orderRev = bundle?.orderRevision;
-    if (!orderRev && bundle?.rawOrderRevXml) {
-      orderRev = parseBrowserPreviewOrderRevXml(bundle.rawOrderRevXml);
-    }
-    const meta = sourceMetadataFromBundle(bundle, sourceFileName, orderRev);
+    const meta = sourceMetadataFromBundle(bundle, sourceFileName, bundle?.orderRevision);
     if (sourceFilePath) {
       meta.filePath = sourceFilePath;
     }
 
-    if (desktopBridge.isRunningInDesktop()) {
-      try {
-        const snapshot = await desktopBridge.projectSessionOpen({
-          configXml: xmlString,
-          orderRevXml: bundle?.rawOrderRevXml,
-          manifestXml: bundle?.rawManifestXml,
-          filePath: sourceFilePath || sourceFileName || meta.fileName || 'Config.xml',
-          isUpz: !!bundle,
-          isTrusted: false,
-          sourceHandle
-        });
-        if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-        syncFromSnapshot(snapshot);
-        setRawXml(xmlString);
-        setSourceMetadata(meta);
-        setCurrentProjectPath(null);
-        setProjectIntegrityWarning(null);
-        setProjectIntegrityClassification(null);
-        setIsProjectLoaded(true);
-        onSessionLoaded?.();
+    try {
+      const snapshot = await desktopBridge.projectSessionOpen({
+        configXml: xmlString,
+        orderRevXml: bundle?.rawOrderRevXml,
+        manifestXml: bundle?.rawManifestXml,
+        filePath: sourceFilePath || sourceFileName || meta.fileName || 'Config.xml',
+        isUpz: !!bundle,
+        isTrusted: false,
+        sourceHandle
+      });
+      if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
+      syncFromSnapshot(snapshot);
+      setRawXml(xmlString);
+      setSourceMetadata(meta);
+      setCurrentProjectPath(null);
+      setProjectIntegrityWarning(null);
+      setProjectIntegrityClassification(null);
+      setIsProjectLoaded(true);
+      onSessionLoaded?.();
 
-        if (!snapshot.facts['unit.comNumber']?.value) {
-          onRequestComNumber?.();
-        }
-        return;
-      } catch (err: any) {
-        alert(`Host verification failed: ${err.message}`);
-        return;
+      if (!snapshot.facts['unit.comNumber']?.value) {
+        onRequestComNumber?.();
       }
+      const savedDetailer = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DETAILER_NAME) : null;
+      if (savedDetailer && (!snapshot.facts['unit.detailer']?.value || snapshot.facts['unit.detailer']?.status === 'Unknown')) {
+        handleUpdateFact('unit.detailer', savedDetailer, 'Detailer', 'Auto-applied from detailer profile');
+      }
+      const savedInitials = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) : null;
+      if (savedInitials && (!snapshot.facts['unit.detailerInitials']?.value || snapshot.facts['unit.detailerInitials']?.status === 'Unknown')) {
+        handleUpdateFact('unit.detailerInitials', savedInitials, 'Detailer', 'Auto-applied from detailer profile');
+      }
+    } catch (err: any) {
+      alert(`Host verification failed: ${err.message}`);
     }
+  }, [handleUpdateFact, onRequestComNumber, onSessionLoaded, syncFromSnapshot]);
 
-    const newGraph = parseBrowserPreviewAhuXml(xmlString);
-    const newFacts = extractBrowserPreviewFacts(newGraph, orderRev);
-    const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
-
-    if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-
-    setSourceMetadata(meta);
-    setSourceIsTrusted(false);
-    setRawXml(xmlString);
-    setGraph(newGraph);
-    setFacts(newFacts);
-    setChecklists(newChecklists);
-    setSqItems([]);
-    setCurrentProjectPath(null);
-    setProjectIntegrityWarning(null);
-    setProjectIntegrityClassification(null);
-    setIsProjectLoaded(true);
-    onSessionLoaded?.();
-
-    if (!newFacts['unit.comNumber']?.value) {
-      onRequestComNumber?.();
-    }
-  }, [activeRules, onRequestComNumber, onSessionLoaded, syncFromSnapshot]);
-
-  const handleOpenDvl = useCallback(async (project: DvlProjectFile, _rawJson?: string, filePath?: string) => {
+  const handleOpenDvl = useCallback(async (project: DvlProjectFile, rawJson?: string, filePath?: string) => {
     const generation = ++sessionLifecycleGeneration.current;
     const revision = ++sessionRevision.current;
     pendingCommandChain.current = Promise.resolve();
-    let trusted = false;
+
     try {
-      const integrity = await inspectDvlIntegrity(project, rulePackIdentity);
-      const persistedFacts = normalizePersistedFactRegistry(project.factRegistry || {});
-      const persistedSqItems = project.sqItems || [];
-      const persistedChecklists = project.checklistInstances || [];
-      const persistedSource = project.sourceXml || ({} as DvlProjectFile['sourceXml']);
-      const persistedMetadata: SourceMetadata = {
-        fileName: persistedSource.fileName,
-        isUpzBundle: persistedSource.isUpzBundle,
-        orderRevision: persistedSource.orderRevision,
-        rawOrderRevisionXml: persistedSource.rawOrderRevisionXml,
-        rawManifestXml: persistedSource.rawManifestXml
-      };
-
-      if (persistedSource.rawXml && desktopBridge.isRunningInDesktop()) {
-        const snapshot = await desktopBridge.projectSessionOpen({
-          configXml: persistedSource.rawXml,
-          orderRevXml: persistedSource.rawOrderRevisionXml,
-          manifestXml: persistedSource.rawManifestXml,
-          filePath: filePath || persistedMetadata.fileName || 'Project.dvl',
-          isUpz: !!persistedMetadata.isUpzBundle,
-          isTrusted: false,
-          initialOverrides: manualOverridesFromFacts(persistedFacts),
-          initialChecklists: persistedChecklists,
-          initialSpecialQuotes: persistedSqItems,
-          initialGeneralComments: project.generalComments || ''
-        });
-        if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-        syncFromSnapshot(snapshot);
-        setRawXml(persistedSource.rawXml || '');
-        setGeneralComments(snapshot.generalComments || project.generalComments || '');
-        setSourceMetadata(persistedMetadata);
-        setCurrentProjectPath(filePath || null);
-        setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
-        setProjectIntegrityClassification(integrity.status === 'unverified' ? integrity.classification : null);
-        setIsProjectLoaded(true);
-        onSessionLoaded?.();
-        return;
-      }
-
-      let loadedGraph = project.normalizedGraph;
-      let loadedFacts = persistedFacts;
-      let loadedChecklists = persistedChecklists;
-      if (persistedSource.rawXml) {
-        loadedGraph = parseBrowserPreviewAhuXml(persistedSource.rawXml);
-        const extractedFacts = extractBrowserPreviewFacts(loadedGraph, persistedSource.orderRevision);
-        loadedFacts = Object.entries(manualOverridesFromFacts(persistedFacts)).reduce(
-          (registry, [key, fact]) => registry[key] ? overrideFact(registry, key, fact.value, 'Detailer', 'Restored persisted override') : registry,
-          extractedFacts
-        );
-        loadedChecklists = generateChecklists(activeRules, loadedGraph, loadedFacts, persistedChecklists);
-      }
-
+      const dvlJson = rawJson || JSON.stringify(project);
+      const snapshot = await desktopBridge.projectSessionOpenDvl({
+        filePath: filePath || undefined,
+        dvlJson
+      });
       if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-      setSessionSnapshot(null);
-      sessionSnapshotRef.current = null;
-      setSourceIsTrusted(trusted);
-      setGraph(loadedGraph);
-      setFacts(loadedFacts);
-      setSqItems(persistedSqItems);
-      setChecklists(loadedChecklists);
-      setRawXml(persistedSource.rawXml || '');
-      setGeneralComments(project.generalComments || '');
-      setSourceMetadata(persistedMetadata);
-      setCurrentProjectPath(filePath || null);
-      setProjectIntegrityWarning(integrity.status === 'unverified' ? integrity.message || 'This project could not be verified.' : null);
-      setProjectIntegrityClassification(integrity.status === 'unverified' ? integrity.classification : null);
+      syncFromSnapshot(snapshot);
+      setRawXml(snapshot.rawConfigXml || '');
+      setGeneralComments(snapshot.generalComments || '');
+      setSourceMetadata({
+        fileName: project.sourceXml?.fileName,
+        filePath: filePath,
+        isUpzBundle: project.sourceXml?.isUpzBundle,
+        orderRevision: project.sourceXml?.orderRevision,
+        rawOrderRevisionXml: project.sourceXml?.rawOrderRevisionXml,
+        rawManifestXml: project.sourceXml?.rawManifestXml
+      });
+      setCurrentProjectPath(snapshot.currentProjectPath || filePath || null);
+      setLastSavedAt(snapshot.lastSavedAt || null);
+      setProjectIntegrityWarning(snapshot.integrityWarning || null);
+      setProjectIntegrityClassification(snapshot.integrityState || null);
+      setSourceIsTrusted(snapshot.source?.isTrusted === true);
       setIsProjectLoaded(true);
       onSessionLoaded?.();
     } catch (err: any) {
-      alert(`Error loading .dvl project: ${err.message}`);
+      alert(`Error loading DVL project: ${err.message}`);
     }
-  }, [activeRules, onSessionLoaded, rulePackIdentity, syncFromSnapshot]);
+  }, [onSessionLoaded, syncFromSnapshot]);
 
   const handleManualCreate = useCallback(async (config: ManualUnitConfig) => {
     const generation = ++sessionLifecycleGeneration.current;
     const revision = ++sessionRevision.current;
     pendingCommandChain.current = Promise.resolve();
-    if (desktopBridge.isRunningInDesktop()) {
-      try {
-        const snapshot = await desktopBridge.projectSessionCreateManual({ config });
-        if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-        syncFromSnapshot(snapshot);
-        setCurrentProjectPath(null);
-        setProjectIntegrityWarning(null);
-        setProjectIntegrityClassification(null);
-        setIsProjectLoaded(true);
-        onSessionLoaded?.();
-      } catch (err: any) {
-        alert(`Error creating manual unit: ${err.message}`);
-      }
-      return;
-    }
-
-    setSessionSnapshot(null);
-    sessionSnapshotRef.current = null;
-    setSourceIsTrusted(false);
     try {
-      const manual = createManualUnit(config, activeRules);
+      const snapshot = await desktopBridge.projectSessionCreateManual({ config });
       if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-      setGraph(manual.graph);
-      setFacts(manual.facts);
-      setChecklists(manual.checklists);
-      setSqItems(manual.sqItems);
-      setRawXml(manual.rawXml);
-      setGeneralComments(manual.generalComments);
-      setSourceMetadata({ fileName: 'Manual Unit Configuration.xml', isUpzBundle: false });
+      syncFromSnapshot(snapshot);
       setCurrentProjectPath(null);
       setProjectIntegrityWarning(null);
       setProjectIntegrityClassification(null);
@@ -585,81 +454,53 @@ export function useProjectSession({
     } catch (err: any) {
       alert(`Error creating manual unit: ${err.message}`);
     }
-  }, [activeRules, onSessionLoaded, syncFromSnapshot]);
+  }, [onSessionLoaded, syncFromSnapshot]);
 
-  const handleResumeAutosave = useCallback(() => {
-    if (autosavedProject) void handleOpenDvl(autosavedProject);
-  }, [autosavedProject, handleOpenDvl]);
-
-  const handleClearAutosave = useCallback(() => {
+  const handleResumeAutosave = useCallback(async () => {
     try {
-      localStorage.removeItem('ahu_dvl_autosave');
+      const snapshot = await desktopBridge.restoreRecovery();
+      syncFromSnapshot(snapshot);
+      setRawXml(snapshot.rawConfigXml || '');
+      setGeneralComments(snapshot.generalComments || '');
+      setCurrentProjectPath(snapshot.currentProjectPath || null);
+      setLastSavedAt(snapshot.lastSavedAt || null);
+      setProjectIntegrityWarning(snapshot.integrityWarning || null);
+      setProjectIntegrityClassification(snapshot.integrityState || null);
+      setSourceIsTrusted(snapshot.source?.isTrusted === true);
+      setIsProjectLoaded(true);
+      onSessionLoaded?.();
+      setRecoveryInfo(null);
       setAutosavedProject(null);
-      setLastSavedAt(null);
-    } catch (e) {
-      console.warn('Failed to clear autosave:', e);
+    } catch (err: any) {
+      alert(`Failed to restore recovery session: ${err?.message || err}`);
     }
+  }, [onSessionLoaded, syncFromSnapshot]);
+
+  const handleClearAutosave = useCallback(async () => {
+    try {
+      await desktopBridge.discardRecovery();
+    } catch (err: any) {
+      console.warn('Failed to discard recovery session:', err);
+    }
+    setRecoveryInfo(null);
+    setAutosavedProject(null);
+    setLastSavedAt(null);
   }, []);
 
   const handleLoadSample = useCallback(async () => {
     const generation = ++sessionLifecycleGeneration.current;
     const revision = ++sessionRevision.current;
     pendingCommandChain.current = Promise.resolve();
-    if (desktopBridge.isRunningInDesktop()) {
-      try {
-        const snapshot = await desktopBridge.projectSessionOpen({
-          configXml: SAMPLE_CONFIG_XML,
-          filePath: 'Sample Config.xml',
-          isUpz: false,
-          isTrusted: false
-        });
-        if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-        syncFromSnapshot(snapshot);
-        setRawXml(SAMPLE_CONFIG_XML);
-        setSourceMetadata({ fileName: 'Sample Config.xml', isUpzBundle: false });
-        setCurrentProjectPath(null);
-        setProjectIntegrityWarning(null);
-        setProjectIntegrityClassification(null);
-        setIsProjectLoaded(true);
-        onSessionLoaded?.();
-        return;
-      } catch (err) {
-        console.warn('Desktop session open failed for sample, falling back to browser preview:', err);
-      }
-    }
-
-    setSessionSnapshot(null);
-    sessionSnapshotRef.current = null;
-    setSourceIsTrusted(false);
     try {
-      const newGraph = parseBrowserPreviewAhuXml(SAMPLE_CONFIG_XML);
-      const newFacts = extractBrowserPreviewFacts(newGraph);
-      const newChecklists = generateChecklists(activeRules, newGraph, newFacts);
-
+      const snapshot = await desktopBridge.projectSessionOpen({
+        configXml: SAMPLE_CONFIG_XML,
+        filePath: 'Sample Config.xml',
+        isUpz: false,
+        isTrusted: false
+      });
       if (revision !== sessionRevision.current || generation !== sessionLifecycleGeneration.current) return;
-
+      syncFromSnapshot(snapshot);
       setRawXml(SAMPLE_CONFIG_XML);
-      setGraph(newGraph);
-      setFacts(newFacts);
-      setChecklists(newChecklists);
-      setSqItems([
-        {
-          slot: 1,
-          id: 'sq-1',
-          text: 'Custom drain pan depth 3.5 in. with copper downspout connection',
-          linkedSkidId: 'skid-3',
-          initials: 'TD',
-          isCompleted: true
-        },
-        {
-          slot: 2,
-          id: 'sq-2',
-          text: 'Dual 630 EBM Fan Wall array with individual disconnects',
-          linkedSkidId: 'skid-4',
-          initials: 'TD',
-          isCompleted: false
-        }
-      ]);
       setSourceMetadata({ fileName: 'Sample Config.xml', isUpzBundle: false });
       setCurrentProjectPath(null);
       setProjectIntegrityWarning(null);
@@ -669,13 +510,13 @@ export function useProjectSession({
     } catch (err: any) {
       alert(`Error loading sample: ${err.message}`);
     }
-  }, [activeRules, onSessionLoaded, syncFromSnapshot]);
+  }, [onSessionLoaded, syncFromSnapshot]);
 
   const handleResetAllChanges = useCallback(async () => {
     const currentGraph = latestGraph.current || graph;
     if (!currentGraph) return;
     try {
-      if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+      if (sessionSnapshotRef.current) {
         await dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
           desktopBridge.projectSessionReset({
             sessionId,
@@ -683,33 +524,26 @@ export function useProjectSession({
             requestId
           })
         );
-        return;
       }
-      const currentMeta = latestSourceMetadata.current || sourceMetadata;
-      const freshFacts = extractBrowserPreviewFacts(currentGraph, currentMeta.orderRevision);
-      const freshChecklists = generateChecklists(activeRules, currentGraph, freshFacts);
-      latestFacts.current = freshFacts;
-      latestChecklists.current = freshChecklists;
-      setFacts(freshFacts);
-      setChecklists(freshChecklists);
     } catch (err: any) {
       alert(`Error resetting changes: ${err.message}`);
     }
-  }, [graph, sourceMetadata, activeRules, dispatchSessionCommand]);
+  }, [graph, dispatchSessionCommand]);
 
   const handleFileUpload = useCallback((file: File) => {
+    const filePath = (file as any).path || (file as any).webkitRelativePath || undefined;
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (file.name.endsWith('.dvl')) {
         try {
           const project = JSON.parse(text);
-          void handleOpenDvl(project);
+          void handleOpenDvl(project, text, filePath);
         } catch (err: any) {
           alert(`Error reading .dvl project file: ${err.message}`);
         }
       } else {
-        void loadXmlData(text, undefined, file.name);
+        void loadXmlData(text, undefined, file.name, filePath);
       }
     };
     reader.readAsText(file);
@@ -732,7 +566,7 @@ export function useProjectSession({
 
     if (items.length === 0) return;
 
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionBatchOverrideFacts({
           sessionId,
@@ -741,76 +575,45 @@ export function useProjectSession({
           requestId
         })
       );
-      return;
     }
-
-    let updated = { ...currentFacts };
-    items.forEach(item => {
-      updated = overrideFact(updated, item.factId, item.value, item.author, item.comment);
-    });
-    applyFactEdit(updated);
-  }, [graph, applyFactEdit, dispatchSessionCommand]);
+  }, [graph, dispatchSessionCommand]);
 
   const handleUpdateChecklistStatus = useCallback((instanceKey: string, status: CheckStatus) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
-      const item = latestChecklists.current.find(c => c.instanceKey === instanceKey);
+    if (sessionSnapshotRef.current) {
+      const savedInitials = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.DETAILER_INITIALS) : null;
+      const currentInitialsFact = sessionSnapshotRef.current.facts['unit.detailerInitials']?.value?.toString();
+      const currentDetailerFact = sessionSnapshotRef.current.facts['unit.detailer']?.value?.toString();
+      const effectiveInitials = currentInitialsFact || savedInitials || (currentDetailerFact ? currentDetailerFact.split(/\s+/).map((p: string) => p[0]).join('').slice(0, 4).toUpperCase() : undefined);
+
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionUpdateChecklist({
           sessionId,
           expectedRevision,
           checkId: instanceKey,
           status,
-          comment: item?.detailerComment,
+          detailerInitials: (status === 'Passed' || status === 'Flagged') ? effectiveInitials : undefined,
           requestId
         })
       );
-      return;
     }
-    ++sessionRevision.current;
-    setChecklists(prev => {
-      const next = prev.map(item => {
-        if (item.instanceKey === instanceKey) {
-          const rule = activeRules.find(candidate => candidate.id === item.ruleId);
-          if (item.applicability !== 'Applicable' || !rule || (status === 'NA' && !rule.allowNA)) return item;
-          return { ...item, status, updatedAt: new Date().toISOString() };
-        }
-        return item;
-      });
-      latestChecklists.current = next;
-      return next;
-    });
-  }, [activeRules, dispatchSessionCommand]);
+  }, [dispatchSessionCommand]);
 
   const handleUpdateChecklistComment = useCallback((instanceKey: string, detailerComment: string) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
-      const item = latestChecklists.current.find(c => c.instanceKey === instanceKey);
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionUpdateChecklist({
           sessionId,
           expectedRevision,
           checkId: instanceKey,
-          status: item?.status || 'Incomplete',
           comment: detailerComment,
           requestId
         })
       );
-      return;
     }
-    ++sessionRevision.current;
-    setChecklists(prev => {
-      const next = prev.map(item => {
-        if (item.instanceKey === instanceKey) {
-          return { ...item, detailerComment, updatedAt: new Date().toISOString() };
-        }
-        return item;
-      });
-      latestChecklists.current = next;
-      return next;
-    });
   }, [dispatchSessionCommand]);
 
   const handleUpdateSpecialQuote = useCallback((item: SpecialQuote) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionUpdateSpecialQuote({
           sessionId,
@@ -819,25 +622,11 @@ export function useProjectSession({
           requestId
         })
       );
-      return;
     }
-    setSqItems(prev => {
-      const existingIndex = prev.findIndex(s => (s.id && item.id && s.id === item.id) || s.slot === item.slot);
-      let next: SpecialQuote[];
-      if (existingIndex >= 0) {
-        next = [...prev];
-        next[existingIndex] = item;
-        next.sort((a, b) => a.slot - b.slot);
-      } else {
-        next = [...prev, item].sort((a, b) => a.slot - b.slot);
-      }
-      latestSqItems.current = next;
-      return next;
-    });
   }, [dispatchSessionCommand]);
 
   const handleDeleteSpecialQuote = useCallback((slotOrId: number | string) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionDeleteSpecialQuote({
           sessionId,
@@ -846,17 +635,11 @@ export function useProjectSession({
           requestId
         })
       );
-      return;
     }
-    setSqItems(prev => {
-      const next = prev.filter(s => s.slot !== slotOrId && s.id !== slotOrId);
-      latestSqItems.current = next;
-      return next;
-    });
   }, [dispatchSessionCommand]);
 
   const handleReorderSpecialQuotes = useCallback((assignments: SpecialQuoteSlotAssignment[]) => {
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionReorderSpecialQuotes({
           sessionId,
@@ -865,23 +648,13 @@ export function useProjectSession({
           requestId
         })
       );
-      return;
     }
-    setSqItems(prev => {
-      const map = new Map(assignments.map(a => [a.quoteId, a.slot]));
-      const next = prev.map(s => {
-        const newSlot = map.get(s.id);
-        return newSlot !== undefined ? { ...s, slot: newSlot } : s;
-      }).sort((a, b) => a.slot - b.slot);
-      latestSqItems.current = next;
-      return next;
-    });
   }, [dispatchSessionCommand]);
 
   const handleUpdateGeneralComments = useCallback((comments: string) => {
     latestGeneralComments.current = comments;
     setGeneralComments(comments);
-    if (desktopBridge.isRunningInDesktop() && sessionSnapshotRef.current) {
+    if (sessionSnapshotRef.current) {
       void dispatchSessionCommand((sessionId, expectedRevision, requestId) =>
         desktopBridge.projectSessionUpdateGeneralComments({
           sessionId,
@@ -904,63 +677,35 @@ export function useProjectSession({
       return;
     }
 
-    const snapshot = sessionSnapshotRef.current;
-    const currentGraph = snapshot?.graph ?? latestGraph.current;
-    const currentFacts = snapshot?.facts ?? latestFacts.current;
-    const currentSqItems = snapshot?.specialQuotes ?? latestSqItems.current;
-    const currentChecklists = snapshot?.checklists ?? latestChecklists.current;
-    const currentGeneralComments = snapshot?.generalComments ?? latestGeneralComments.current;
-    const currentRawXml = (snapshot?.rawConfigXml !== undefined ? snapshot.rawConfigXml : latestRawXml.current) || '';
-    const currentSourceMetadata = latestSourceMetadata.current;
-
-    if (!currentGraph) return;
-
-    try {
-      const project = await createDvlProject(
-        currentGraph,
-        currentFacts,
-        currentSqItems,
-        currentChecklists,
-        currentRawXml,
-        currentGeneralComments,
-        currentSourceMetadata,
-        {
-          rulePackIdentity,
-          activeRules,
-          rulePackSnapshot: {
-            templateMap: activeRulePackArtifacts.templateMap as any,
-            approvedMappings: activeRulePackArtifacts.approvedMappings,
-            rules: activeRules
-          },
-          integrityState: projectIntegrityClassification || undefined
-        }
-      );
-      const jobName = currentFacts['unit.jobName']?.value || 'AHU_Project';
-      const comNumber = currentFacts['unit.comNumber']?.value || 'COM-000000';
-      const defaultName = `${jobName}_${comNumber}.dvl`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-
-      if (desktopBridge.isRunningInDesktop()) {
-        let targetPath = forceSaveAs ? null : currentProjectPath;
-        if (!targetPath) targetPath = await desktopBridge.saveFileDialog(defaultName);
-        if (!targetPath) return;
-
-        const res = await desktopBridge.saveDvl(targetPath, project);
+    if (sessionSnapshotRef.current) {
+      try {
+        const currentSessionId = sessionSnapshotRef.current.sessionId;
+        const res = await desktopBridge.projectSessionSave({
+          sessionId: currentSessionId,
+          expectedRevision: sessionSnapshotRef.current.revision,
+          forceSaveAs
+        });
         if (res.saved) {
-          setCurrentProjectPath(res.path);
-          setExportNotice({ fileName: res.path.split(/[\\/]/).pop() || defaultName, filePath: res.path });
+          setCurrentProjectPath(res.path || null);
+          setLastSavedAt(res.lastSavedAt || new Date().toISOString());
+          setExportNotice({ fileName: res.fileName || 'Project.dvl', filePath: res.path });
+          setRecoveryInfo(null);
+          setAutosavedProject(null);
+          if (res.snapshot) {
+            syncFromSnapshot(res.snapshot);
+          }
         }
-      } else {
-        saveDvlToFile(project);
+      } catch (error: any) {
+        alert(`Error saving .dvl project: ${error.message}`);
       }
-    } catch (error: any) {
-      alert(`Error saving .dvl project: ${error.message}`);
     }
-  }, [rulePackIdentity, activeRules, activeRulePackArtifacts, projectIntegrityClassification, currentProjectPath]);
+  }, [syncFromSnapshot]);
 
   const handleExportExcel = useCallback(async (isDraft: boolean = false) => {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    setExportError(null);
     try {
       await pendingCommandChain.current;
     } catch (err: any) {
@@ -968,75 +713,23 @@ export function useProjectSession({
       return;
     }
 
-    if (exportError) {
-      return;
-    }
-
-    const snapshot = sessionSnapshotRef.current;
-    const currentGraph = snapshot?.graph ?? latestGraph.current;
-    const currentFacts = snapshot?.facts ?? latestFacts.current;
-    const currentSqItems = snapshot?.specialQuotes ?? latestSqItems.current;
-    const currentChecklists = snapshot?.checklists ?? latestChecklists.current;
-    const currentGeneralComments = snapshot?.generalComments ?? latestGeneralComments.current;
-    const currentRawXml = (snapshot?.rawConfigXml !== undefined ? snapshot.rawConfigXml : latestRawXml.current) || '';
-    const currentSourceMetadata = latestSourceMetadata.current;
-
-    if (!currentGraph) {
-      setExportError('Cannot export Excel deliverable: No project geometry or graph is loaded.');
-      return;
-    }
-    if (snapshot?.readiness?.exportBlocked) {
-      setExportError('Export is blocked: the deliverable template (template.xlsx) is missing or cannot be retrieved.');
-      return;
-    }
-    if (pendingVerifications > 0) {
-      setExportError('Wait for host verification to finish before exporting.');
-      return;
-    }
-    if (!isDraft && (!desktopBridge.isRunningInDesktop() || projectIntegrityWarning || !sourceIsTrusted)) {
-      setExportError(!desktopBridge.isRunningInDesktop()
-        ? 'Final Excel export requires the certified Windows desktop host. Browser preview can export drafts only.'
-        : 'Final Excel export requires a verified native source and resolved project integrity. Reopen the source through the desktop file picker.');
-      return;
-    }
-    const jobName = String(currentFacts['unit.jobName']?.value || 'AHU_Project');
-    const comNumber = String(currentFacts['unit.comNumber']?.value || 'COM-000000');
-    const defaultName = `${jobName}_${comNumber}_Detailing_Verification_List${isDraft ? '_DRAFT' : ''}.xlsx`.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    const exportFacts = {
-      ...currentFacts,
-      'unit.date': {
-        ...currentFacts['unit.date'],
-        key: 'unit.date',
-        label: 'Verification Date',
-        category: 'Order & Identity',
-        value: new Date().toISOString().split('T')[0],
-        status: 'Known' as const,
-        confidence: 'Authoritative' as const
+    if (sessionSnapshotRef.current) {
+      try {
+        const currentSessionId = sessionSnapshotRef.current.sessionId;
+        const result = await desktopBridge.projectSessionExportExcel({
+          sessionId: currentSessionId,
+          isDraft,
+          expectedRevision: sessionSnapshotRef.current.revision
+        });
+        if (result.exported && !result.cancelled) {
+          setExportNotice({ fileName: result.fileName || 'Deliverable.xlsx', filePath: result.filePath });
+        }
+      } catch (error: any) {
+        console.error('Export Excel failed:', error);
+        setExportError(error?.message || 'An unknown error occurred while exporting the Excel deliverable.');
       }
-    };
-
-    try {
-      const result = await desktopBridge.exportExcelDeliverable(
-        exportFacts,
-        currentSqItems,
-        currentChecklists,
-        activeRules,
-        currentGraph,
-        currentGeneralComments,
-        defaultName,
-        isDraft,
-        currentRawXml,
-        currentSourceMetadata?.rawOrderRevisionXml,
-        currentSourceMetadata?.rawManifestXml
-      );
-      if (result.exported && !result.cancelled) {
-        setExportNotice({ fileName: result.fileName || defaultName, filePath: result.filePath });
-      }
-    } catch (error: any) {
-      console.error('Export Excel failed:', error);
-      setExportError(error?.message || 'An unknown error occurred while exporting the Excel deliverable.');
     }
-  }, [pendingVerifications, projectIntegrityWarning, sourceIsTrusted, activeRules, exportError]);
+  }, []);
 
   return {
     isProjectLoaded,
@@ -1046,6 +739,7 @@ export function useProjectSession({
     checklists,
     generalComments,
     autosavedProject,
+    recoveryInfo,
     projectIntegrityWarning,
     sourceIsTrusted,
     pendingVerifications,
@@ -1078,11 +772,13 @@ export function useProjectSession({
       setSourceMetadata({});
       latestSourceMetadata.current = {};
       setCurrentProjectPath(null);
+      setLastSavedAt(null);
       setProjectIntegrityWarning(null);
       setProjectIntegrityClassification(null);
       setSourceIsTrusted(false);
       setExportError(null);
       setExportNotice(null);
+      setRecoveryInfo(null);
     },
     loadXmlData,
     handleOpenDvl,
@@ -1103,6 +799,7 @@ export function useProjectSession({
     handleUpdateGeneralComments,
     handleSaveDvl,
     handleExportExcel,
+    applySessionSnapshot: syncFromSnapshot,
     dismissExportNotice: () => setExportNotice(null),
     dismissExportError: () => setExportError(null)
   };

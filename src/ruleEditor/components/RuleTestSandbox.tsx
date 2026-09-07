@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, FileCode, Sliders, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
-import { RuleDefinition, Fact, FactStatus } from '../../types';
-import { evaluateAstPredicate } from '../../services/ruleEvaluator';
+import { RuleDefinition } from '../../types';
+import { desktopBridge } from '../../services/desktopBridge';
 import { getFactDefinition } from './FactDictionaryCatalog';
 
 interface RuleTestSandboxProps {
@@ -83,26 +83,54 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
     }));
   };
 
-  // Evaluate rule against simulated values
-  const evalResult = useMemo(() => {
-    // Create mock FactRegistry entries for requiredFacts
-    const mockRegistry: Record<string, Fact> = {};
-    const context: Record<string, any> = { ...simulatedValues };
+  const [evalResult, setEvalResult] = useState<{ result: boolean; needsInput: boolean; trace: string }>({
+    result: true,
+    needsInput: false,
+    trace: 'Evaluating rule logic...'
+  });
+  const [isRuleValid, setIsRuleValid] = useState<boolean>(true);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
-    rule.requiredFacts.forEach(k => {
-      const val = simulatedValues[k];
-      mockRegistry[k] = {
-        key: k,
-        label: getFactDefinition(k)?.label || k,
-        category: 'Simulation',
-        value: val ?? null,
-        status: val !== undefined ? 'Known' : 'Unknown',
-        confidence: 'Authoritative'
-      };
-    });
+  // Evaluate rule dynamically against simulated values using C# authoritative engine
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await desktopBridge.evaluateRuleSandbox({ rule, simulatedValues });
+        if (cancelled) return;
+        if (!res.isValid) {
+          setIsRuleValid(false);
+          setEvalError(res.error || 'The rule logic is currently incomplete or contains errors.');
+          setEvalResult({
+            result: false,
+            needsInput: true,
+            trace: res.trace || 'The rule logic is currently incomplete or contains errors.'
+          });
+        } else {
+          setIsRuleValid(true);
+          setEvalError(null);
+          setEvalResult({
+            result: res.result,
+            needsInput: res.needsInput,
+            trace: res.trace
+          });
+        }
+      } catch (err: any) {
+        if (cancelled) return;
+        setIsRuleValid(false);
+        setEvalError(err?.message || 'Failed to evaluate rule condition.');
+        setEvalResult({
+          result: false,
+          needsInput: true,
+          trace: 'The rule logic is currently incomplete or contains errors.'
+        });
+      }
+    }, 50);
 
-    const evaluated = evaluateAstPredicate(rule.predicate, context, rule.requiredFacts, mockRegistry);
-    return evaluated;
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [rule, simulatedValues]);
 
   return (
@@ -124,6 +152,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
 
         {/* Profile preset picker */}
         <select
+          aria-label="Preset profile"
           value={activeProfileKey}
           onChange={e => handleProfileSelect(e.target.value)}
           className="text-xs bg-slate-950 border border-slate-700 rounded-md px-2.5 py-1.5 text-slate-200 focus:outline-none"
@@ -138,7 +167,19 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
 
       {/* Outcome Banner */}
       <div className="my-4">
-        {evalResult.needsInput ? (
+        {!isRuleValid ? (
+          <div className="flex items-center gap-3 p-3 bg-red-950/60 border border-red-800 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-red-300">
+                Simulation Paused: Incomplete or Invalid Rule Logic
+              </div>
+              <div className="text-[11px] text-red-400/90 mt-0.5">
+                {evalError || evalResult.trace}
+              </div>
+            </div>
+          </div>
+        ) : evalResult.needsInput ? (
           <div className="flex items-center gap-3 p-3 bg-amber-950/40 border border-amber-800/80 rounded-lg">
             <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
             <div>
@@ -194,7 +235,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
         </div>
 
         {rule.requiredFacts.length === 0 ? (
-          <div className="p-4 text-center text-xs text-slate-500 bg-slate-950/40 rounded-lg border border-dashed border-slate-800">
+          <div className="p-4 text-center text-xs text-slate-400 bg-slate-950/40 rounded-lg border border-dashed border-slate-800">
             This rule has no required facts and evaluates as a standard check (always applicable).
           </div>
         ) : (
@@ -213,7 +254,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
                     <span className="text-xs font-medium text-slate-200">
                       {factDef?.label || factKey}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-500">
+                    <span className="text-[10px] font-mono text-slate-400">
                       {factKey}
                     </span>
                   </div>
@@ -245,6 +286,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
                     </div>
                   ) : factDef?.dataType === 'enum' ? (
                     <select
+                      aria-label={`Value for ${factKey}`}
                       value={val ?? ''}
                       onChange={e => handleTweakFact(factKey, e.target.value)}
                       className="w-full text-xs bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 focus:outline-none"
@@ -258,6 +300,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
                   ) : dataType === 'number' ? (
                     <div className="flex items-center gap-2">
                       <input
+                        aria-label={`Value for ${factKey}`}
                         type="number"
                         step="any"
                         value={val ?? 0}
@@ -272,6 +315,7 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
                     </div>
                   ) : (
                     <input
+                      aria-label={`Value for ${factKey}`}
                       type="text"
                       value={val ?? ''}
                       onChange={e => handleTweakFact(factKey, e.target.value)}

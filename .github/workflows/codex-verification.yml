@@ -123,14 +123,8 @@ jobs:
       - name: Run canonical DVL contract tests
         run: node scripts/test_dvl_canonical.mjs
 
-      - name: Run state reducers and domain logic tests
-        run: node scripts/test_reducers.mjs
-
       - name: Run readiness tests
         run: node scripts/test_readiness.mjs
-
-      - name: Run adversarial readiness tests
-        run: node scripts/stress_test_readiness_adversarial.mjs
 
       - name: Run modal and keyboard accessibility tests
         run: node scripts/test_modal_accessibility.mjs
@@ -144,8 +138,17 @@ jobs:
       - name: Run responsive layout and contrast tests
         run: node scripts/test_responsive_contrast.mjs
 
-      - name: Run cross-engine parity and bridge tests
-        run: node scripts/test_m2_parity_and_bridge.mjs
+      - name: Run CE2-A ProjectSession bridge tests
+        run: node scripts/test_ce2a_session_bridge.mjs
+
+      - name: Run CE2-B manual and pack tests
+        run: node scripts/test_ce2b_manual_and_pack.mjs
+
+      - name: Run CE3 persistence and export tests
+        run: node scripts/test_ce3_persistence_and_export.mjs
+
+      - name: Run CE5 desktop-only verification tests
+        run: node scripts/test_ce5_desktop_only.mjs
 
       - name: Verify checkout remains clean
         shell: pwsh

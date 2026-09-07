@@ -326,20 +326,47 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
-        public void ProjectSession_ExistingDiskPath_WithoutAuthorization_IsUntrusted()
+        public void ProjectSession_ExistingDiskPath_VerifiedOnDisk_IsTrusted()
         {
             var handler = CreateAppHandler();
             string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
             var options = JsonDefaults.CreateFlexibleOptions();
 
-            // Client supplies real file path from disk without host authorization / handle
+            // Client supplies real file path from disk (e.g. drag-and-drop from Windows Explorer)
+            // The C# engine verifies and reads directly from disk, authorizing it as Trusted for Certified deliverable.
             var openRes = handler.Handle(JsonSerializer.Serialize(new
             {
-                id = "req-open-unauth",
+                id = "req-open-disk-drop",
                 action = "projectSession_open",
                 payload = new
                 {
-                    filePath = configXmlPath,
+                    filePath = configXmlPath
+                }
+            }));
+
+            Assert.True(openRes.Success, openRes.Error);
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+            Assert.NotNull(snapshot);
+            Assert.True(snapshot.Source.IsTrusted, "Existing disk path verified on disk by host must be trusted.");
+        }
+
+        [Fact]
+        public void ProjectSession_NonExistentDiskPath_IsUntrusted()
+        {
+            var handler = CreateAppHandler();
+            string fakePath = @"C:\NonExistentFolder\FakeConfig.xml";
+            string validXml = File.ReadAllText(TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml")));
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            // Client supplies non-existent file path with inline configXml
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open-fake-path",
+                action = "projectSession_open",
+                payload = new
+                {
+                    filePath = fakePath,
+                    configXml = validXml,
                     isTrusted = true // client claims trust
                 }
             }));
@@ -347,7 +374,7 @@ namespace AHUVerification.Tests
             Assert.True(openRes.Success, openRes.Error);
             var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
             Assert.NotNull(snapshot);
-            Assert.False(snapshot.Source.IsTrusted, "Existing disk path without native picker authorization must NOT be trusted.");
+            Assert.False(snapshot.Source.IsTrusted, "Non-existent disk path must NOT be trusted.");
         }
 
         [Fact]
@@ -407,6 +434,41 @@ namespace AHUVerification.Tests
             Assert.Null(snapshot.Source.RawOrderRevisionXml);
             Assert.Null(snapshot.Source.RawManifestXml);
             Assert.NotEqual("Injected Job", snapshot.Facts["unit.jobName"].Value?.ToString());
+        }
+
+        [Fact]
+        public void ProjectSession_SpecialQuotes_EnforcesSlotBoundsAndMaxCount()
+        {
+            var handler = CreateAppHandler();
+            string configXmlPath = TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml"));
+            string configXml = File.ReadAllText(configXmlPath);
+            var options = JsonDefaults.CreateFlexibleOptions();
+
+            var openRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-open",
+                action = "projectSession_open",
+                payload = new { filePath = configXmlPath, configXml, isUpz = false, isTrusted = true }
+            }));
+            var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(JsonSerializer.Serialize(openRes.Data), options)!;
+
+            // Slot 0 or 23 must be rejected
+            var invalidSlotRes = handler.Handle(JsonSerializer.Serialize(new
+            {
+                id = "req-sq-invalid",
+                action = "projectSession_updateSpecialQuote",
+                payload = new
+                {
+                    sessionId = snapshot.SessionId,
+                    expectedRevision = snapshot.Revision,
+                    requestId = "req-sq-invalid",
+                    specialQuote = new { slot = 23, text = "Overflow SQ", id = "sq-23" }
+                }
+            }));
+            Assert.True(invalidSlotRes.Success); // Bridge returns Ok with failing SessionCommandResult
+            var invalidResult = JsonSerializer.Deserialize<SessionCommandResult>(JsonSerializer.Serialize(invalidSlotRes.Data), options)!;
+            Assert.False(invalidResult.Success);
+            Assert.Contains("slots 1 through 22", invalidResult.ErrorMessage);
         }
     }
 }
