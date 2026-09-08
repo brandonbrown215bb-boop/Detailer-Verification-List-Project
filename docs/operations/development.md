@@ -3,8 +3,8 @@
 ## Prerequisites
 
 - **Windows 10/11 (64-bit)**. The desktop hosts are Windows Forms/WebView2 applications and the release script targets `win-x64`.
-- **.NET 8 SDK**. The projects target `net8.0` and `net8.0-windows`; release publishes are self-contained `win-x64` folders.
-- **Node.js 22.18.x and npm**. `scripts/init_env.bat` checks the pinned Node major/minor and never installs software. Install Node.js 22.18.0, open a new terminal so PATH is refreshed, then retry if the check fails.
+- **.NET 8 SDK**. The projects target `net8.0` and `net8.0-windows`; release publishes are self-contained `win-x64` folders. `setup.bat` can automatically install the .NET 8 SDK via `winget` or the official portable Microsoft installer script.
+- **Node.js 22.18.x and npm**. `scripts/init_env.bat` checks the pinned Node major/minor and .NET 8 SDK without installing software. `setup.bat` will automatically provision Node.js 22.18.0 and the .NET 8 SDK if not found.
 - **Microsoft Edge WebView2 Runtime** for either desktop host. Browser/Vite mode does not exercise the native bridge.
 
 ## Standard Windows Workflows
@@ -13,7 +13,7 @@ Run these from the repository root.
 
 | Command | What it does |
 | --- | --- |
-| `setup.bat` | Checks the SDK and npm, installs npm dependencies, builds the frontend and rule pack, builds both desktop hosts, then runs the C# tests. It does **not** run the Node AST converter tests. |
+| `setup.bat` | Checks and automatically provisions .NET 8 SDK and Node.js 22.18.0, installs npm dependencies, builds the frontend and rule pack, builds both desktop hosts, then runs the C# tests. It does **not** run the Node AST converter tests. |
 | `build-all.bat` | Builds the Vite assets, validates the rule pack, and builds Core, the main host, and the Rule Editor. |
 | `run-tests.bat` | Runs the C# xUnit suite through the Core coverage gate and the focused Node suites. The CI clean-checkout gate runs as a separate final job step after build and test outputs settle. |
 | `launch-app.bat` | Builds `dist/index.html` if needed and starts the main desktop host. |

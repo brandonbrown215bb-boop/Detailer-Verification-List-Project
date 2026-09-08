@@ -120,6 +120,105 @@ if "!NEED_NODE_INSTALL!"=="1" (
     echo.
 )
 
+REM ------------------------------------------------------------------
+REM Verify or Automatically Install Required .NET 8 SDK
+REM ------------------------------------------------------------------
+set "TOOLS_DOTNET_DIR=%~dp0.tools\dotnet"
+
+REM Prioritize project-local or user-local .NET if available
+if exist "%TOOLS_DOTNET_DIR%\dotnet.exe" (
+    set "PATH=%TOOLS_DOTNET_DIR%;!PATH!"
+    set "DOTNET_ROOT=%TOOLS_DOTNET_DIR%"
+) else if exist "%LocalAppData%\Microsoft\dotnet\dotnet.exe" (
+    set "PATH=%LocalAppData%\Microsoft\dotnet;!PATH!"
+    set "DOTNET_ROOT=%LocalAppData%\Microsoft\dotnet"
+)
+
+REM Ensure global.json is present at repo root to pin .NET 8 SDK
+if not exist "%~dp0global.json" (
+    echo [INFO] Creating global.json to pin .NET SDK to 8.0...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.IO.File]::WriteAllText('%~dp0global.json', '{`n  `"sdk`": {`n    `"version`": `"8.0.100`",`n    `"rollForward`": `"latestFeature`"`n  }`n}`n', [System.Text.Encoding]::UTF8)"
+)
+
+REM Check whether .NET 8 SDK is installed
+set "NEED_DOTNET_INSTALL=0"
+where dotnet >nul 2>&1
+if errorlevel 1 (
+    set "NEED_DOTNET_INSTALL=1"
+) else (
+    set "FOUND_DOTNET_8=0"
+    for /f "tokens=1" %%s in ('dotnet --list-sdks 2^>nul') do (
+        for /f "tokens=1 delims=." %%v in ("%%s") do (
+            if "%%v"=="8" set "FOUND_DOTNET_8=1"
+        )
+    )
+    if "!FOUND_DOTNET_8!"=="0" (
+        set "NEED_DOTNET_INSTALL=1"
+    )
+)
+
+if "!NEED_DOTNET_INSTALL!"=="1" (
+    echo.
+    echo [INFO] .NET 8 SDK is required ^(not found on machine^).
+    echo [INFO] Automatically installing .NET 8 SDK...
+    
+    set "DOTNET_PROVISIONED=0"
+    
+    REM 1. Try winget if available
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo [INFO] Attempting install via winget...
+        winget install --id Microsoft.DotNet.SDK.8 --exact --source winget --accept-package-agreements --accept-source-agreements --silent >nul 2>&1
+        if exist "%ProgramFiles%\dotnet\dotnet.exe" (
+            set "PATH=%ProgramFiles%\dotnet;!PATH!"
+        )
+        for /f "tokens=1" %%s in ('dotnet --list-sdks 2^>nul') do (
+            for /f "tokens=1 delims=." %%v in ("%%s") do (
+                if "%%v"=="8" set "DOTNET_PROVISIONED=1"
+            )
+        )
+    )
+    
+    REM 2. Standalone official Microsoft dotnet-install script (.tools\dotnet)
+    if "!DOTNET_PROVISIONED!"=="0" (
+        if not exist "%~dp0.tools" mkdir "%~dp0.tools"
+        set "DOTNET_INSTALL_SCRIPT=%~dp0.tools\dotnet-install.ps1"
+        set "DOTNET_INSTALL_URL=https://dot.net/v1/dotnet-install.ps1"
+        
+        echo [INFO] Downloading official Microsoft dotnet-install script...
+        where curl.exe >nul 2>&1
+        if not errorlevel 1 (
+            curl.exe -L --fail --retry 3 --silent --show-error -o "!DOTNET_INSTALL_SCRIPT!" "!DOTNET_INSTALL_URL!"
+        ) else (
+            powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('!DOTNET_INSTALL_URL!', '!DOTNET_INSTALL_SCRIPT!')"
+        )
+        
+        if not exist "!DOTNET_INSTALL_SCRIPT!" (
+            echo [ERROR] Failed to download dotnet-install script from !DOTNET_INSTALL_URL!.
+            pause
+            exit /b 1
+        )
+        
+        echo [INFO] Installing .NET 8 SDK into .tools\dotnet...
+        powershell -NoProfile -ExecutionPolicy Bypass -File "!DOTNET_INSTALL_SCRIPT!" -Channel 8.0 -Quality GA -InstallDir "!TOOLS_DOTNET_DIR!"
+        
+        if exist "!DOTNET_INSTALL_SCRIPT!" del /f /q "!DOTNET_INSTALL_SCRIPT!" >nul 2>&1
+        
+        if not exist "!TOOLS_DOTNET_DIR!\dotnet.exe" (
+            echo [ERROR] .NET SDK binary was not found after installation in "!TOOLS_DOTNET_DIR!".
+            pause
+            exit /b 1
+        )
+        
+        set "PATH=!TOOLS_DOTNET_DIR!;!PATH!"
+        set "DOTNET_ROOT=!TOOLS_DOTNET_DIR!"
+        set "DOTNET_PROVISIONED=1"
+    )
+    
+    echo [OK] .NET 8 SDK is now installed and active for this session.
+    echo.
+)
+
 call "%~dp0scripts\init_env.bat"
 if %ERRORLEVEL% NEQ 0 (
     pause

@@ -7,25 +7,53 @@ if exist "%~dp0..\.tools\node-v22.18.0-win-x64\node.exe" (
     set "PATH=%~dp0.tools\node-v22.18.0-win-x64;%PATH%"
 )
 
+REM If a project-local .NET SDK has been provisioned by setup.bat, prioritize it.
+if exist "%~dp0..\.tools\dotnet\dotnet.exe" (
+    set "PATH=%~dp0..\.tools\dotnet;%PATH%"
+    set "DOTNET_ROOT=%~dp0..\.tools\dotnet"
+) else if exist "%~dp0.tools\dotnet\dotnet.exe" (
+    set "PATH=%~dp0.tools\dotnet;%PATH%"
+    set "DOTNET_ROOT=%~dp0.tools\dotnet"
+) else if exist "%LocalAppData%\Microsoft\dotnet\dotnet.exe" (
+    if not defined DOTNET_ROOT (
+        set "PATH=%LocalAppData%\Microsoft\dotnet;%PATH%"
+        set "DOTNET_ROOT=%LocalAppData%\Microsoft\dotnet"
+    )
+)
+
 where dotnet >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] .NET 8 SDK was not found on PATH.
-    echo         Install the .NET 8 SDK from https://dotnet.microsoft.com/download/dotnet/8.0
+    echo         Run setup.bat to automatically install .NET 8 SDK, or download from https://dotnet.microsoft.com/download/dotnet/8.0
     exit /b 1
 )
 
+pushd "%~dp0.."
 set "DOTNET_VER="
 for /f "tokens=1" %%i in ('dotnet --version 2^>nul') do if not defined DOTNET_VER set "DOTNET_VER=%%i"
+popd
+
 if not defined DOTNET_VER (
     echo [ERROR] dotnet could not report an SDK version.
-    echo         Install the .NET 8 SDK from https://dotnet.microsoft.com/download/dotnet/8.0
+    echo         Run setup.bat to automatically install .NET 8 SDK, or download from https://dotnet.microsoft.com/download/dotnet/8.0
     exit /b 1
 )
 for /f "tokens=1 delims=." %%i in ("%DOTNET_VER%") do set "DOTNET_MAJOR=%%i"
 if not "%DOTNET_MAJOR%"=="8" (
-    echo [ERROR] .NET SDK 8.x is required; found %DOTNET_VER%.
-    echo         Install the .NET 8 SDK from https://dotnet.microsoft.com/download/dotnet/8.0
-    exit /b 1
+    set "HAS_DOTNET_8="
+    for /f "tokens=1" %%s in ('dotnet --list-sdks 2^>nul') do (
+        for /f "tokens=1 delims=." %%v in ("%%s") do (
+            if "%%v"=="8" set "HAS_DOTNET_8=%%s"
+        )
+    )
+    if defined HAS_DOTNET_8 (
+        echo [WARN] .NET SDK 8 is installed on system, but active SDK resolved to %DOTNET_VER%.
+        echo        Ensure global.json at repository root pins SDK version to 8.0.x.
+    ) else (
+        echo [ERROR] .NET SDK 8.x is required; found %DOTNET_VER%.
+        echo         Run setup.bat to automatically install .NET 8 SDK, or download from https://dotnet.microsoft.com/download/dotnet/8.0
+        exit /b 1
+    )
 )
 echo [OK] .NET SDK %DOTNET_VER%
 
