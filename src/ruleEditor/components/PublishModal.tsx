@@ -4,10 +4,13 @@ import { CheckCircle2, AlertCircle, ArrowRight, Upload, Folder, ShieldCheck, Tag
 import { desktopBridge } from '../../services/desktopBridge';
 import { ModalShell } from '../../components/common/ModalShell';
 
+export const DEFAULT_RELEASE_PUBLISH_PATH = 'P:\\Detailing\\DVL Rulepack';
+
 interface PublishModalProps {
   isOpen: boolean;
   currentVersion: string;
   diffs: RuleDiffItem[];
+  defaultPublishPath?: string;
   onClose: () => void;
   onPublish: (newVersion: string, releaseNotes: string, targetPath?: string) => Promise<void>;
 }
@@ -16,6 +19,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   isOpen,
   currentVersion,
   diffs,
+  defaultPublishPath,
   onClose,
   onPublish
 }) => {
@@ -32,9 +36,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [selectedVersion, setSelectedVersion] = useState<string>(minorVer);
   const [customVersion, setCustomVersion] = useState<string>('');
   const [releaseNotes, setReleaseNotes] = useState<string>('');
-  const [targetPath, setTargetPath] = useState<string>('');
+  const [targetPath, setTargetPath] = useState<string>(() => {
+    return defaultPublishPath ?? (import.meta.env.PROD ? DEFAULT_RELEASE_PUBLISH_PATH : '');
+  });
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (defaultPublishPath && !targetPath) {
+      setTargetPath(defaultPublishPath);
+    }
+  }, [defaultPublishPath]);
 
   const effectiveVersion = customVersion.trim() || selectedVersion;
 
@@ -269,7 +281,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 type="text"
                 value={targetPath}
                 onChange={e => setTargetPath(e.target.value)}
-                placeholder="e.g. \\share\Engineering\RulePacks or C:\Users\...\OneDrive\AHU_Rules"
+                placeholder="e.g. P:\Detailing\DVL Rulepack or \\share\Engineering\RulePacks"
                 className="w-full text-xs font-mono bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {desktopBridge.isRunningInDesktop() && (

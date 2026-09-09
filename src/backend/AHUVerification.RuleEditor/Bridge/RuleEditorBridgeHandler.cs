@@ -21,6 +21,7 @@ namespace AHUVerification.RuleEditor.Bridge
         private readonly string _rulePackPath;
         private readonly Func<string?>? _draftSavePathSelector;
         private readonly Func<string?>? _draftOpenPathSelector;
+        private readonly string? _defaultPublishPath;
         private RulePackBundle? _activeRulePack;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,16 +31,22 @@ namespace AHUVerification.RuleEditor.Bridge
             Converters = { new JsonStringEnumConverter() }
         };
 
-        public RuleEditorBridgeHandler(string rulePackPath) : this(null, rulePackPath, null, null)
+        public RuleEditorBridgeHandler(string rulePackPath) : this(null, rulePackPath, null, null, null)
         {
         }
 
-        public RuleEditorBridgeHandler(Form? parentForm, string rulePackPath, Func<string?>? draftSavePathSelector = null, Func<string?>? draftOpenPathSelector = null)
+        public RuleEditorBridgeHandler(
+            Form? parentForm,
+            string rulePackPath,
+            Func<string?>? draftSavePathSelector = null,
+            Func<string?>? draftOpenPathSelector = null,
+            string? defaultPublishPath = null)
         {
             _parentForm = parentForm;
             _rulePackPath = rulePackPath;
             _draftSavePathSelector = draftSavePathSelector;
             _draftOpenPathSelector = draftOpenPathSelector;
+            _defaultPublishPath = defaultPublishPath;
             LoadRulePack();
         }
 
@@ -111,7 +118,8 @@ namespace AHUVerification.RuleEditor.Bridge
                 appVersion = ApplicationVersion.Current,
                 rulePackVersion = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 ruleCount = _activeRulePack?.Rules.Count ?? 0,
-                isDesktopHost = true
+                isDesktopHost = true,
+                defaultPublishPath = _defaultPublishPath
             };
         }
 
@@ -853,6 +861,23 @@ namespace AHUVerification.RuleEditor.Bridge
                     activePath.StartsWith(targetDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("publishRulePack.targetPath must be separate from the active Rule Pack directory.");
             }
+            else if (!string.IsNullOrWhiteSpace(_defaultPublishPath))
+            {
+                bool userExplicitlyCleared = payload.TryGetProperty("targetPath", out var tp) &&
+                                             tp.ValueKind == JsonValueKind.String &&
+                                             string.IsNullOrWhiteSpace(tp.GetString());
+                if (!userExplicitlyCleared)
+                {
+                    string candidate = Path.GetFullPath(_defaultPublishPath);
+                    if (Path.IsPathRooted(candidate) &&
+                        !string.Equals(candidate, activePath, StringComparison.OrdinalIgnoreCase) &&
+                        !candidate.StartsWith(activePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                        !activePath.StartsWith(candidate + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetDir = candidate;
+                    }
+                }
+            }
 
             string transactionRoot = Path.Combine(Path.GetTempPath(), $"rulepack_{Guid.NewGuid():N}");
             string activeStage = Path.Combine(transactionRoot, "active");
@@ -920,6 +945,36 @@ namespace AHUVerification.RuleEditor.Bridge
             public string? Backup { get; init; }
         }
 
+        private static void MoveDirectorySafe(string sourceDir, string destDir)
+        {
+            string srcRoot = Path.GetPathRoot(Path.GetFullPath(sourceDir)) ?? "";
+            string dstRoot = Path.GetPathRoot(Path.GetFullPath(destDir)) ?? "";
+            if (string.Equals(srcRoot, dstRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.Move(sourceDir, destDir);
+            }
+            else
+            {
+                CopyDirectoryRecursively(sourceDir, destDir);
+                Directory.Delete(sourceDir, true);
+            }
+        }
+
+        private static void CopyDirectoryRecursively(string sourceDir, string destinationDir)
+        {
+            Directory.CreateDirectory(destinationDir);
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                string destFile = Path.Combine(destinationDir, Path.GetFileName(file));
+                File.Copy(file, destFile, true);
+            }
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                string destSubDir = Path.Combine(destinationDir, Path.GetFileName(subDir));
+                CopyDirectoryRecursively(subDir, destSubDir);
+            }
+        }
+
         private static DirectoryPromotion PromoteDirectory(string staged, string destination)
         {
             if (File.Exists(destination))
@@ -938,7 +993,7 @@ namespace AHUVerification.RuleEditor.Bridge
 
             try
             {
-                Directory.Move(staged, destination);
+                MoveDirectorySafe(staged, destination);
                 return new DirectoryPromotion { Destination = destination, Backup = backup };
             }
             catch

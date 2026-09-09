@@ -13,6 +13,8 @@ namespace AHUVerification.Core.Services
 
     public static class RulePackLocationResolver
     {
+        public const string DefaultNetworkPath = @"P:\Detailing\DVL Rulepack";
+
         public static readonly string[] RelativeCandidateSubpaths = new[]
         {
             Path.Combine("UNIT DETAILING VERIFICATION LIST", "RulePack"),
@@ -62,7 +64,18 @@ namespace AHUVerification.Core.Services
                 };
             }
 
-            // 3. Probing Corporate OneDrive / SharePoint root directories
+            // 3. Default Release Network Share Path (P:\Detailing\DVL Rulepack)
+            if (checkDir(DefaultNetworkPath) && checkFile(Path.Combine(DefaultNetworkPath, "manifest.json")))
+            {
+                return new ResolvedRulePackLocation
+                {
+                    Path = DefaultNetworkPath,
+                    IsAutoDetected = true,
+                    SourceType = "NetworkShare"
+                };
+            }
+
+            // 4. Probing Corporate OneDrive / SharePoint root directories
             var candidateRoots = new List<(string RootPath, string SourceType)>();
 
             string? oneDriveCommercial = getEnv("OneDriveCommercial");

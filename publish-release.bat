@@ -127,7 +127,7 @@ if exist "Releases" (
     mkdir "Releases"
     if errorlevel 1 exit /b 1
 )
-call vpk pack --packId AHUVerification --packVersion !VERSION! --packDir publish\AHUVerification --mainExe AHUVerification.App.exe -o Releases
+call vpk pack --packId AHUVerification --packVersion !VERSION! --packDir publish\AHUVerification --mainExe AHUVerification.App.exe --icon resources\app.ico -o Releases
 if errorlevel 1 (
     echo [ERROR] Velopack packaging failed.
     exit /b 1

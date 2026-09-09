@@ -121,16 +121,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const DEFAULT_RELEASE_RULEPACK_PATH = 'P:\\Detailing\\DVL Rulepack';
+
   const handleCheckForUpdates = async () => {
-    const targetPath = rulePath.trim() || autoDetectedPath;
+    const targetPath = rulePath.trim() || autoDetectedPath || (import.meta.env.PROD ? DEFAULT_RELEASE_RULEPACK_PATH : '');
     if (!targetPath) {
       setCheckStatus('error');
       setStatusMessage('Please specify a network share or folder path first.');
       return;
     }
 
-    if (!rulePath.trim() && autoDetectedPath) {
-      handleRulePathChange(autoDetectedPath);
+    if (!rulePath.trim() && (autoDetectedPath || import.meta.env.PROD)) {
+      handleRulePathChange(targetPath);
     }
 
     try {
@@ -314,7 +316,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="text"
                     value={rulePath}
                     onChange={(e) => handleRulePathChange(e.target.value)}
-                    placeholder="e.g. \\server\share\Engineering\RulePacks or C:\Users\...\OneDrive\AHU_Rules"
+                    placeholder="e.g. P:\Detailing\DVL Rulepack or \\server\share\RulePacks"
                     className="w-full px-3 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-emerald-500 transition-colors"
                   />
                   {desktopBridge.isRunningInDesktop() && (

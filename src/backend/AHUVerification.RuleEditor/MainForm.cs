@@ -32,6 +32,29 @@ namespace AHUVerification.RuleEditor
             };
             Controls.Add(_webView);
 
+            try
+            {
+                using var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream("RuleEditor.app.ico")
+                    ?? typeof(MainForm).Assembly.GetManifestResourceStream("AHUVerification.RuleEditor.app.ico");
+                if (iconStream != null)
+                {
+                    Icon = new Icon(iconStream);
+                }
+                else
+                {
+                    string? exePath = Environment.ProcessPath ?? Application.ExecutablePath;
+                    if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+                    {
+                        var extracted = Icon.ExtractAssociatedIcon(exePath);
+                        if (extracted != null) Icon = extracted;
+                    }
+                }
+            }
+            catch
+            {
+                // Graceful fallback to default system icon
+            }
+
             Load += MainForm_Load;
         }
 
@@ -79,7 +102,12 @@ namespace AHUVerification.RuleEditor
                 if (!File.Exists(Path.Combine(distFolder, "rule-editor.html")))
                     throw new FileNotFoundException("Packaged web interface not found.", Path.Combine(distFolder, "rule-editor.html"));
 
-                _bridgeHandler = new RuleEditorBridgeHandler(this, rulePackPath);
+#if !DEBUG
+                string? defaultPublishPath = @"P:\Detailing\DVL Rulepack";
+#else
+                string? defaultPublishPath = null;
+#endif
+                _bridgeHandler = new RuleEditorBridgeHandler(this, rulePackPath, defaultPublishPath: defaultPublishPath);
                 _webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
 
                 _webView.CoreWebView2.NewWindowRequested += (s, ev) => ev.Handled = true;

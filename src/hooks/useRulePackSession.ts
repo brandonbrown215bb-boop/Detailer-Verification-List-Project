@@ -93,7 +93,9 @@ export function useRulePackSession(): UseRulePackSessionResult {
             const syncResult = await desktopBridge.syncRulePack(resolved.path);
             if (!cancelled && syncResult.success && syncResult.rules) {
               applyPack(syncResult);
-              const origin = resolved.isAutoDetected ? 'SharePoint sync' : 'central path';
+              const origin = resolved.isAutoDetected
+                ? (resolved.sourceType === 'NetworkShare' ? 'network share' : 'SharePoint sync')
+                : 'central path';
               setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules) from ${origin}`);
             }
           }

@@ -633,6 +633,24 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
+        public void RuleEditor_GetAppInfo_ReturnsDefaultPublishPathWhenConfigured()
+        {
+            string expectedPath = @"P:\Detailing\DVL Rulepack";
+            string pack = TestPathHelper.GetRepoPath("resources/rulepack");
+            var handler = new RuleEditorBridgeHandler(null, pack, defaultPublishPath: expectedPath);
+            string requestJson = "{\"id\":\"req-re-info-pub\",\"action\":\"getAppInfo\"}";
+
+            var response = handler.Handle(requestJson);
+
+            Assert.Equal("req-re-info-pub", response.Id);
+            Assert.True(response.Success);
+
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(response.Data));
+            Assert.True(doc.RootElement.TryGetProperty("defaultPublishPath", out var prop));
+            Assert.Equal(expectedPath, prop.GetString());
+        }
+
+        [Fact]
         public void RuleEditor_GetRulePack_ReturnsRulesAndManifest()
         {
             var handler = CreateRuleEditorHandler();
@@ -932,6 +950,90 @@ namespace AHUVerification.Tests
             {
                 if (Directory.Exists(tempActiveDir)) try { Directory.Delete(tempActiveDir, true); } catch { }
                 if (Directory.Exists(tempTargetDir)) try { Directory.Delete(tempTargetDir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void RuleEditor_PublishRulePack_WithDefaultPublishPath_PublishesBothLocations()
+        {
+            string tempActiveDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_active_{Guid.NewGuid():N}");
+            string tempDefaultTargetDir = Path.Combine(Path.GetTempPath(), $"test_rulepack_default_target_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempActiveDir);
+            Directory.CreateDirectory(tempDefaultTargetDir);
+
+            try
+            {
+                var handler = new RuleEditorBridgeHandler(null, tempActiveDir, defaultPublishPath: tempDefaultTargetDir);
+                var rules = new List<RuleDefinition>
+                {
+                    new()
+                    {
+                        Id = "TEST-DEF-001",
+                        SemanticKey = "testDef",
+                        Scope = RuleScope.Unit,
+                        Category = "Base",
+                        Order = 1,
+                        Text = "Default publish rule",
+                        VerificationMode = "ManualCheckbox",
+                        RequiredFacts = new List<string>()
+                    }
+                };
+
+                var templateMap = new TemplateMap
+                {
+                    TemplateVersion = "14.1.0",
+                    GeneralFields = new Dictionary<string, CellCoordinate>
+                    {
+                        ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "B2" }
+                    },
+                    SqRange = new SqRangeMapping { Sheet = "Verification List", StartRow = 50, EndRow = 71 },
+                    RuleCellMappings = new Dictionary<string, RuleCellMapping>
+                    {
+                        ["testDef"] = new RuleCellMapping
+                        {
+                            RuleId = "TEST-DEF-001",
+                            Row = 15,
+                            NaCell = "C15",
+                            DetailerCell = "D15",
+                            CheckerCell = "E15",
+                            CommentsCell = "F15",
+                            InitialsCell = "G15"
+                        }
+                    }
+                };
+
+                // Request without explicit targetPath; should fall back to defaultPublishPath
+                string requestJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-re-publish-default-path",
+                    action = "publishRulePack",
+                    payload = new
+                    {
+                        version = "14.1.0",
+                        rules = rules,
+                        templateMap = templateMap
+                    }
+                });
+
+                var response = handler.Handle(requestJson);
+
+                Assert.Equal("req-re-publish-default-path", response.Id);
+                Assert.True(response.Success, response.Error);
+
+                var manager = new RulePackManager();
+                var activeBundle = manager.LoadFromDirectory(tempActiveDir);
+                Assert.True(activeBundle.IsValid);
+                Assert.Equal("14.1.0", activeBundle.Manifest.Version);
+
+                var targetBundle = manager.LoadFromDirectory(tempDefaultTargetDir);
+                Assert.True(targetBundle.IsValid);
+                Assert.Equal("14.1.0", targetBundle.Manifest.Version);
+                Assert.Equal(activeBundle.Manifest.BundleSha256, targetBundle.Manifest.BundleSha256);
+            }
+            finally
+            {
+                if (Directory.Exists(tempActiveDir)) try { Directory.Delete(tempActiveDir, true); } catch { }
+                if (Directory.Exists(tempDefaultTargetDir)) try { Directory.Delete(tempDefaultTargetDir, true); } catch { }
             }
         }
 

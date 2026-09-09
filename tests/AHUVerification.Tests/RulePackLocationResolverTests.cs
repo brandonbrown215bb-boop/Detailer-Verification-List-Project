@@ -173,5 +173,78 @@ namespace AHUVerification.Tests
             Assert.True(result.IsAutoDetected);
             Assert.Equal("SharePointSync", result.SourceType);
         }
+
+        [Fact]
+        public void ResolveLocation_DefaultNetworkPath_ResolvesWhenManifestExists()
+        {
+            string networkShare = RulePackLocationResolver.DefaultNetworkPath;
+            var existingDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { networkShare };
+            var existingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Path.Combine(networkShare, "manifest.json") };
+
+            var result = RulePackLocationResolver.ResolveLocation(
+                configuredPath: null,
+                envGetter: key => null,
+                dirExists: path => existingDirs.Contains(path),
+                fileExists: path => existingFiles.Contains(path)
+            );
+
+            Assert.Equal(networkShare, result.Path);
+            Assert.True(result.IsAutoDetected);
+            Assert.Equal("NetworkShare", result.SourceType);
+        }
+
+        [Fact]
+        public void ResolveLocation_ExplicitlyConfiguredPath_OverridesDefaultNetworkPath()
+        {
+            string customConfigured = @"D:\MyCustom\RulePack";
+            string networkShare = RulePackLocationResolver.DefaultNetworkPath;
+            var existingDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { customConfigured, networkShare };
+            var existingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.Combine(customConfigured, "manifest.json"),
+                Path.Combine(networkShare, "manifest.json")
+            };
+
+            var result = RulePackLocationResolver.ResolveLocation(
+                configuredPath: customConfigured,
+                envGetter: key => null,
+                dirExists: path => existingDirs.Contains(path),
+                fileExists: path => existingFiles.Contains(path)
+            );
+
+            Assert.Equal(customConfigured, result.Path);
+            Assert.False(result.IsAutoDetected);
+            Assert.Equal("Configured", result.SourceType);
+        }
+
+        [Fact]
+        public void ResolveLocation_DefaultNetworkPathWithoutManifest_FallsBackToSharePoint()
+        {
+            string networkShare = RulePackLocationResolver.DefaultNetworkPath;
+            string odCommercial = @"C:\Users\testuser\OneDrive - Johnson Controls";
+            string spFolder = Path.Combine(odCommercial, "UNIT DETAILING VERIFICATION LIST", "RulePack");
+
+            var existingDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                networkShare, // Network share folder exists but has no manifest!
+                odCommercial,
+                spFolder
+            };
+            var existingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.Combine(spFolder, "manifest.json")
+            };
+
+            var result = RulePackLocationResolver.ResolveLocation(
+                configuredPath: null,
+                envGetter: key => key == "OneDriveCommercial" ? odCommercial : null,
+                dirExists: path => existingDirs.Contains(path),
+                fileExists: path => existingFiles.Contains(path)
+            );
+
+            Assert.Equal(spFolder, result.Path);
+            Assert.True(result.IsAutoDetected);
+            Assert.Equal("SharePointSync", result.SourceType);
+        }
     }
 }

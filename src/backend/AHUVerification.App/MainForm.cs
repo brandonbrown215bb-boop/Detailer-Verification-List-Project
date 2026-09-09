@@ -32,6 +32,28 @@ namespace AHUVerification.App
             };
             Controls.Add(_webView);
 
+            try
+            {
+                using var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream("AHUVerification.App.app.ico");
+                if (iconStream != null)
+                {
+                    Icon = new Icon(iconStream);
+                }
+                else
+                {
+                    string? exePath = Environment.ProcessPath ?? Application.ExecutablePath;
+                    if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+                    {
+                        var extracted = Icon.ExtractAssociatedIcon(exePath);
+                        if (extracted != null) Icon = extracted;
+                    }
+                }
+            }
+            catch
+            {
+                // Graceful fallback to default system icon
+            }
+
             Load += MainForm_Load;
         }
 
@@ -82,6 +104,25 @@ namespace AHUVerification.App
                 string repositoryDist = Path.Combine(repoRoot, "dist");
                 if (Directory.Exists(repositoryRulePack) && !Directory.Exists(localActiveRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
+#else
+                // Release build default: authoritative central rulepack folder on corporate share
+                const string defaultReleaseRulePack = @"P:\Detailing\DVL Rulepack";
+                if (Directory.Exists(defaultReleaseRulePack) && File.Exists(Path.Combine(defaultReleaseRulePack, "manifest.json")))
+                {
+                    try
+                    {
+                        var testManager = new AHUVerification.Core.Services.RulePackManager();
+                        var testBundle = testManager.LoadFromDirectory(defaultReleaseRulePack);
+                        if (testBundle.IsValid)
+                        {
+                            rulePackPath = defaultReleaseRulePack;
+                        }
+                    }
+                    catch
+                    {
+                        // Fall back to localActiveRulePack or packagedRulePack
+                    }
+                }
 #endif
 
                 if (!Directory.Exists(rulePackPath))

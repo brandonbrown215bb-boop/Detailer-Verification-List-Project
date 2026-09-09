@@ -44,6 +44,7 @@ export const RuleEditorAppContent: React.FC = () => {
   const [activeDraftName, setActiveDraftName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [defaultPublishPath, setDefaultPublishPath] = useState<string | undefined>(undefined);
 
   // Load from Desktop IPC bridge
   useEffect(() => {
@@ -51,7 +52,13 @@ export const RuleEditorAppContent: React.FC = () => {
       try {
         setIsLoading(true);
         setLoadError(null);
-        const pack = await desktopBridge.getRulePack();
+        const [pack, appInfo] = await Promise.all([
+          desktopBridge.getRulePack(),
+          desktopBridge.getAppInfo().catch(() => null)
+        ]);
+        if ((appInfo as any)?.defaultPublishPath) {
+          setDefaultPublishPath((appInfo as any).defaultPublishPath);
+        }
         if (pack && pack.rules && pack.rules.length > 0) {
           setBaselineRules(JSON.parse(JSON.stringify(pack.rules)));
           setRules(JSON.parse(JSON.stringify(pack.rules)));
@@ -550,6 +557,7 @@ export const RuleEditorAppContent: React.FC = () => {
         isOpen={isPublishModalOpen}
         currentVersion={manifest.version}
         diffs={diffs}
+        defaultPublishPath={defaultPublishPath}
         onClose={() => setIsPublishModalOpen(false)}
         onPublish={handlePublish}
       />
