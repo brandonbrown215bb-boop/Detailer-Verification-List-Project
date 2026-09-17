@@ -92,11 +92,13 @@ export const AppContent: React.FC = () => {
     centralRulePackPath,
     setCentralRulePackPath,
     rulePackNotice,
+    rulePackNeedsReverify,
     dismissRulePackNotice,
     appUpdateNotice,
     dismissAppUpdateNotice,
     applyAppUpdate,
     handleRulePackUpdated,
+    markRulePackReverified,
     rulePackError
   } = useRulePackSession();
 
@@ -157,7 +159,7 @@ export const AppContent: React.FC = () => {
       if (res && res.success) {
         const bundle = res.rulePack || res;
         if (bundle.rules) {
-          handleRulePackUpdated(bundle);
+          markRulePackReverified(bundle);
         }
         const snapshot = res.sessionSnapshot || res.snapshot;
         if (snapshot) {
@@ -167,7 +169,67 @@ export const AppContent: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to reload active rule pack:', err);
     }
-  }, [handleRulePackUpdated, applySessionSnapshot]);
+  }, [markRulePackReverified, applySessionSnapshot]);
+
+  const renderRulePackNotice = () => {
+    if (!rulePackNotice) return null;
+    return (
+      <div className="bg-indigo-100 dark:bg-indigo-950/90 border-b border-indigo-300 dark:border-indigo-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+        <div className="flex items-center gap-2.5 text-xs text-indigo-900 dark:text-indigo-200 font-medium">
+          <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <span>{rulePackNotice}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {rulePackNeedsReverify && isProjectLoaded && desktopBridge.isRunningInDesktop() && (
+            <button
+              type="button"
+              onClick={handleReloadAndReverify}
+              className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow transition-colors"
+            >
+              Reload & Re-verify Project
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={dismissRulePackNotice}
+            className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAppUpdateNotice = () => {
+    if (!appUpdateNotice) return null;
+    return (
+      <div className="bg-sky-100 dark:bg-sky-950/90 border-b border-sky-300 dark:border-sky-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+        <div className="flex items-center gap-2.5 text-xs text-sky-900 dark:text-sky-200 font-medium">
+          <DownloadCloud className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+          <span>{appUpdateNotice.message}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {appUpdateNotice.canRestart && (
+            <button
+              type="button"
+              onClick={applyAppUpdate}
+              className="px-2.5 py-1 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded shadow transition-colors"
+            >
+              Restart App
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={dismissAppUpdateNotice}
+            className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const handleBatchResolveDefaultsAndClose = useCallback(() => {
     handleBatchResolveDefaults();
@@ -293,18 +355,22 @@ export const AppContent: React.FC = () => {
   // --- RENDER: HOME / LANDING PAGE ---
   if (!isProjectLoaded || !graph) {
     return (
-      <div className="min-h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-        <HomePage
-          autosavedProject={autosavedProject}
-          onResumeAutosave={handleResumeAutosave}
-          onClearAutosave={handleClearAutosave}
-          onImportXml={loadXmlData}
-          onOpenDvl={handleOpenDvl}
-          onOpenManualModal={() => setIsManualModalOpen(true)}
-          onLoadSample={handleLoadSample}
-          rulePackVersion={rulePackIdentity.version}
-          ruleCount={activeRules.filter(r => !r.isArchived).length}
-        />
+      <div className="min-h-screen w-screen overflow-x-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+        {renderRulePackNotice()}
+        {renderAppUpdateNotice()}
+        <div className="flex-1 min-h-0">
+          <HomePage
+            autosavedProject={autosavedProject}
+            onResumeAutosave={handleResumeAutosave}
+            onClearAutosave={handleClearAutosave}
+            onImportXml={loadXmlData}
+            onOpenDvl={handleOpenDvl}
+            onOpenManualModal={() => setIsManualModalOpen(true)}
+            onLoadSample={handleLoadSample}
+            rulePackVersion={rulePackIdentity.version}
+            ruleCount={activeRules.filter(r => !r.isArchived).length}
+          />
+        </div>
 
         <ManualUnitModal
           isOpen={isManualModalOpen}
@@ -416,59 +482,10 @@ export const AppContent: React.FC = () => {
         )}
 
         {/* Rule Pack Update Notice Toast */}
-        {rulePackNotice && (
-          <div className="bg-indigo-100 dark:bg-indigo-950/90 border-b border-indigo-300 dark:border-indigo-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
-            <div className="flex items-center gap-2.5 text-xs text-indigo-900 dark:text-indigo-200 font-medium">
-              <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>{rulePackNotice}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {isProjectLoaded && desktopBridge.isRunningInDesktop() && (
-                <button
-                  type="button"
-                  onClick={handleReloadAndReverify}
-                  className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow transition-colors"
-                >
-                  Reload & Re-verify Project
-                </button>
-              )}
-              <button
-                onClick={dismissRulePackNotice}
-                className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
+        {renderRulePackNotice()}
 
         {/* Desktop App Update Notice Toast */}
-        {appUpdateNotice && (
-          <div className="bg-sky-100 dark:bg-sky-950/90 border-b border-sky-300 dark:border-sky-700/60 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
-            <div className="flex items-center gap-2.5 text-xs text-sky-900 dark:text-sky-200 font-medium">
-              <DownloadCloud className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
-              <span>{appUpdateNotice.message}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {appUpdateNotice.canRestart && (
-                <button
-                  type="button"
-                  onClick={applyAppUpdate}
-                  className="px-2.5 py-1 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded shadow transition-colors"
-                >
-                  Restart App
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={dismissAppUpdateNotice}
-                className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
+        {renderAppUpdateNotice()}
 
         {/* Export Notification Toast */}
         {exportNotice && (

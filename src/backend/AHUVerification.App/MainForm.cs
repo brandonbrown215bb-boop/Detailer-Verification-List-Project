@@ -105,9 +105,9 @@ namespace AHUVerification.App
                 if (Directory.Exists(repositoryRulePack) && !Directory.Exists(localActiveRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
 #else
-                // Release build default: authoritative central rulepack folder on corporate share
+                // Release build fallback: if no local active rulepack exists yet, check corporate share before packaged rulepack
                 const string defaultReleaseRulePack = @"P:\Detailing\DVL Rulepack";
-                if (Directory.Exists(defaultReleaseRulePack) && File.Exists(Path.Combine(defaultReleaseRulePack, "manifest.json")))
+                if (rulePackPath == packagedRulePack && Directory.Exists(defaultReleaseRulePack) && File.Exists(Path.Combine(defaultReleaseRulePack, "manifest.json")))
                 {
                     try
                     {
@@ -120,7 +120,7 @@ namespace AHUVerification.App
                     }
                     catch
                     {
-                        // Fall back to localActiveRulePack or packagedRulePack
+                        // Fall back to packagedRulePack
                     }
                 }
 #endif

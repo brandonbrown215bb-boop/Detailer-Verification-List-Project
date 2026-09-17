@@ -1150,6 +1150,123 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
+        public void Handle_SyncRulePack_ThenReloadActiveRulePack_RetainsSyncedPack()
+        {
+            var manager = new RulePackManager();
+            var baseline = manager.LoadFromDirectory(_rulePackPath);
+            string tempRemoteDir = Path.Combine(Path.GetTempPath(), $"dvl-remote-pack-{Guid.NewGuid():N}");
+
+            string localData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AHUVerification");
+            string activeDir = Path.Combine(localData, "active_rulepack");
+            string backupDir = Path.Combine(Path.GetTempPath(), $"dvl-active-backup-{Guid.NewGuid():N}");
+            bool hadActive = Directory.Exists(activeDir);
+
+            void CopyDirectory(string source, string target)
+            {
+                Directory.CreateDirectory(target);
+                foreach (var file in Directory.GetFiles(source))
+                {
+                    File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+                }
+            }
+
+            if (hadActive)
+            {
+                CopyDirectory(activeDir, backupDir);
+            }
+
+            try
+            {
+                var modifiedRules = new List<RuleDefinition>(baseline.Rules);
+                modifiedRules.Add(new RuleDefinition
+                {
+                    Id = "TEST-SYNC-RELOAD",
+                    SemanticKey = "TEST_SYNC_RELOAD",
+                    Scope = Core.Models.RuleScope.Unit,
+                    Category = "Base",
+                    Text = "Test sync reload retention",
+                    Order = 99
+                });
+
+                baseline.TemplateMap.RuleCellMappings["TEST_SYNC_RELOAD"] = new RuleCellMapping
+                {
+                    RuleId = "TEST-SYNC-RELOAD",
+                    Row = 101,
+                    NaCell = "S101",
+                    DetailerCell = "T101",
+                    CheckerCell = "V101",
+                    CommentsCell = "Y101",
+                    InitialsCell = "Z101"
+                };
+
+                var published = manager.PublishToDirectory(
+                    tempRemoteDir,
+                    "99.0.0",
+                    modifiedRules,
+                    baseline.TemplateMap,
+                    baseline.ApprovedMappings,
+                    baseline.TemplatePath
+                );
+
+                var handler = CreateAppHandler();
+
+                // 1. Initial pack is baseline (< 99.0.0)
+                var initialRes = handler.Handle("{\"id\":\"req-initial\",\"action\":\"getRulePack\"}");
+                Assert.True(initialRes.Success);
+                using var initialDoc = JsonDocument.Parse(JsonSerializer.Serialize(initialRes.Data));
+                string initialVersion = initialDoc.RootElement.GetProperty("manifest").GetProperty("version").GetString()!;
+                Assert.NotEqual("99.0.0", initialVersion);
+
+                // 2. Sync from remote
+                string syncJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-sync",
+                    action = "syncRulePack",
+                    payload = new { remotePath = tempRemoteDir }
+                });
+                var syncRes = handler.Handle(syncJson);
+                Assert.True(syncRes.Success, syncRes.Error);
+                using var syncDoc = JsonDocument.Parse(JsonSerializer.Serialize(syncRes.Data));
+                Assert.Equal("99.0.0", syncDoc.RootElement.GetProperty("version").GetString());
+
+                // 3. Reload active rule pack - MUST retain 99.0.0 and NOT revert to baseline
+                var reloadRes = handler.Handle("{\"id\":\"req-reload\",\"action\":\"reloadActiveRulePack\"}");
+                Assert.True(reloadRes.Success, reloadRes.Error);
+                using var reloadDoc = JsonDocument.Parse(JsonSerializer.Serialize(reloadRes.Data));
+                Assert.Equal("99.0.0", reloadDoc.RootElement.GetProperty("version").GetString());
+                Assert.Equal(published.Manifest.BundleSha256, reloadDoc.RootElement.GetProperty("bundleSha256").GetString());
+
+                // 4. Subsequent getRulePack also confirms 99.0.0
+                var postReloadRes = handler.Handle("{\"id\":\"req-post\",\"action\":\"getRulePack\"}");
+                Assert.True(postReloadRes.Success);
+                using var postDoc = JsonDocument.Parse(JsonSerializer.Serialize(postReloadRes.Data));
+                Assert.Equal("99.0.0", postDoc.RootElement.GetProperty("manifest").GetProperty("version").GetString());
+            }
+            finally
+            {
+                if (Directory.Exists(tempRemoteDir))
+                {
+                    try { Directory.Delete(tempRemoteDir, true); } catch { }
+                }
+
+                if (hadActive && Directory.Exists(backupDir))
+                {
+                    try
+                    {
+                        if (Directory.Exists(activeDir)) Directory.Delete(activeDir, true);
+                        CopyDirectory(backupDir, activeDir);
+                        Directory.Delete(backupDir, true);
+                    }
+                    catch { }
+                }
+                else if (!hadActive && Directory.Exists(activeDir))
+                {
+                    try { Directory.Delete(activeDir, true); } catch { }
+                }
+            }
+        }
+
+        [Fact]
         public void RuleEditor_HeadlessDialogActions_ReturnNullWithoutCrashing()
         {
             var handler = CreateRuleEditorHandler();

@@ -34,7 +34,7 @@ namespace AHUVerification.App.Bridge
         private RulePackBundle? _activeRulePack;
         private string? _rulePackError;
         private int _rulePackGeneration = 1;
-        private readonly string _rulePackPath;
+        private string _rulePackPath;
         private readonly Func<string?>? _exportPathSelector;
         private readonly Action<ProcessStartInfo> _processLauncher;
 
@@ -88,7 +88,17 @@ namespace AHUVerification.App.Bridge
             try
             {
                 if (!Directory.Exists(_rulePackPath))
-                    throw new DirectoryNotFoundException($"Rule pack directory not found: {_rulePackPath}");
+                {
+                    string localActive = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AHUVerification", "active_rulepack");
+                    if (Directory.Exists(localActive) && File.Exists(Path.Combine(localActive, "manifest.json")))
+                    {
+                        _rulePackPath = localActive;
+                    }
+                    else
+                    {
+                        throw new DirectoryNotFoundException($"Rule pack directory not found: {_rulePackPath}");
+                    }
+                }
 
                 _activeRulePack = _rulePackManager.LoadFromDirectory(_rulePackPath);
                 _rulePackError = null;
@@ -392,6 +402,7 @@ namespace AHUVerification.App.Bridge
             ProjectSessionSnapshot? updatedSnapshot = null;
             if (success)
             {
+                _rulePackPath = active;
                 _activeRulePack = _rulePackManager.LoadFromDirectory(active);
                 _rulePackGeneration++;
                 _rulePackError = null;

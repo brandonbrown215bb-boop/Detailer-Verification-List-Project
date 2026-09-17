@@ -25,11 +25,13 @@ export interface UseRulePackSessionResult {
   centralRulePackPath: string;
   setCentralRulePackPath: (path: string) => void;
   rulePackNotice: string | null;
+  rulePackNeedsReverify: boolean;
   dismissRulePackNotice: () => void;
   appUpdateNotice: AppUpdateNotice | null;
   dismissAppUpdateNotice: () => void;
   applyAppUpdate: () => Promise<void>;
   handleRulePackUpdated: (updatedBundle: RulePackPayload) => void;
+  markRulePackReverified: (updatedBundle: RulePackPayload) => void;
   rulePackError: string | null;
 }
 
@@ -41,6 +43,7 @@ export function useRulePackSession(): UseRulePackSessionResult {
     return localStorage.getItem('dvl_central_rulepack_path') || '';
   });
   const [rulePackNotice, setRulePackNotice] = useState<string | null>(null);
+  const [rulePackNeedsReverify, setRulePackNeedsReverify] = useState(false);
   const [rulePackError, setRulePackError] = useState<string | null>(null);
   const [appUpdateNotice, setAppUpdateNotice] = useState<AppUpdateNotice | null>(null);
   const packLoadRevision = useRef(0);
@@ -96,6 +99,7 @@ export function useRulePackSession(): UseRulePackSessionResult {
               const origin = resolved.isAutoDetected
                 ? (resolved.sourceType === 'NetworkShare' ? 'network share' : 'SharePoint sync')
                 : 'central path';
+              setRulePackNeedsReverify(true);
               setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules) from ${origin}`);
             }
           }
@@ -148,7 +152,27 @@ export function useRulePackSession(): UseRulePackSessionResult {
     setRulePackNotice(`Rule Pack updated to v${nextIdentity.version} (${updatedBundle.ruleCount || nextRules.filter(r => !r.isArchived).length} active rules)`);
   }, [rulePackIdentity]);
 
-  const dismissRulePackNotice = useCallback(() => setRulePackNotice(null), []);
+  const markRulePackReverified = useCallback((updatedBundle: RulePackPayload) => {
+    if (!updatedBundle?.rules?.length) return;
+    if (typeof updatedBundle.generation === 'number') {
+      if (updatedBundle.generation < activeHostGeneration.current) return;
+      activeHostGeneration.current = updatedBundle.generation;
+    }
+    ++packLoadRevision.current;
+    const nextRules = updatedBundle.rules as RuleDefinition[];
+    const nextIdentity = identityFromRulePack(updatedBundle, rulePackIdentity);
+    setActiveRules(nextRules);
+    setActiveRulePackArtifacts(activeRulePackArtifactsFrom(updatedBundle));
+    setRulePackIdentity(nextIdentity);
+    setRulePackNeedsReverify(false);
+    const activeCount = updatedBundle.ruleCount || nextRules.filter(r => !r.isArchived).length;
+    setRulePackNotice(`Project re-verified with Rule Pack v${nextIdentity.version} (${activeCount} active rules)`);
+  }, [rulePackIdentity]);
+
+  const dismissRulePackNotice = useCallback(() => {
+    setRulePackNotice(null);
+    setRulePackNeedsReverify(false);
+  }, []);
   const dismissAppUpdateNotice = useCallback(() => setAppUpdateNotice(null), []);
   const applyAppUpdate = useCallback(() => desktopBridge.applyAppUpdate(), []);
 
@@ -159,11 +183,13 @@ export function useRulePackSession(): UseRulePackSessionResult {
     centralRulePackPath,
     setCentralRulePackPath,
     rulePackNotice,
+    rulePackNeedsReverify,
     dismissRulePackNotice,
     appUpdateNotice,
     dismissAppUpdateNotice,
     applyAppUpdate,
     handleRulePackUpdated,
+    markRulePackReverified,
     rulePackError
   };
 }
