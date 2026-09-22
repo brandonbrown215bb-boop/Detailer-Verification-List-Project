@@ -180,6 +180,92 @@ namespace AHUVerification.Tests
             Assert.NotNull(missingRes.Error);
         }
 
+        [Fact]
+        public void SyncFromRemoteDetailed_ReturnsActionableError_WhenValidationFails()
+        {
+            var manager = new RulePackManager();
+            string remoteTemp = CopyRulePackToTemp();
+            string localStaging = Path.Combine(Path.GetTempPath(), $"staging-{Guid.NewGuid():N}");
+            string localActive = Path.Combine(Path.GetTempPath(), $"active-{Guid.NewGuid():N}");
+            string localLkg = Path.Combine(Path.GetTempPath(), $"lkg-{Guid.NewGuid():N}");
+
+            try
+            {
+                // Corrupt template_map.json with empty generalFields (reproducing the P: drive issue)
+                string tmPath = Path.Combine(remoteTemp, "template_map.json");
+                string badTm = File.ReadAllText(tmPath).Replace("\"generalFields\": {", "\"generalFields\": {}, \"_orig\": {");
+                File.WriteAllText(tmPath, badTm);
+
+                var result = manager.SyncFromRemoteDetailed(remoteTemp, localStaging, localActive, localLkg);
+                Assert.False(result.Success);
+                Assert.NotNull(result.Error);
+                Assert.Contains("Staged rule pack validation failed", result.Error);
+            }
+            finally
+            {
+                if (Directory.Exists(remoteTemp)) Directory.Delete(remoteTemp, true);
+                if (Directory.Exists(localStaging)) Directory.Delete(localStaging, true);
+                if (Directory.Exists(localActive)) Directory.Delete(localActive, true);
+                if (Directory.Exists(localLkg)) Directory.Delete(localLkg, true);
+            }
+        }
+
+        [Fact]
+        public void SyncFromRemoteDetailed_ReturnsSuccess_WhenBundleIsValid()
+        {
+            var manager = new RulePackManager();
+            string remoteTemp = CopyRulePackToTemp();
+            string localStaging = Path.Combine(Path.GetTempPath(), $"staging-{Guid.NewGuid():N}");
+            string localActive = Path.Combine(Path.GetTempPath(), $"active-{Guid.NewGuid():N}");
+            string localLkg = Path.Combine(Path.GetTempPath(), $"lkg-{Guid.NewGuid():N}");
+
+            try
+            {
+                var result = manager.SyncFromRemoteDetailed(remoteTemp, localStaging, localActive, localLkg);
+                Assert.True(result.Success);
+                Assert.Null(result.Error);
+                Assert.True(Directory.Exists(localActive));
+                Assert.True(File.Exists(Path.Combine(localActive, "manifest.json")));
+            }
+            finally
+            {
+                if (Directory.Exists(remoteTemp)) Directory.Delete(remoteTemp, true);
+                if (Directory.Exists(localStaging)) Directory.Delete(localStaging, true);
+                if (Directory.Exists(localActive)) Directory.Delete(localActive, true);
+                if (Directory.Exists(localLkg)) Directory.Delete(localLkg, true);
+            }
+        }
+
+        [Fact]
+        public void P_DriveRulePack_LoadsAndValidatesCleanly()
+        {
+            string pPath = @"P:\Detailing\DVL Rulepack";
+            if (!Directory.Exists(pPath)) return;
+
+            var manager = new RulePackManager();
+            var bundle = manager.LoadFromDirectory(pPath);
+            Assert.True(bundle.IsValid);
+            Assert.Equal("14.1.0", bundle.Manifest.Version);
+            Assert.Equal(82, bundle.Rules.Count(r => r.IsArchived != true));
+            Assert.True(bundle.TemplateMap.GeneralFields.Count > 0);
+
+            string localStaging = Path.Combine(Path.GetTempPath(), $"staging-p-{Guid.NewGuid():N}");
+            string localActive = Path.Combine(Path.GetTempPath(), $"active-p-{Guid.NewGuid():N}");
+            string localLkg = Path.Combine(Path.GetTempPath(), $"lkg-p-{Guid.NewGuid():N}");
+            try
+            {
+                var result = manager.SyncFromRemoteDetailed(pPath, localStaging, localActive, localLkg);
+                Assert.True(result.Success, result.Error);
+                Assert.Null(result.Error);
+            }
+            finally
+            {
+                if (Directory.Exists(localStaging)) Directory.Delete(localStaging, true);
+                if (Directory.Exists(localActive)) Directory.Delete(localActive, true);
+                if (Directory.Exists(localLkg)) Directory.Delete(localLkg, true);
+            }
+        }
+
         private static string CopyRulePackToTemp()
         {
             string destination = Path.Combine(Path.GetTempPath(), $"ahu-rulepack-{Guid.NewGuid():N}");

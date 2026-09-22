@@ -772,6 +772,9 @@ namespace AHUVerification.Core.Models
         [JsonPropertyName("isStackedTopUnit")]
         public bool IsStackedTopUnit { get; set; }
 
+        [JsonPropertyName("isMultiTunnel")]
+        public bool IsMultiTunnel { get; set; }
+
         [JsonPropertyName("hasFloorDrains")]
         public bool HasFloorDrains { get; set; }
 

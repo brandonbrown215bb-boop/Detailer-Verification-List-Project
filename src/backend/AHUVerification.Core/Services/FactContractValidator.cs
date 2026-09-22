@@ -82,9 +82,17 @@ namespace AHUVerification.Core.Services
         public static bool TryGetFactType(JsonElement contract, string rawKey, out string type)
         {
             type = "";
+            if (contract.ValueKind != JsonValueKind.Object) return false;
             var specs = new List<FactSpec>();
-            ReadSpecs(contract, "facts", specs);
-            ReadSpecs(contract, "patterns", specs);
+            try
+            {
+                ReadSpecs(contract, "facts", specs);
+                ReadSpecs(contract, "patterns", specs);
+            }
+            catch
+            {
+                return false;
+            }
             var aliases = ReadAliases(contract);
 
             if (!TryGetSpec(rawKey, specs, aliases, out var spec) || spec == null) return false;
@@ -112,6 +120,116 @@ namespace AHUVerification.Core.Services
                 "boolean" => value is bool,
                 _ => false
             };
+        }
+
+        public static bool IsFactContractCovered(JsonElement baselineContract, JsonElement candidateContract)
+        {
+            if (baselineContract.ValueKind != JsonValueKind.Object || candidateContract.ValueKind != JsonValueKind.Object)
+                return false;
+
+            try
+            {
+                var baselineSpecs = new List<FactSpec>();
+                ReadSpecs(baselineContract, "facts", baselineSpecs);
+
+                var candidateSpecs = new List<FactSpec>();
+                ReadSpecs(candidateContract, "facts", candidateSpecs);
+                ReadSpecs(candidateContract, "patterns", candidateSpecs);
+                var candidateAliases = ReadAliases(candidateContract);
+
+                foreach (var bSpec in baselineSpecs)
+                {
+                    if (!TryGetSpec(bSpec.Key, candidateSpecs, candidateAliases, out var cSpec) || cSpec == null)
+                    {
+                        return false;
+                    }
+                    if (!string.Equals(bSpec.Type, cSpec.Type, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+
+                var baselinePatterns = new List<FactSpec>();
+                ReadSpecs(baselineContract, "patterns", baselinePatterns);
+                foreach (var bPattern in baselinePatterns)
+                {
+                    if (!candidateSpecs.Any(c => string.Equals(c.Key, bPattern.Key, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static JsonElement MergeFactContracts(JsonElement baselineContract, JsonElement snapshotContract)
+        {
+            if (baselineContract.ValueKind != JsonValueKind.Object) return snapshotContract;
+            if (snapshotContract.ValueKind != JsonValueKind.Object) return baselineContract;
+
+            try
+            {
+                var baselineSpecs = new List<FactSpec>();
+                ReadSpecs(baselineContract, "facts", baselineSpecs);
+                var baselinePatterns = new List<FactSpec>();
+                ReadSpecs(baselineContract, "patterns", baselinePatterns);
+
+                var snapshotSpecs = new List<FactSpec>();
+                ReadSpecs(snapshotContract, "facts", snapshotSpecs);
+                var snapshotPatterns = new List<FactSpec>();
+                ReadSpecs(snapshotContract, "patterns", snapshotPatterns);
+
+                var mergedFacts = new List<FactSpec>(snapshotSpecs);
+                var snapshotAliases = ReadAliases(snapshotContract);
+                foreach (var bSpec in baselineSpecs)
+                {
+                    if (!TryGetSpec(bSpec.Key, mergedFacts, snapshotAliases, out var existing) || existing == null)
+                    {
+                        mergedFacts.Add(bSpec);
+                    }
+                }
+
+                var mergedPatterns = new List<FactSpec>(snapshotPatterns);
+                foreach (var bPattern in baselinePatterns)
+                {
+                    if (!mergedPatterns.Any(p => string.Equals(p.Key, bPattern.Key, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        mergedPatterns.Add(bPattern);
+                    }
+                }
+
+                var baselineAliases = ReadAliases(baselineContract);
+                var mergedAliases = new Dictionary<string, string>(baselineAliases, StringComparer.Ordinal);
+                foreach (var (k, v) in snapshotAliases)
+                {
+                    mergedAliases[k] = v;
+                }
+
+                string version = OptionalString(snapshotContract, "contractVersion")
+                    ?? OptionalString(baselineContract, "contractVersion")
+                    ?? "1.0.0";
+
+                var contractDict = new Dictionary<string, object>
+                {
+                    ["contractVersion"] = version,
+                    ["facts"] = mergedFacts.Select(s => new { key = s.Key, type = s.Type, scope = s.Scope }).ToArray(),
+                    ["patterns"] = mergedPatterns.Select(s => new { key = s.Key, type = s.Type, scope = s.Scope }).ToArray(),
+                    ["legacyAliases"] = mergedAliases
+                };
+
+                string json = JsonSerializer.Serialize(contractDict);
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.Clone();
+            }
+            catch
+            {
+                return baselineContract;
+            }
         }
 
         public static void Validate(JsonElement contract, JsonElement rules, JsonElement templateMap)
@@ -339,11 +457,20 @@ namespace AHUVerification.Core.Services
             if (map.ValueKind != JsonValueKind.Object) { errors.Add("template_map.json must be an object."); return; }
             if (!map.TryGetProperty("templateVersion", out var version) || version.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(version.GetString())) errors.Add("template_map.templateVersion is required.");
             if (!map.TryGetProperty("generalFields", out var fields) || fields.ValueKind != JsonValueKind.Object) errors.Add("template_map.generalFields is required.");
-            else foreach (var field in fields.EnumerateObject())
+            else
+            {
+                int fieldCount = 0;
+                foreach (var field in fields.EnumerateObject())
                 {
+                    fieldCount++;
                     if (field.Name != "generalComments" && !TryGetSpec(field.Name, specs, aliases, out _)) errors.Add($"template_map.generalFields references unknown fact '{field.Name}'.");
                     ValidateCoordinate(field.Value, $"template_map.generalFields.{field.Name}", errors);
                 }
+                if (fieldCount == 0)
+                {
+                    errors.Add("template_map.generalFields must be a non-empty object containing general specifications.");
+                }
+            }
             if (!map.TryGetProperty("sqRange", out var range) || range.ValueKind != JsonValueKind.Object) errors.Add("template_map.sqRange is required.");
             else
             {

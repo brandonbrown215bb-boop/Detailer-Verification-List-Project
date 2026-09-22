@@ -12,9 +12,33 @@ import { desktopBridge } from '../services/desktopBridge';
 const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 const defaultTemplateMap: TemplateMap = {
-  templateVersion: '1.0',
-  generalFields: {},
-  sqRange: { sheet: 'Skid 1', startRow: 1, endRow: 50, slotCol: 'A', textCol: 'B' },
+  templateVersion: '14.0.0',
+  generalFields: {
+    'unit.detailer': { sheet: 'Verification List', cell: 'D3' },
+    'unit.date': { sheet: 'Verification List', cell: 'D4' },
+    'unit.jobName': { sheet: 'Verification List', cell: 'D5' },
+    'unit.comNumber': { sheet: 'Verification List', cell: 'D6' },
+    'unit.shellType': { sheet: 'Verification List', cell: 'D7' },
+    'unit.tags': { sheet: 'Verification List', cell: 'D8' },
+    'unit.baseHeight': { sheet: 'Verification List', cell: 'D9' },
+    'casing.thicknessFront': { sheet: 'Verification List', cell: 'D10' },
+    'unit.thermalBreak': { sheet: 'Verification List', cell: 'D11' },
+    'roof.roofPeak': { sheet: 'Verification List', cell: 'D12' },
+    'unit.curbrest': { sheet: 'Verification List', cell: 'D13' },
+    'unit.noa': { sheet: 'Verification List', cell: 'D14' },
+    'unit.isSeismic': { sheet: 'Verification List', cell: 'D15' },
+    'unit.unitType': { sheet: 'Verification List', cell: 'D16' },
+    'unit.knockdown': { sheet: 'Verification List', cell: 'D17' },
+    'unit.hasUTL': { sheet: 'Verification List', cell: 'D18' },
+    'casing.interiorMaterial': { sheet: 'Verification List', cell: 'D19' },
+    'casing.interiorGauge': { sheet: 'Verification List', cell: 'F19' },
+    'casing.exteriorMaterial': { sheet: 'Verification List', cell: 'D20' },
+    'casing.exteriorGauge': { sheet: 'Verification List', cell: 'F20' },
+    'casing.floorMaterial': { sheet: 'Verification List', cell: 'D21' },
+    'casing.floorGauge': { sheet: 'Verification List', cell: 'F21' },
+    'generalComments': { sheet: 'Verification List', cell: 'D22' }
+  },
+  sqRange: { sheet: 'Verification List', startRow: 4, endRow: 25, slotCol: 'G', textCol: 'H' },
   ruleCellMappings: {}
 };
 

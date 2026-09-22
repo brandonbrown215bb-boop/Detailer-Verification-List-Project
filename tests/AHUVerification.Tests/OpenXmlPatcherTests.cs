@@ -138,6 +138,14 @@ namespace AHUVerification.Tests
                     Assert.Equal("Tanner Dean", GetCellValue("D3"));
                     Assert.Equal("Medical Center Phase 3", GetCellValue("D5"));
                     Assert.Equal("COM-842910", GetCellValue("D6"));
+                    Assert.Equal("Multi-Tunnel", GetCellValue("D8"));
+                    Assert.Equal("Outdoor", GetCellValue("D16"));
+                    Assert.Equal("STL GALV", GetCellValue("D19"));
+                    Assert.Equal("22", GetCellValue("F19"));
+                    Assert.Equal("STL GALV PPC", GetCellValue("D20"));
+                    Assert.Equal("18", GetCellValue("F20"));
+                    Assert.Equal("STL GALV", GetCellValue("D21"));
+                    Assert.Equal("16", GetCellValue("F21"));
                     Assert.Equal("1", GetCellValue("G4"));
                     Assert.Equal("Custom drain pan depth 3.5 in. with copper downspout connection", GetCellValue("H4"));
 
@@ -169,6 +177,29 @@ namespace AHUVerification.Tests
                     Assert.Equal(expectedRuleCount, emittedRuleIds.Count);
                     Assert.Contains(allEmittedTexts, t => t == "Needs Input");
                     Assert.DoesNotContain(allEmittedTexts, t => t == "Not Applicable");
+
+                    // Verify Column T & Column V checkbox boolean formatting on actual check rows
+                    var checkRows = vlRows.Where(r =>
+                    {
+                        string bVal = GetCellValue($"B{r.RowIndex?.Value}");
+                        return !string.IsNullOrEmpty(bVal) && bVal.Contains("-");
+                    }).ToList();
+                    Assert.NotEmpty(checkRows);
+                    foreach (var cr in checkRows)
+                    {
+                        var tCell = cr.Elements<Cell>().First(c => c.CellReference?.Value == $"T{cr.RowIndex?.Value}");
+                        var vCell = cr.Elements<Cell>().First(c => c.CellReference?.Value == $"V{cr.RowIndex?.Value}");
+
+                        Assert.Equal(CellValues.Boolean, tCell.DataType?.Value);
+                        Assert.Contains(tCell.CellValue?.Text, new[] { "0", "1" });
+
+                        Assert.Equal(CellValues.Boolean, vCell.DataType?.Value);
+                        Assert.Equal("0", vCell.CellValue?.Text);
+                    }
+                    // At least one passed check emits "1" in Column T
+                    Assert.Contains(checkRows, cr => cr.Elements<Cell>().Any(c => c.CellReference?.Value == $"T{cr.RowIndex?.Value}" && c.CellValue?.Text == "1"));
+                    // At least one incomplete/needsInput check emits "0" in Column T
+                    Assert.Contains(checkRows, cr => cr.Elements<Cell>().Any(c => c.CellReference?.Value == $"T{cr.RowIndex?.Value}" && c.CellValue?.Text == "0"));
 
                     // Verify hidden Audit Log sheet exists with hidden state
                     var auditSheet = sheets.FirstOrDefault(s => s.Name?.Value == "Audit Log");
@@ -716,6 +747,226 @@ namespace AHUVerification.Tests
                 var row = vlWsPart.Worksheet.Descendants<Row>().First(r => GetVlCellValue($"B{r.RowIndex?.Value}") == "OVERRIDE-01");
                 // Column Z should have the overridden initials "BRB" instead of "BB"
                 Assert.Equal("BRB", GetVlCellValue($"Z{row.RowIndex?.Value}"));
+
+                var tCell = row.Elements<Cell>().First(c => c.CellReference?.Value == $"T{row.RowIndex?.Value}");
+                var vCell = row.Elements<Cell>().First(c => c.CellReference?.Value == $"V{row.RowIndex?.Value}");
+                Assert.Equal(CellValues.Boolean, tCell.DataType?.Value);
+                Assert.Equal("1", tCell.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, vCell.DataType?.Value);
+                Assert.Equal("0", vCell.CellValue?.Text);
+            }
+            finally
+            {
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+            }
+        }
+
+        [Fact]
+        public void PatchTemplate_CreatesValidBooleanCheckboxesForExcel()
+        {
+            string templatePath = TestPathHelper.GetRepoPath("Detailing Verification List.xlsx");
+            var rulePackManager = new RulePackManager();
+            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
+
+            var graph = new NormalizedXmlGraph();
+            var facts = new Dictionary<string, Fact>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                ["unit.detailer"] = new Fact { Value = "Test Detailer" },
+                ["unit.date"] = new Fact { Value = "2026-09-22" }
+            };
+
+            var testRules = new List<RuleDefinition>
+            {
+                new RuleDefinition { Id = "CHK-01", SemanticKey = "CHK-01", Text = "Passed Check", Category = "Base" },
+                new RuleDefinition { Id = "CHK-02", SemanticKey = "CHK-02", Text = "Incomplete Check", Category = "Base" },
+                new RuleDefinition { Id = "CHK-03", SemanticKey = "CHK-03", Text = "NA Check", Category = "Base" }
+            };
+
+            var testChecklists = new List<ChecklistInstance>
+            {
+                new ChecklistInstance
+                {
+                    RuleId = "CHK-01",
+                    SemanticKey = "CHK-01",
+                    ScopeTargetId = "unit",
+                    Applicability = RuleApplicability.Applicable,
+                    Status = CheckStatus.Passed
+                },
+                new ChecklistInstance
+                {
+                    RuleId = "CHK-02",
+                    SemanticKey = "CHK-02",
+                    ScopeTargetId = "unit",
+                    Applicability = RuleApplicability.Applicable,
+                    Status = CheckStatus.Incomplete
+                },
+                new ChecklistInstance
+                {
+                    RuleId = "CHK-03",
+                    SemanticKey = "CHK-03",
+                    ScopeTargetId = "unit",
+                    Applicability = RuleApplicability.Applicable,
+                    Status = CheckStatus.NA
+                }
+            };
+
+            string outputPath = Environment.GetEnvironmentVariable("AHU_PRESERVE_TEST_DELIVERABLE") ?? Path.Combine(Path.GetTempPath(), "ExcelCheckboxValidation.xlsx");
+            try
+            {
+                var patcher = new OpenXmlTemplatePatcher();
+                patcher.PatchTemplate(
+                    templatePath,
+                    outputPath,
+                    bundle.TemplateMap,
+                    facts,
+                    new List<SpecialQuote>(),
+                    testChecklists,
+                    testRules,
+                    generalComments: "Excel COM verification",
+                    isDraft: false,
+                    graph: graph
+                );
+
+                Assert.True(File.Exists(outputPath));
+                OpenXmlTemplatePatcher.ValidateGeneratedWorkbook(outputPath);
+
+                using var doc = SpreadsheetDocument.Open(outputPath, false);
+                var wbPart = doc.WorkbookPart!;
+                var vlSheet = wbPart.Workbook.Sheets!.Elements<Sheet>().First(s => s.Name?.Value == "Verification List");
+                var vlWsPart = (WorksheetPart)wbPart.GetPartById(vlSheet.Id!);
+
+                var sstPart = wbPart.SharedStringTablePart!;
+                var sst = sstPart.SharedStringTable.Elements<SharedStringItem>().Select(s => s.InnerText).ToList();
+
+                string GetVal(string cellRef)
+                {
+                    var cell = vlWsPart.Worksheet.Descendants<Cell>().FirstOrDefault(c => c.CellReference?.Value == cellRef);
+                    if (cell == null || cell.CellValue == null) return "";
+                    string val = cell.CellValue.Text;
+                    if (cell.DataType != null && cell.DataType.Value == CellValues.SharedString && int.TryParse(val, out int idx) && idx < sst.Count)
+                    {
+                        return sst[idx];
+                    }
+                    return val;
+                }
+
+                var rPassed = vlWsPart.Worksheet.Descendants<Row>().First(r => GetVal($"B{r.RowIndex?.Value}") == "CHK-01");
+                var sPassed = rPassed.Elements<Cell>().First(c => c.CellReference?.Value == $"S{rPassed.RowIndex?.Value}");
+                var tPassed = rPassed.Elements<Cell>().First(c => c.CellReference?.Value == $"T{rPassed.RowIndex?.Value}");
+                var vPassed = rPassed.Elements<Cell>().First(c => c.CellReference?.Value == $"V{rPassed.RowIndex?.Value}");
+                Assert.Equal(CellValues.Boolean, sPassed.DataType?.Value);
+                Assert.Equal("0", sPassed.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, tPassed.DataType?.Value);
+                Assert.Equal("1", tPassed.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, vPassed.DataType?.Value);
+                Assert.Equal("0", vPassed.CellValue?.Text);
+
+                var rIncomplete = vlWsPart.Worksheet.Descendants<Row>().First(r => GetVal($"B{r.RowIndex?.Value}") == "CHK-02");
+                var sIncomplete = rIncomplete.Elements<Cell>().First(c => c.CellReference?.Value == $"S{rIncomplete.RowIndex?.Value}");
+                var tIncomplete = rIncomplete.Elements<Cell>().First(c => c.CellReference?.Value == $"T{rIncomplete.RowIndex?.Value}");
+                var vIncomplete = rIncomplete.Elements<Cell>().First(c => c.CellReference?.Value == $"V{rIncomplete.RowIndex?.Value}");
+                Assert.Equal(CellValues.Boolean, sIncomplete.DataType?.Value);
+                Assert.Equal("0", sIncomplete.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, tIncomplete.DataType?.Value);
+                Assert.Equal("0", tIncomplete.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, vIncomplete.DataType?.Value);
+                Assert.Equal("0", vIncomplete.CellValue?.Text);
+
+                var rNa = vlWsPart.Worksheet.Descendants<Row>().First(r => GetVal($"B{r.RowIndex?.Value}") == "CHK-03");
+                var sNa = rNa.Elements<Cell>().First(c => c.CellReference?.Value == $"S{rNa.RowIndex?.Value}");
+                var tNa = rNa.Elements<Cell>().First(c => c.CellReference?.Value == $"T{rNa.RowIndex?.Value}");
+                var vNa = rNa.Elements<Cell>().First(c => c.CellReference?.Value == $"V{rNa.RowIndex?.Value}");
+                Assert.Equal(CellValues.Boolean, sNa.DataType?.Value);
+                Assert.Equal("1", sNa.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, tNa.DataType?.Value);
+                Assert.Equal("0", tNa.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, vNa.DataType?.Value);
+                Assert.Equal("0", vNa.CellValue?.Text);
+            }
+            finally
+            {
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AHU_PRESERVE_TEST_DELIVERABLE")) && File.Exists(outputPath))
+                {
+                    File.Delete(outputPath);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false, false, "Standard")]
+        [InlineData(true, false, false, "Tiered")]
+        [InlineData(false, true, false, "Stacked")]
+        [InlineData(false, false, true, "Multi-Tunnel")]
+        public void PatchTemplate_PopulatesHeaderCellsAndEvaluatesTagsHierarchy(bool isTiered, bool isStacked, bool isMultiTunnel, string expectedTag)
+        {
+            string templatePath = TestPathHelper.GetRepoPath("Detailing Verification List.xlsx");
+            var rulePackManager = new RulePackManager();
+            var bundle = rulePackManager.LoadFromDirectory(TestPathHelper.GetRepoPath("resources/rulepack"));
+
+            var graph = TestGraphFactory.CreateStandardMultiSkidGraph();
+            graph.IsTiered = isTiered;
+            graph.IsStacked = isStacked;
+            graph.IsMultiTunnel = isMultiTunnel;
+            graph.UnitOptions.UnitType = "Indoor";
+
+            var extractor = new FactExtractor();
+            var facts = extractor.ExtractFacts(graph);
+            extractor.OverrideFact(facts, "unit.detailer", "Jane Doe", "Test", "Test");
+            extractor.OverrideFact(facts, "unit.jobName", "Hospital Expansion", "Test", "Test");
+            extractor.OverrideFact(facts, "unit.comNumber", "COM-112233", "Test", "Test");
+
+            var evaluator = new AstRuleEvaluator();
+            var checklists = evaluator.GenerateChecklists(bundle.Rules, graph, facts);
+
+            string outputPath = Path.Combine(Path.GetTempPath(), $"TagHierarchy_{System.Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var patcher = new OpenXmlTemplatePatcher();
+                patcher.PatchTemplate(
+                    templatePath,
+                    outputPath,
+                    bundle.TemplateMap,
+                    facts,
+                    new List<SpecialQuote>(),
+                    checklists,
+                    bundle.Rules,
+                    "Audit tags test",
+                    isDraft: false,
+                    graph: graph
+                );
+
+                Assert.True(File.Exists(outputPath));
+
+                using var doc = SpreadsheetDocument.Open(outputPath, false);
+                var wbPart = doc.WorkbookPart!;
+                var vlSheet = wbPart.Workbook.Sheets?.Elements<Sheet>().FirstOrDefault(s => s.Name?.Value == "Verification List");
+                Assert.NotNull(vlSheet);
+                var vlWsPart = (WorksheetPart)wbPart.GetPartById(vlSheet.Id!);
+                var sstPart = wbPart.SharedStringTablePart;
+                var sst = sstPart?.SharedStringTable.Elements<SharedStringItem>().Select(s => s.InnerText).ToList() ?? new List<string>();
+
+                string GetCellValue(string cellRef)
+                {
+                    var cell = vlWsPart.Worksheet.Descendants<Cell>().FirstOrDefault(c => c.CellReference?.Value == cellRef);
+                    if (cell == null || cell.CellValue == null) return "";
+                    string val = cell.CellValue.Text;
+                    if (cell.DataType != null && cell.DataType.Value == CellValues.SharedString && int.TryParse(val, out int idx) && idx < sst.Count)
+                    {
+                        return sst[idx];
+                    }
+                    return val;
+                }
+
+                // Assert D8 tags resolution
+                Assert.Equal(expectedTag, GetCellValue("D8"));
+
+                // Assert D16 unit location / unitType resolution
+                Assert.Equal("Indoor", GetCellValue("D16"));
+
+                // Assert core header fields are populated
+                Assert.Equal("Jane Doe", GetCellValue("D3"));
+                Assert.Equal("Hospital Expansion", GetCellValue("D5"));
+                Assert.Equal("COM-112233", GetCellValue("D6"));
             }
             finally
             {

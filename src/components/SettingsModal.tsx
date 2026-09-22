@@ -158,14 +158,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const syncResult = await desktopBridge.syncRulePack(targetPath);
 
       if (syncResult.success) {
+        localStorage.removeItem('dvl_failed_rulepack_sha');
         setCheckStatus('updated');
         setStatusMessage(`Successfully updated to Rule Pack v${syncResult.version} (${syncResult.ruleCount} active rules).`);
         if (onRulePackUpdated && syncResult.rules) {
           onRulePackUpdated(syncResult);
         }
       } else {
+        if (updateInfo.remoteBundleSha256) {
+          localStorage.setItem('dvl_failed_rulepack_sha', updateInfo.remoteBundleSha256);
+        }
         setCheckStatus('error');
-        setStatusMessage('Sync failed. Reverting to Last Known Good rule pack.');
+        const detail = syncResult.error ? `: ${syncResult.error}` : '';
+        setStatusMessage(`Remote rule pack rejected${detail}. Active rule pack (v${updateInfo.currentVersion}) remains active.`);
       }
     } catch (err: any) {
       setCheckStatus('error');

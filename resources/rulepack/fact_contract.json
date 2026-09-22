@@ -77,12 +77,27 @@
       "scope": "Unit"
     },
     {
+      "key": "unit.isMultiTunnel",
+      "type": "boolean",
+      "scope": "Unit"
+    },
+    {
       "key": "unit.hasFloorDrains",
       "type": "boolean",
       "scope": "Unit"
     },
     {
       "key": "unit.shellType",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.detailingTool",
+      "type": "string",
+      "scope": "Unit"
+    },
+    {
+      "key": "unit.tags",
       "type": "string",
       "scope": "Unit"
     },

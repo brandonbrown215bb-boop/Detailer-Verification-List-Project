@@ -33,6 +33,12 @@ namespace AHUVerification.Core.Services
         public string? Error { get; set; }
     }
 
+    public class RulePackSyncOperationResult
+    {
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+    }
+
     public class RulePackManager
     {
         private static readonly string[] RequiredArtifactNames =
@@ -255,27 +261,64 @@ namespace AHUVerification.Core.Services
             }
         }
 
-        public bool SyncFromRemote(string remotePath, string localStagingPath, string activeStorePath, string lkgPath)
+        public RulePackSyncOperationResult SyncFromRemoteDetailed(string remotePath, string localStagingPath, string activeStorePath, string lkgPath)
         {
             bool activeMovedToLkg = false;
             try
             {
-                if (!Directory.Exists(remotePath)) return false;
+                if (string.IsNullOrWhiteSpace(remotePath) || !Directory.Exists(remotePath))
+                {
+                    return new RulePackSyncOperationResult
+                    {
+                        Success = false,
+                        Error = $"Remote directory does not exist or is inaccessible: '{remotePath}'"
+                    };
+                }
 
                 // 1. Download to local staging directory
                 if (Directory.Exists(localStagingPath))
                     Directory.Delete(localStagingPath, true);
                 Directory.CreateDirectory(localStagingPath);
 
-                foreach (var file in Directory.GetFiles(remotePath))
+                var files = Directory.GetFiles(remotePath);
+                if (files.Length == 0)
+                {
+                    return new RulePackSyncOperationResult
+                    {
+                        Success = false,
+                        Error = $"Remote directory is empty: '{remotePath}'"
+                    };
+                }
+
+                foreach (var file in files)
                 {
                     string dest = Path.Combine(localStagingPath, Path.GetFileName(file));
                     File.Copy(file, dest, true);
                 }
 
                 // 2. Validate staged rule pack
-                var staged = LoadFromDirectory(localStagingPath);
-                if (!staged.IsValid) return false;
+                RulePackBundle staged;
+                try
+                {
+                    staged = LoadFromDirectory(localStagingPath);
+                }
+                catch (Exception valEx)
+                {
+                    return new RulePackSyncOperationResult
+                    {
+                        Success = false,
+                        Error = $"Staged rule pack validation failed: {valEx.Message}"
+                    };
+                }
+
+                if (!staged.IsValid)
+                {
+                    return new RulePackSyncOperationResult
+                    {
+                        Success = false,
+                        Error = "Staged rule pack is invalid."
+                    };
+                }
 
                 // 3. Rename the active store to LKG on the same local volume.
                 if (Directory.Exists(activeStorePath))
@@ -289,7 +332,7 @@ namespace AHUVerification.Core.Services
                 // 4. Promote the already-validated staging directory with a rename.
                 Directory.Move(localStagingPath, activeStorePath);
 
-                return true;
+                return new RulePackSyncOperationResult { Success = true };
             }
             catch (Exception ex)
             {
@@ -297,12 +340,28 @@ namespace AHUVerification.Core.Services
                 // Roll back only when this attempt moved the previous active pack.
                 if (activeMovedToLkg && Directory.Exists(lkgPath))
                 {
-                    if (Directory.Exists(activeStorePath))
-                        Directory.Delete(activeStorePath, true);
-                    Directory.Move(lkgPath, activeStorePath);
+                    try
+                    {
+                        if (Directory.Exists(activeStorePath))
+                            Directory.Delete(activeStorePath, true);
+                        Directory.Move(lkgPath, activeStorePath);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        Console.WriteLine($"Rule pack rollback error: {rollbackEx.Message}");
+                    }
                 }
-                return false;
+                return new RulePackSyncOperationResult
+                {
+                    Success = false,
+                    Error = $"Rule pack sync error: {ex.Message}"
+                };
             }
+        }
+
+        public bool SyncFromRemote(string remotePath, string localStagingPath, string activeStorePath, string lkgPath)
+        {
+            return SyncFromRemoteDetailed(remotePath, localStagingPath, activeStorePath, lkgPath).Success;
         }
 
         public RulePackBundle PublishToDirectory(

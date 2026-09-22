@@ -138,6 +138,16 @@ namespace AHUVerification.Core.Session
                 Graph = synthesizedGraph;
                 BaselineFacts = synthesizedBaselineFacts != null ? CloneFacts(synthesizedBaselineFacts) : _factExtractor.ExtractFacts(Graph, OrderRevision);
                 Facts = synthesizedFacts != null ? CloneFacts(synthesizedFacts) : CloneFacts(BaselineFacts);
+                if (synthesizedFacts != null)
+                {
+                    foreach (var (bKey, bFact) in BaselineFacts)
+                    {
+                        if (!Facts.ContainsKey(bKey))
+                        {
+                            Facts[bKey] = CloneFact(bFact);
+                        }
+                    }
+                }
                 ManualOverrides = new Dictionary<string, Fact>(StringComparer.Ordinal);
 
                 if (initialOverrides != null)
@@ -301,6 +311,7 @@ namespace AHUVerification.Core.Session
                 }
 
                 if (ActiveRulePack.FactContract.ValueKind == JsonValueKind.Object
+                    && FactContractValidator.TryGetFactType(ActiveRulePack.FactContract, key, out _)
                     && !FactContractValidator.IsFactValueCompatible(ActiveRulePack.FactContract, key, val))
                 {
                     return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Value for '{cmd.FactId}' is incompatible with fact contract", CreateSnapshot()));
@@ -355,6 +366,7 @@ namespace AHUVerification.Core.Session
                     }
 
                     if (ActiveRulePack.FactContract.ValueKind == JsonValueKind.Object
+                        && FactContractValidator.TryGetFactType(ActiveRulePack.FactContract, key, out _)
                         && !FactContractValidator.IsFactValueCompatible(ActiveRulePack.FactContract, key, val))
                     {
                         return RecordCommandResult(cmd.RequestId, SessionCommandResult.Fail($"Value for '{entry.FactId}' is incompatible with fact contract", CreateSnapshot()));

@@ -240,7 +240,7 @@ namespace AHUVerification.Core.Session
                         Rules = project.RulePackSnapshot.Rules,
                         TemplateMap = project.RulePackSnapshot.TemplateMap ?? new TemplateMap(),
                         ApprovedMappings = project.RulePackSnapshot.ApprovedMappings,
-                        FactContract = project.RulePackSnapshot.FactContract,
+                        FactContract = FactContractValidator.MergeFactContracts(activePack.FactContract, project.RulePackSnapshot.FactContract),
                         TemplatePath = activePack.TemplatePath ?? "",
                         IsValid = true
                     };

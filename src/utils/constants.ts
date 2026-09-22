@@ -21,6 +21,7 @@ export const FACT_KEYS = {
   LIP_HEIGHT: 'unit.lipHeight',
   HAS_UTL: 'unit.hasUTL',
   SHELL_TYPE: 'unit.shellType',
+  DETAILING_TOOL: 'unit.detailingTool',
   UNIT_TYPE: 'unit.unitType',
   WALL_THICKNESS: 'unit.wallThickness',
   THERMAL_BREAK: 'unit.thermalBreak',

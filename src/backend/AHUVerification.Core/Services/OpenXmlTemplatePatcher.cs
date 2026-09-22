@@ -222,23 +222,36 @@ namespace AHUVerification.Core.Services
                                 ? dateFact.Value.ToString()!
                                 : DateTime.Now.ToString("yyyy-MM-dd");
                         }
-                        else if (facts.TryGetValue(factKey, out var fact))
+                        else if (coord.Cell == "D8" || factKey == "unit.tags")
                         {
-                            if (fact.Value is bool b)
+                            if (facts.TryGetValue("unit.tags", out var tfVal) && !string.IsNullOrWhiteSpace(tfVal.Value?.ToString()))
                             {
-                                val = b ? "Yes" : "No";
-                            }
-                            else if (fact.Value is System.Text.Json.JsonElement je && (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False))
-                            {
-                                val = je.GetBoolean() ? "Yes" : "No";
-                            }
-                            else if (bool.TryParse(fact.Value?.ToString(), out bool bParsed))
-                            {
-                                val = bParsed ? "Yes" : "No";
+                                val = tfVal.Value.ToString()!;
                             }
                             else
                             {
-                                val = fact.Value?.ToString() ?? "";
+                                facts.TryGetValue("unit.isTiered", out var tf);
+                                facts.TryGetValue("unit.isStacked", out var sf);
+                                facts.TryGetValue("unit.isMultiTunnel", out var mtf);
+
+                                bool isTiered = IsTruthyFact(tf, graph?.IsTiered ?? false);
+                                bool isStacked = IsTruthyFact(sf, graph?.IsStacked ?? false);
+                                bool isMultiTunnel = IsTruthyFact(mtf, graph?.IsMultiTunnel ?? false);
+
+                                var activeTags = new List<string>();
+                                if (isTiered) activeTags.Add("Tiered");
+                                if (isStacked) activeTags.Add("Stacked");
+                                if (isMultiTunnel) activeTags.Add("Multi-Tunnel");
+
+                                val = activeTags.Count > 0 ? string.Join(", ", activeTags) : "Standard";
+                            }
+                        }
+                        else
+                        {
+                            string canonicalKey = FactContractValidator.CanonicalizeKey(factKey);
+                            if (facts.TryGetValue(factKey, out var fact) || facts.TryGetValue(canonicalKey, out fact))
+                            {
+                                val = FormatFactValue(fact);
                             }
                         }
                         SetCellValue(coord.Cell, val);
@@ -682,31 +695,39 @@ namespace AHUVerification.Core.Services
             }
             row.AppendChild(new Cell { CellReference = $"R{rowIndex}", StyleIndex = rEndStyle });
 
-            string naVal = "";
-            if (inst.Applicability == RuleApplicability.NeedsInput) naVal = "Needs Input";
-            else if (inst.Applicability == RuleApplicability.NotApplicable) naVal = "Not Applicable";
-            else if (inst.Status == CheckStatus.NA) naVal = "N/A";
-
-            if (!string.IsNullOrEmpty(naVal))
+            if (inst.Applicability == RuleApplicability.NeedsInput)
             {
-                row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(naVal).ToString()) });
+                row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString("Needs Input").ToString()) });
             }
             else
             {
-                row.AppendChild(new Cell { CellReference = $"S{rowIndex}", StyleIndex = sStyle });
+                bool isNa = inst.Status == CheckStatus.NA;
+                row.AppendChild(new Cell
+                {
+                    CellReference = $"S{rowIndex}",
+                    StyleIndex = sStyle,
+                    DataType = CellValues.Boolean,
+                    CellValue = new CellValue(isNa ? "1" : "0")
+                });
             }
 
-            string detailerVal = "0";
-            if (inst.Applicability == RuleApplicability.NeedsInput) detailerVal = "Needs Input";
-            else if (inst.Applicability == RuleApplicability.NotApplicable) detailerVal = "Not Applicable";
-            else if (inst.Status == CheckStatus.NA) detailerVal = "N/A";
-            else if (inst.Status == CheckStatus.Passed) detailerVal = "Yes";
-            else if (inst.Status == CheckStatus.Flagged) detailerVal = "Flagged";
-
-            row.AppendChild(new Cell { CellReference = $"T{rowIndex}", StyleIndex = tStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString(detailerVal).ToString()) });
+            bool isDetailerChecked = inst.Status == CheckStatus.Passed;
+            row.AppendChild(new Cell
+            {
+                CellReference = $"T{rowIndex}",
+                StyleIndex = tStyle,
+                DataType = CellValues.Boolean,
+                CellValue = new CellValue(isDetailerChecked ? "1" : "0")
+            });
             row.AppendChild(new Cell { CellReference = $"U{rowIndex}", StyleIndex = tStyle });
 
-            row.AppendChild(new Cell { CellReference = $"V{rowIndex}", StyleIndex = tStyle, DataType = CellValues.SharedString, CellValue = new CellValue(insertSharedString("0").ToString()) });
+            row.AppendChild(new Cell
+            {
+                CellReference = $"V{rowIndex}",
+                StyleIndex = tStyle,
+                DataType = CellValues.Boolean,
+                CellValue = new CellValue("0")
+            });
             row.AppendChild(new Cell { CellReference = $"W{rowIndex}", StyleIndex = wEndStyle });
 
             string comments = inst.DetailerComment;
@@ -856,6 +877,29 @@ namespace AHUVerification.Core.Services
             }
 
             auditWs.Save();
+        }
+
+        private static bool IsTruthyFact(Fact? fact, bool fallback = false)
+        {
+            if (fact == null || fact.Value == null) return fallback;
+            if (fact.Value is bool b) return b;
+            string s = fact.Value.ToString() ?? "";
+            return s.Equals("True", StringComparison.OrdinalIgnoreCase) || s.Equals("Yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatFactValue(Fact? fact)
+        {
+            if (fact?.Value == null) return "";
+            if (fact.Value is bool b) return b ? "Yes" : "No";
+            if (fact.Value is System.Text.Json.JsonElement je && (je.ValueKind == System.Text.Json.JsonValueKind.True || je.ValueKind == System.Text.Json.JsonValueKind.False))
+            {
+                return je.GetBoolean() ? "Yes" : "No";
+            }
+            if (bool.TryParse(fact.Value.ToString(), out bool bParsed))
+            {
+                return bParsed ? "Yes" : "No";
+            }
+            return fact.Value.ToString() ?? "";
         }
     }
 }

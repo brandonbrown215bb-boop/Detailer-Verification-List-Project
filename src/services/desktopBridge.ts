@@ -76,6 +76,7 @@ export interface INativeBridge {
   }>;
   syncRulePack(remotePath: string): Promise<{
     success: boolean;
+    error?: string;
     version: string;
     bundleSha256?: string;
     ruleCount: number;
@@ -263,6 +264,7 @@ export class WebView2DesktopBridge implements INativeBridge {
 
   public async syncRulePack(remotePath: string): Promise<{
     success: boolean;
+    error?: string;
     version: string;
     bundleSha256?: string;
     ruleCount: number;

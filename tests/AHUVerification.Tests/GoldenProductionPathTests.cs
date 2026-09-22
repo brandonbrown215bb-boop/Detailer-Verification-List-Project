@@ -296,8 +296,24 @@ namespace AHUVerification.Tests
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .ToList();
 
-                Assert.Contains("Yes", allEmittedStatuses);
+                Assert.Contains("1", allEmittedStatuses);
                 Assert.DoesNotContain("Incomplete", allEmittedStatuses);
+
+                // Verify Column T (Detailer Check) and Column V (Checker Check) use Boolean datatype on actual check rows
+                var checkRows = vlRows.Where(r =>
+                {
+                    string bVal = ReadCell($"B{r.RowIndex?.Value}");
+                    return !string.IsNullOrEmpty(bVal) && bVal.Contains("-");
+                }).ToList();
+                Assert.NotEmpty(checkRows);
+
+                var firstCheckRow = checkRows.First();
+                var tCell = firstCheckRow.Elements<Cell>().First(c => c.CellReference?.Value == $"T{firstCheckRow.RowIndex?.Value}");
+                var vCell = firstCheckRow.Elements<Cell>().First(c => c.CellReference?.Value == $"V{firstCheckRow.RowIndex?.Value}");
+                Assert.Equal(CellValues.Boolean, tCell.DataType?.Value);
+                Assert.Equal("1", tCell.CellValue?.Text);
+                Assert.Equal(CellValues.Boolean, vCell.DataType?.Value);
+                Assert.Equal("0", vCell.CellValue?.Text);
             }
             finally
             {

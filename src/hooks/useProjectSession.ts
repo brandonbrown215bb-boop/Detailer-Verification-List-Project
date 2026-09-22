@@ -680,10 +680,14 @@ export function useProjectSession({
     if (sessionSnapshotRef.current) {
       try {
         const currentSessionId = sessionSnapshotRef.current.sessionId;
+        const defaultDirectory = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('dvl_shared_export_path') || undefined
+          : undefined;
         const res = await desktopBridge.projectSessionSave({
           sessionId: currentSessionId,
           expectedRevision: sessionSnapshotRef.current.revision,
-          forceSaveAs
+          forceSaveAs,
+          defaultDirectory
         });
         if (res.saved) {
           setCurrentProjectPath(res.path || null);
@@ -716,10 +720,14 @@ export function useProjectSession({
     if (sessionSnapshotRef.current) {
       try {
         const currentSessionId = sessionSnapshotRef.current.sessionId;
+        const defaultDirectory = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('dvl_shared_export_path') || undefined
+          : undefined;
         const result = await desktopBridge.projectSessionExportExcel({
           sessionId: currentSessionId,
           isDraft,
-          expectedRevision: sessionSnapshotRef.current.revision
+          expectedRevision: sessionSnapshotRef.current.revision,
+          defaultDirectory
         });
         if (result.exported && !result.cancelled) {
           setExportNotice({ fileName: result.fileName || 'Deliverable.xlsx', filePath: result.filePath });

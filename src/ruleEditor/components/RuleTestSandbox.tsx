@@ -16,6 +16,8 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
       name: 'Standard 2-Skid Outdoor Unit',
       facts: {
         'unit.shellType': 'ThermalBreak',
+        'unit.detailingTool': 'ISG',
+        'unit.thermalBreak': true,
         'unit.unitType': 'Outdoor',
         'unit.wallThickness': 2,
         'unit.baseHeight': 10,
@@ -41,6 +43,8 @@ export const RuleTestSandbox: React.FC<RuleTestSandboxProps> = ({ rule }) => {
       name: 'Heavy 4-Skid Washdown & Seismic Unit',
       facts: {
         'unit.shellType': 'ThermalBreak',
+        'unit.detailingTool': 'ISG',
+        'unit.thermalBreak': true,
         'unit.unitType': 'Outdoor',
         'unit.wallThickness': 3,
         'unit.baseHeight': 12,

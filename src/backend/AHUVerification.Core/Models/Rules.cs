@@ -226,6 +226,9 @@ namespace AHUVerification.Core.Models
 
         [JsonPropertyName("ruleCellMappings")]
         public Dictionary<string, RuleCellMapping> RuleCellMappings { get; set; } = new();
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalProperties { get; set; }
     }
 
     public class RulePackManifestFileEntry

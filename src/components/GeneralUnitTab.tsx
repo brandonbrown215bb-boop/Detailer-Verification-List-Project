@@ -41,6 +41,7 @@ const ONLY_SHOW_WHEN_TRUE_FACTS = [
   { key: 'unit.curbrest', label: 'Curbrest Option', icon: CheckCircle2, description: 'Roof curb rest channel' },
   { key: 'unit.isTiered', label: 'Tiered Unit', icon: Layers, description: 'Multi-level upper tier segments' },
   { key: 'unit.isStacked', label: 'Stacked Unit', icon: Box, description: 'Upper base stacked unit assembly' },
+  { key: 'unit.isMultiTunnel', label: 'Multi-Tunnel Unit', icon: Box, description: 'Parallel multi-tunnel airflow design' },
   { key: 'unit.knockdown', label: 'Knockdown Construction', icon: Wrench, description: 'Ships field-disassembled' },
   { key: 'unit.noa', label: 'NOA Certified', icon: ShieldCheck, description: 'Miami-Dade Notice of Acceptance' },
   { key: 'unit.isSeismic', label: 'Seismic Certified', icon: Zap, description: 'IBC / OSHPD seismic compliance' }
@@ -280,9 +281,10 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
 
   // Unit Specifications Facts (core geometry & general casing specs)
   const unitSpecFacts = [
+    'unit.tags',
     'unit.unitType',
+    'unit.detailingTool',
     'unit.shellType',
-    'unit.thermalBreak',
     'unit.baseHeight',
     'unit.lipHeight',
     ...(isOutdoor ? ['roof.roofPeak'] : []),
@@ -339,6 +341,15 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
             >
               {fact.value ? String(fact.value) : <span className="text-amber-500 font-bold">Set Detailer Name</span>}
             </button>
+          ) : key === 'unit.tags' ? (
+            <input
+              type="text"
+              aria-label={fact.label || 'Unit Tags'}
+              value={displayValue || 'Standard'}
+              placeholder="Standard / Tiered / Stacked / Multi-Tunnel"
+              onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
+            />
           ) : key === 'unit.unitType' ? (
             <select
               aria-label={fact.label || 'Unit Type'}
@@ -349,21 +360,39 @@ export const GeneralUnitTab: React.FC<GeneralUnitTabProps> = ({
               <option value="Outdoor">Outdoor</option>
               <option value="Indoor">Indoor</option>
             </select>
-          ) : key === 'unit.shellType' ? (
+          ) : key === 'unit.detailingTool' ? (
             <select
-              aria-label={fact.label || 'Shell Type'}
+              aria-label={fact.label || 'Detailing Tool'}
               value={String(fact.value || 'ISG').toUpperCase() === 'CAD' ? 'CAD' : 'ISG'}
               onChange={(e) => onUpdateFact(key, e.target.value, 'Detailer')}
               className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
             >
-              <option value="ISG">ISG</option>
-              <option value="CAD">CAD</option>
+              <option value="ISG">ISG (Automated)</option>
+              <option value="CAD">CAD (Manual)</option>
+            </select>
+          ) : key === 'unit.shellType' ? (
+            <select
+              aria-label={fact.label || 'Shell Type'}
+              value={String(fact.value || 'ThermalBreak').toLowerCase().includes('standard') ? 'Standard' : 'ThermalBreak'}
+              onChange={(e) => {
+                const newVal = e.target.value;
+                onUpdateFact(key, newVal, 'Detailer');
+                onUpdateFact('unit.thermalBreak', newVal === 'ThermalBreak', 'Detailer');
+              }}
+              className="w-44 sm:w-52 px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-950/70 hover:bg-slate-50 dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border border-slate-300 dark:border-slate-700/80 focus:border-blue-500 rounded-md text-right text-slate-900 dark:text-slate-100 outline-none transition-all shadow-inner font-semibold"
+            >
+              <option value="ThermalBreak">Thermal Break</option>
+              <option value="Standard">Standard</option>
             </select>
           ) : key === 'unit.thermalBreak' ? (
             <button
               type="button"
               aria-label={fact.label || 'Thermal Break'}
-              onClick={() => onUpdateFact(key, !Boolean(fact.value), 'Detailer')}
+              onClick={() => {
+                const nextVal = !Boolean(fact.value);
+                onUpdateFact(key, nextVal, 'Detailer');
+                onUpdateFact('unit.shellType', nextVal ? 'ThermalBreak' : 'Standard', 'Detailer');
+              }}
               className={`w-44 sm:w-52 px-3 py-1.5 text-xs font-mono rounded-md border text-center font-bold transition-all shadow-inner flex items-center justify-between ${
                 Boolean(fact.value)
                   ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'

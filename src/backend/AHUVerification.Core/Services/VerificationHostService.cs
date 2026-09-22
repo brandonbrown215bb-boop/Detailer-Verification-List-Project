@@ -111,6 +111,7 @@ namespace AHUVerification.Core.Services
                 if (value == null)
                     throw new ArgumentException($"Manual override for '{entry.Key}' must provide a value.", nameof(manualOverrides));
                 if (activePack.FactContract.ValueKind == JsonValueKind.Object
+                    && FactContractValidator.TryGetFactType(activePack.FactContract, key, out _)
                     && !FactContractValidator.IsFactValueCompatible(activePack.FactContract, key, value))
                     throw new ArgumentException($"Manual override for '{entry.Key}' has a value incompatible with the fact contract.", nameof(manualOverrides));
 

@@ -942,5 +942,94 @@ namespace AHUVerification.Tests
                 if (File.Exists(dvlPath2)) File.Delete(dvlPath2);
             }
         }
+
+        [Fact]
+        public void OpenDvl_WithOlderRulePackSnapshotMissingDetailingTool_AllowsSwitchingDetailingToolToCad()
+        {
+            var service = new ProjectSessionService();
+            string configXml = File.ReadAllText(_configXmlPath);
+            var openCmd = new OpenSourceCommand
+            {
+                FilePath = _configXmlPath,
+                ConfigXml = configXml,
+                IsUpz = false,
+                IsTrusted = true
+            };
+            var snap = service.OpenSource(openCmd, _activePack, 1);
+            string dvlPath = Path.Combine(Path.GetTempPath(), $"test_old_snapshot_{Guid.NewGuid():N}.dvl");
+            try
+            {
+                var saveResult = service.SaveProject(new SaveProjectCommand
+                {
+                    SessionId = snap.SessionId,
+                    ExpectedRevision = snap.Revision
+                }, dvlPath);
+                Assert.True(saveResult.Success);
+
+                // Simulate an older DVL saved before unit.detailingTool was added:
+                // Remove unit.detailingTool from both FactRegistry and RulePackSnapshot.FactContract
+                string dvlJson = File.ReadAllText(dvlPath);
+                using (var doc = System.Text.Json.JsonDocument.Parse(dvlJson))
+                {
+                    var root = doc.RootElement;
+                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(dvlJson, AHUVerification.Core.Utils.JsonDefaults.CreateFlexibleOptions())!;
+
+                    // Create older contract without unit.detailingTool
+                    string olderContractJson = @"{
+                        ""contractVersion"": ""1.0.0"",
+                        ""facts"": [
+                            { ""key"": ""unit.unitType"", ""type"": ""string"", ""scope"": ""Unit"" },
+                            { ""key"": ""unit.shellType"", ""type"": ""string"", ""scope"": ""Unit"" }
+                        ],
+                        ""patterns"": []
+                    }";
+
+                    if (dict.TryGetValue("rulePackSnapshot", out var snapObj) && snapObj is System.Text.Json.JsonElement snapEl)
+                    {
+                        var snapDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(snapEl.GetRawText(), AHUVerification.Core.Utils.JsonDefaults.CreateFlexibleOptions())!;
+                        using var olderContractDoc = System.Text.Json.JsonDocument.Parse(olderContractJson);
+                        snapDict["factContract"] = olderContractDoc.RootElement.Clone();
+                        dict["rulePackSnapshot"] = snapDict;
+                    }
+
+                    if (dict.TryGetValue("factRegistry", out var regObj) && regObj is System.Text.Json.JsonElement regEl)
+                    {
+                        var regDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(regEl.GetRawText(), AHUVerification.Core.Utils.JsonDefaults.CreateFlexibleOptions())!;
+                        regDict.Remove("unit.detailingTool");
+                        dict["factRegistry"] = regDict;
+                    }
+
+                    // Write back modified DVL
+                    File.WriteAllText(dvlPath, System.Text.Json.JsonSerializer.Serialize(dict));
+                }
+
+                // Reopen the simulated older DVL
+                var service2 = new ProjectSessionService();
+                var reopened = service2.OpenDvl(dvlPath, _activePack, packGeneration: 1);
+
+                // unit.detailingTool should be hydrated from baseline
+                Assert.True(reopened.Facts.ContainsKey("unit.detailingTool"));
+                Assert.Equal("ISG", reopened.Facts["unit.detailingTool"].Value?.ToString());
+
+                // Detailer switches Detailing Tool from ISG to CAD
+                var overrideCmd = new OverrideFactCommand
+                {
+                    SessionId = reopened.SessionId,
+                    ExpectedRevision = reopened.Revision,
+                    FactId = "unit.detailingTool",
+                    Value = "CAD",
+                    Author = "Detailer"
+                };
+                var overrideResult = service2.OverrideFact(overrideCmd);
+
+                Assert.True(overrideResult.Success, $"Override failed with: {overrideResult.ErrorMessage}");
+                Assert.NotNull(overrideResult.Snapshot);
+                Assert.Equal("CAD", overrideResult.Snapshot!.Facts["unit.detailingTool"].Value?.ToString());
+            }
+            finally
+            {
+                if (File.Exists(dvlPath)) File.Delete(dvlPath);
+            }
+        }
     }
 }

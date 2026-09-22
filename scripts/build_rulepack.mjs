@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const rulePackDir = path.join(repoRoot, 'resources', 'rulepack');
+const rulePackDir = process.argv[2] ? path.resolve(process.argv[2]) : path.join(repoRoot, 'resources', 'rulepack');
 
 const REQUIRED_FILES = [
   'rules.json',
@@ -158,11 +158,36 @@ rules.forEach((rule, index) => {
   if (rule.predicate) validatePredicate(rule.predicate, `rules[${index}].predicate`);
 });
 
+const requiredGeneralFields = [
+  'unit.detailer',
+  'unit.date',
+  'unit.jobName',
+  'unit.comNumber',
+  'unit.tags',
+  'unit.unitType'
+];
+if (!templateMap.generalFields || typeof templateMap.generalFields !== 'object' || Object.keys(templateMap.generalFields).length === 0) {
+  errors.push('template_map.generalFields must be a non-empty object containing required general specifications.');
+} else {
+  for (const reqField of requiredGeneralFields) {
+    if (!templateMap.generalFields[reqField]) {
+      errors.push(`template_map.generalFields missing required field '${reqField}'.`);
+    }
+  }
+}
+
 for (const [key, coordinate] of Object.entries(templateMap.generalFields || {})) {
   const canonical = canonicalFactKey(key);
   if (key !== 'generalComments' && !factEntry(canonical)) errors.push(`template_map.generalFields: unknown fact '${key}'.`);
   if (!coordinate?.sheet || !/^[A-Z]{1,3}[1-9][0-9]*$/.test(coordinate?.cell || '')) errors.push(`template_map.generalFields.${key}: malformed cell mapping.`);
-  if (canonical !== key) { templateMap.generalFields[canonical] = coordinate; delete templateMap.generalFields[key]; }
+  if (canonical !== key) {
+    if (templateMap.generalFields[canonical] && templateMap.generalFields[canonical].cell !== coordinate.cell) {
+      errors.push(`template_map.generalFields key collision: '${key}' aliases to '${canonical}' which is already mapped to cell '${templateMap.generalFields[canonical].cell}'.`);
+    } else {
+      templateMap.generalFields[canonical] = coordinate;
+      delete templateMap.generalFields[key];
+    }
+  }
 }
 const cellIsValid = cell => /^[A-Z]{1,3}[1-9][0-9]*$/.test(cell || '');
 for (const [semanticKey, mapping] of Object.entries(templateMap.ruleCellMappings || {})) {

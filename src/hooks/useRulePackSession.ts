@@ -88,19 +88,28 @@ export function useRulePackSession(): UseRulePackSessionResult {
 
       const configuredPath = localStorage.getItem('dvl_central_rulepack_path');
       const autoSync = localStorage.getItem('dvl_auto_sync_rulepack') !== 'false';
+      const failedSha = localStorage.getItem('dvl_failed_rulepack_sha');
       try {
         const resolved = await desktopBridge.resolveRulePackLocation(configuredPath || undefined);
         if (!cancelled && resolved.path && autoSync) {
           const updateInfo = await desktopBridge.checkRulePackUpdate(resolved.path);
           if (!cancelled && updateInfo.hasUpdate && !updateInfo.error) {
+            if (updateInfo.remoteBundleSha256 && updateInfo.remoteBundleSha256 === failedSha) {
+              console.info(`[RulePackSession] Skipping auto-sync for quarantined failing remote bundle SHA: ${failedSha}`);
+              return;
+            }
             const syncResult = await desktopBridge.syncRulePack(resolved.path);
             if (!cancelled && syncResult.success && syncResult.rules) {
+              localStorage.removeItem('dvl_failed_rulepack_sha');
               applyPack(syncResult);
               const origin = resolved.isAutoDetected
                 ? (resolved.sourceType === 'NetworkShare' ? 'network share' : 'SharePoint sync')
                 : 'central path';
               setRulePackNeedsReverify(true);
               setRulePackNotice(`Rule Pack auto-updated to v${syncResult.version} (${syncResult.ruleCount} active rules) from ${origin}`);
+            } else if (!cancelled && !syncResult.success && updateInfo.remoteBundleSha256) {
+              localStorage.setItem('dvl_failed_rulepack_sha', updateInfo.remoteBundleSha256);
+              console.warn(`[RulePackSession] Remote rule pack sync rejected: ${syncResult.error || 'Validation failed'}`);
             }
           }
         }

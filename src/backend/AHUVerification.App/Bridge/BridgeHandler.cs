@@ -36,17 +36,24 @@ namespace AHUVerification.App.Bridge
         private int _rulePackGeneration = 1;
         private string _rulePackPath;
         private readonly Func<string?>? _exportPathSelector;
+        private readonly Func<string, string?, string?>? _dialogPathSelector;
         private readonly Action<ProcessStartInfo> _processLauncher;
 
         public BridgeHandler(string rulePackPath) : this(null, rulePackPath)
         {
         }
 
-        public BridgeHandler(Form? parentForm, string rulePackPath, Func<string?>? exportPathSelector = null, Action<ProcessStartInfo>? processLauncher = null)
+        public BridgeHandler(
+            Form? parentForm,
+            string rulePackPath,
+            Func<string?>? exportPathSelector = null,
+            Action<ProcessStartInfo>? processLauncher = null,
+            Func<string, string?, string?>? dialogPathSelector = null)
         {
             _parentForm = parentForm;
             _rulePackPath = rulePackPath;
             _exportPathSelector = exportPathSelector;
+            _dialogPathSelector = dialogPathSelector;
             _processLauncher = processLauncher ?? (psi => Process.Start(psi));
             LoadActiveRulePack();
         }
@@ -81,6 +88,64 @@ namespace AHUVerification.App.Bridge
             {
                 return _authorizedPickerPaths.Contains(fullPath);
             }
+        }
+
+        public static string? ResolveInitialDirectory(ProjectSession? session, string? fallbackDirectory = null)
+        {
+            if (session != null)
+            {
+                // 1. If project was already saved or loaded from a .dvl file, use its directory
+                if (!string.IsNullOrWhiteSpace(session.CurrentSavePath))
+                {
+                    try
+                    {
+                        string? dir = Path.GetDirectoryName(session.CurrentSavePath);
+                        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                        {
+                            return dir;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore malformed path
+                    }
+                }
+
+                // 2. If session was loaded from an authentic source file (.upz or .xml), use its directory
+                if (!string.IsNullOrWhiteSpace(session.FilePath))
+                {
+                    try
+                    {
+                        string? dir = Path.GetDirectoryName(session.FilePath);
+                        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                        {
+                            return dir;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore malformed path
+                    }
+                }
+            }
+
+            // 3. Fall back to user-configured directory (e.g. from Settings or payload)
+            if (!string.IsNullOrWhiteSpace(fallbackDirectory))
+            {
+                try
+                {
+                    if (Directory.Exists(fallbackDirectory))
+                    {
+                        return Path.GetFullPath(fallbackDirectory);
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed directory
+                }
+            }
+
+            return null;
         }
 
         private void LoadActiveRulePack()
@@ -153,7 +218,7 @@ namespace AHUVerification.App.Bridge
                 {
                     "getAppInfo" => GetAppInfo(),
                     "getRulePack" => GetRulePack(),
-                    "openFileDialog" => ShowOpenFileDialog(),
+                    "openFileDialog" => ShowOpenFileDialog(req.Payload),
                     "saveFileDialog" => ShowSaveFileDialog(req.Payload),
                     "extractUpz" => ExtractUpz(req.Payload),
                     "openFile" => OpenFile(req.Payload),
@@ -225,9 +290,16 @@ namespace AHUVerification.App.Bridge
             };
         }
 
-        private object? ShowOpenFileDialog()
+        private object? ShowOpenFileDialog(JsonElement? payload = null)
         {
             if (_parentForm == null) return null;
+
+            string? initialDir = null;
+            if (payload.HasValue && payload.Value.ValueKind == JsonValueKind.Object)
+            {
+                initialDir = BridgeValidation.GetStringPropertyOrDefault(payload.Value, "initialDirectory", null)
+                    ?? BridgeValidation.GetStringPropertyOrDefault(payload.Value, "defaultDirectory", null);
+            }
 
             object? result = null;
             _parentForm.Invoke(() =>
@@ -237,6 +309,11 @@ namespace AHUVerification.App.Bridge
                     Title = "Open AHU Engineering File",
                     Filter = "All Supported Files (*.upz;*.xml;*.dvl)|*.upz;*.xml;*.dvl|Unit Package (*.upz)|*.upz|Config XML (*.xml)|*.xml|DVL Project (*.dvl)|*.dvl|All Files (*.*)|*.*"
                 };
+
+                if (!string.IsNullOrWhiteSpace(initialDir) && Directory.Exists(initialDir))
+                {
+                    ofd.InitialDirectory = initialDir;
+                }
 
                 if (ofd.ShowDialog(_parentForm) == DialogResult.OK)
                 {
@@ -284,6 +361,8 @@ namespace AHUVerification.App.Bridge
         {
             string defaultName = BridgeValidation.GetStringPropertyOrDefault(payload, "defaultName", "Project.dvl");
             string filter = BridgeValidation.GetStringPropertyOrDefault(payload, "filter", "DVL Project (*.dvl)|*.dvl");
+            string? initialDir = BridgeValidation.GetStringPropertyOrDefault(payload, "initialDirectory", null)
+                ?? BridgeValidation.GetStringPropertyOrDefault(payload, "defaultDirectory", null);
 
             if (_parentForm == null) return null;
 
@@ -296,6 +375,11 @@ namespace AHUVerification.App.Bridge
                     FileName = defaultName,
                     Filter = filter
                 };
+
+                if (!string.IsNullOrWhiteSpace(initialDir) && Directory.Exists(initialDir))
+                {
+                    sfd.InitialDirectory = initialDir;
+                }
 
                 if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
                 {
@@ -398,9 +482,9 @@ namespace AHUVerification.App.Bridge
             string active = Path.Combine(localData, "active_rulepack");
             string lkg = Path.Combine(localData, "lkg_rulepack");
 
-            bool success = _rulePackManager.SyncFromRemote(remotePath, staging, active, lkg);
+            var syncResult = _rulePackManager.SyncFromRemoteDetailed(remotePath, staging, active, lkg);
             ProjectSessionSnapshot? updatedSnapshot = null;
-            if (success)
+            if (syncResult.Success)
             {
                 _rulePackPath = active;
                 _activeRulePack = _rulePackManager.LoadFromDirectory(active);
@@ -411,7 +495,8 @@ namespace AHUVerification.App.Bridge
 
             return new
             {
-                success,
+                success = syncResult.Success,
+                error = syncResult.Error,
                 version = _activeRulePack?.Manifest.Version ?? "Unavailable",
                 bundleSha256 = _activeRulePack?.Manifest.BundleSha256 ?? "",
                 ruleCount = _activeRulePack?.Rules.Count(rule => rule.IsArchived != true) ?? 0,
@@ -682,7 +767,13 @@ namespace AHUVerification.App.Bridge
                         defaultName = defaultName.Replace(c, '_');
                     }
 
-                    if (_exportPathSelector != null)
+                    string? initialDir = ResolveInitialDirectory(session, cmd.DefaultDirectory);
+
+                    if (_dialogPathSelector != null)
+                    {
+                        targetPath = _dialogPathSelector(defaultName, initialDir);
+                    }
+                    else if (_exportPathSelector != null)
                     {
                         targetPath = _exportPathSelector();
                     }
@@ -696,6 +787,10 @@ namespace AHUVerification.App.Bridge
                                 FileName = defaultName,
                                 Filter = "DVL Project (*.dvl)|*.dvl"
                             };
+                            if (!string.IsNullOrWhiteSpace(initialDir))
+                            {
+                                sfd.InitialDirectory = initialDir;
+                            }
                             if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
                             {
                                 targetPath = sfd.FileName;
@@ -773,7 +868,13 @@ namespace AHUVerification.App.Bridge
                     defaultName = defaultName.Replace(c, '_');
                 }
 
-                if (_exportPathSelector != null)
+                string? initialDir = ResolveInitialDirectory(session, cmd.DefaultDirectory);
+
+                if (_dialogPathSelector != null)
+                {
+                    targetPath = _dialogPathSelector(defaultName, initialDir);
+                }
+                else if (_exportPathSelector != null)
                 {
                     targetPath = _exportPathSelector();
                 }
@@ -787,6 +888,10 @@ namespace AHUVerification.App.Bridge
                             FileName = defaultName,
                             Filter = "Excel Workbook (*.xlsx)|*.xlsx"
                         };
+                        if (!string.IsNullOrWhiteSpace(initialDir))
+                        {
+                            sfd.InitialDirectory = initialDir;
+                        }
                         if (sfd.ShowDialog(_parentForm) == DialogResult.OK)
                         {
                             targetPath = sfd.FileName;

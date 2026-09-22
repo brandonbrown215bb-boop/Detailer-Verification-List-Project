@@ -387,7 +387,13 @@ namespace AHUVerification.Core.Manual
             ApplyManualOverride("unit.comNumber", !string.IsNullOrEmpty(config.ComNumber) ? config.ComNumber : "COM-000000");
             ApplyManualOverride("unit.detailer", detailer);
             ApplyManualOverride("unit.unitType", !string.IsNullOrEmpty(config.UnitType) ? config.UnitType : "Outdoor");
-            ApplyManualOverride("unit.shellType", "ISG");
+            var manualTags = new List<string>();
+            if (graph.IsTiered) manualTags.Add("Tiered");
+            if (graph.IsStacked) manualTags.Add("Stacked");
+            if (graph.IsMultiTunnel) manualTags.Add("Multi-Tunnel");
+            ApplyManualOverride("unit.tags", manualTags.Count > 0 ? string.Join(", ", manualTags) : "Standard");
+            ApplyManualOverride("unit.shellType", casingMaterials.HousingStyle);
+            ApplyManualOverride("unit.detailingTool", "ISG");
             ApplyManualOverride("casing.thicknessFront", defaultWallThickness);
             ApplyManualOverride("unit.baseHeight", defaultBaseHeight);
             ApplyManualOverride("unit.totalStaticPressure", totalStaticPressure);

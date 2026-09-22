@@ -1267,6 +1267,54 @@ namespace AHUVerification.Tests
         }
 
         [Fact]
+        public void Handle_SyncRulePack_WhenValidationFails_ReturnsDescriptiveErrorAndPreservesActivePack()
+        {
+            var manager = new RulePackManager();
+            string tempRemoteDir = Path.Combine(Path.GetTempPath(), $"dvl-remote-pack-invalid-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempRemoteDir);
+
+            foreach (var file in Directory.GetFiles(_rulePackPath))
+            {
+                File.Copy(file, Path.Combine(tempRemoteDir, Path.GetFileName(file)), true);
+            }
+
+            string tmPath = Path.Combine(tempRemoteDir, "template_map.json");
+            string badTm = File.ReadAllText(tmPath).Replace("\"generalFields\": {", "\"generalFields\": {}, \"_orig\": {");
+            File.WriteAllText(tmPath, badTm);
+
+            try
+            {
+                var handler = CreateAppHandler();
+                var initialRes = handler.Handle("{\"id\":\"req-initial\",\"action\":\"getRulePack\"}");
+                Assert.True(initialRes.Success);
+                using var initialDoc = JsonDocument.Parse(JsonSerializer.Serialize(initialRes.Data));
+                string initialVersion = initialDoc.RootElement.GetProperty("manifest").GetProperty("version").GetString()!;
+
+                string syncJson = JsonSerializer.Serialize(new
+                {
+                    id = "req-sync-fail",
+                    action = "syncRulePack",
+                    payload = new { remotePath = tempRemoteDir }
+                });
+                var syncRes = handler.Handle(syncJson);
+                Assert.True(syncRes.Success);
+                using var syncDoc = JsonDocument.Parse(JsonSerializer.Serialize(syncRes.Data));
+                Assert.False(syncDoc.RootElement.GetProperty("success").GetBoolean());
+                Assert.True(syncDoc.RootElement.TryGetProperty("error", out var errorProp));
+                Assert.NotNull(errorProp.GetString());
+                Assert.Contains("Staged rule pack validation failed", errorProp.GetString());
+                Assert.Equal(initialVersion, syncDoc.RootElement.GetProperty("version").GetString());
+            }
+            finally
+            {
+                if (Directory.Exists(tempRemoteDir))
+                {
+                    try { Directory.Delete(tempRemoteDir, true); } catch { }
+                }
+            }
+        }
+
+        [Fact]
         public void RuleEditor_HeadlessDialogActions_ReturnNullWithoutCrashing()
         {
             var handler = CreateRuleEditorHandler();
@@ -1293,6 +1341,167 @@ namespace AHUVerification.Tests
             Assert.Equal("req-re-unknown", response.Id);
             Assert.False(response.Success);
             Assert.Contains("Unsupported Rule Editor bridge action: 'unsupportedEditorAction'", response.Error);
+        }
+
+        // =========================================================================
+        // Initial Directory Resolution & Native Dialog Integration
+        // =========================================================================
+
+        [Fact]
+        public void ResolveInitialDirectory_CurrentSavePathExists_ReturnsSavePathDirectory()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "DVL_DirTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                string savePath = Path.Combine(tempDir, "TestProject.dvl");
+                File.WriteAllText(savePath, "{}");
+
+                var session = new ProjectSession(
+                    filePath: "",
+                    configXml: "<Config />",
+                    orderRevXml: null,
+                    manifestXml: null,
+                    isUpz: false,
+                    isTrusted: false,
+                    activePack: new RulePackBundle(),
+                    packGeneration: 1);
+                session.CurrentSavePath = savePath;
+
+                string? resolved = BridgeHandler.ResolveInitialDirectory(session, @"C:\NonexistentFolder");
+                Assert.Equal(tempDir, resolved);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void ResolveInitialDirectory_SourceFilePathExists_ReturnsSourceDirectory()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "DVL_DirTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                string sourcePath = Path.Combine(tempDir, "Job.upz");
+                File.WriteAllText(sourcePath, "dummy");
+
+                var session = new ProjectSession(
+                    filePath: sourcePath,
+                    configXml: "<Config />",
+                    orderRevXml: null,
+                    manifestXml: null,
+                    isUpz: true,
+                    isTrusted: true,
+                    activePack: new RulePackBundle(),
+                    packGeneration: 1);
+
+                string? resolved = BridgeHandler.ResolveInitialDirectory(session, @"C:\NonexistentFolder");
+                Assert.Equal(tempDir, resolved);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void ResolveInitialDirectory_ManualProject_FallsBackToExistingSettingsDirectory()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "DVL_DirTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                var session = new ProjectSession(
+                    filePath: "",
+                    configXml: "<Config />",
+                    orderRevXml: null,
+                    manifestXml: null,
+                    isUpz: false,
+                    isTrusted: false,
+                    activePack: new RulePackBundle(),
+                    packGeneration: 1);
+
+                string? resolved = BridgeHandler.ResolveInitialDirectory(session, tempDir);
+                Assert.Equal(tempDir, resolved);
+
+                string? nonexistent = BridgeHandler.ResolveInitialDirectory(session, @"C:\DoesNotExist_12345");
+                Assert.Null(nonexistent);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void Handle_ProjectSessionSave_WithDialogPathSelector_ReceivesSourceInitialDirectory()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "DVL_SaveDirTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                string xmlFile = Path.Combine(tempDir, "TestConfig.xml");
+                string fixtureXml = File.ReadAllText(TestPathHelper.GetRepoPath(Path.Combine("tests", "fixtures", "Config.xml")));
+                File.WriteAllText(xmlFile, fixtureXml);
+
+                string? capturedName = null;
+                string? capturedDir = null;
+                string chosenSavePath = Path.Combine(tempDir, "Output.dvl");
+
+                var handler = new BridgeHandler(
+                    parentForm: null,
+                    _rulePackPath,
+                    exportPathSelector: null,
+                    processLauncher: null,
+                    dialogPathSelector: (defaultName, initialDir) =>
+                    {
+                        capturedName = defaultName;
+                        capturedDir = initialDir;
+                        return chosenSavePath;
+                    });
+
+                // Open session from source on disk
+                string openReq = JsonSerializer.Serialize(new
+                {
+                    id = "req-open",
+                    action = "projectSession_open",
+                    payload = new
+                    {
+                        filePath = xmlFile,
+                        isUpz = false
+                    }
+                });
+                var openRes = handler.Handle(openReq);
+                Assert.True(openRes.Success, openRes.Error);
+
+                var snapshot = JsonSerializer.Deserialize<ProjectSessionSnapshot>(
+                    JsonSerializer.Serialize(openRes.Data), JsonDefaults.CreateFlexibleOptions())!;
+
+                // Save session without targetPath
+                string saveReq = JsonSerializer.Serialize(new
+                {
+                    id = "req-save",
+                    action = "projectSession_save",
+                    payload = new
+                    {
+                        sessionId = snapshot.SessionId,
+                        expectedRevision = snapshot.Revision
+                    }
+                });
+                var saveRes = handler.Handle(saveReq);
+                Assert.True(saveRes.Success, saveRes.Error);
+
+                Assert.NotNull(capturedName);
+                Assert.EndsWith(".dvl", capturedName);
+                Assert.Equal(tempDir, capturedDir);
+                Assert.True(File.Exists(chosenSavePath));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
         }
     }
 }

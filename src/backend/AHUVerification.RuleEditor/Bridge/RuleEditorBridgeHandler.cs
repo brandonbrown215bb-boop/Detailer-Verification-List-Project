@@ -154,6 +154,33 @@ namespace AHUVerification.RuleEditor.Bridge
             public string Message { get; set; } = "";
         }
 
+        private static readonly Dictionary<string, CellCoordinate> DefaultGeneralFields = new(StringComparer.Ordinal)
+        {
+            ["unit.detailer"] = new CellCoordinate { Sheet = "Verification List", Cell = "D3" },
+            ["unit.date"] = new CellCoordinate { Sheet = "Verification List", Cell = "D4" },
+            ["unit.jobName"] = new CellCoordinate { Sheet = "Verification List", Cell = "D5" },
+            ["unit.comNumber"] = new CellCoordinate { Sheet = "Verification List", Cell = "D6" },
+            ["unit.shellType"] = new CellCoordinate { Sheet = "Verification List", Cell = "D7" },
+            ["unit.tags"] = new CellCoordinate { Sheet = "Verification List", Cell = "D8" },
+            ["unit.baseHeight"] = new CellCoordinate { Sheet = "Verification List", Cell = "D9" },
+            ["casing.thicknessFront"] = new CellCoordinate { Sheet = "Verification List", Cell = "D10" },
+            ["unit.thermalBreak"] = new CellCoordinate { Sheet = "Verification List", Cell = "D11" },
+            ["roof.roofPeak"] = new CellCoordinate { Sheet = "Verification List", Cell = "D12" },
+            ["unit.curbrest"] = new CellCoordinate { Sheet = "Verification List", Cell = "D13" },
+            ["unit.noa"] = new CellCoordinate { Sheet = "Verification List", Cell = "D14" },
+            ["unit.isSeismic"] = new CellCoordinate { Sheet = "Verification List", Cell = "D15" },
+            ["unit.unitType"] = new CellCoordinate { Sheet = "Verification List", Cell = "D16" },
+            ["unit.knockdown"] = new CellCoordinate { Sheet = "Verification List", Cell = "D17" },
+            ["unit.hasUTL"] = new CellCoordinate { Sheet = "Verification List", Cell = "D18" },
+            ["casing.interiorMaterial"] = new CellCoordinate { Sheet = "Verification List", Cell = "D19" },
+            ["casing.interiorGauge"] = new CellCoordinate { Sheet = "Verification List", Cell = "F19" },
+            ["casing.exteriorMaterial"] = new CellCoordinate { Sheet = "Verification List", Cell = "D20" },
+            ["casing.exteriorGauge"] = new CellCoordinate { Sheet = "Verification List", Cell = "F20" },
+            ["casing.floorMaterial"] = new CellCoordinate { Sheet = "Verification List", Cell = "D21" },
+            ["casing.floorGauge"] = new CellCoordinate { Sheet = "Verification List", Cell = "F21" },
+            ["generalComments"] = new CellCoordinate { Sheet = "Verification List", Cell = "D22" }
+        };
+
         public static TemplateMap SynchronizeTemplateMap(List<RuleDefinition> rules, TemplateMap? existingTemplateMap)
         {
             var tm = existingTemplateMap != null
@@ -161,10 +188,36 @@ namespace AHUVerification.RuleEditor.Bridge
                 : new TemplateMap();
 
             if (string.IsNullOrWhiteSpace(tm.TemplateVersion))
-                tm.TemplateVersion = "1.0";
+                tm.TemplateVersion = "14.0.0";
 
             tm.GeneralFields ??= new Dictionary<string, CellCoordinate>(StringComparer.Ordinal);
-            tm.SqRange ??= new SqRangeMapping { Sheet = "Skid 1", StartRow = 1, EndRow = 50 };
+            if (tm.GeneralFields.Count == 0)
+            {
+                foreach (var kvp in DefaultGeneralFields)
+                {
+                    tm.GeneralFields[kvp.Key] = new CellCoordinate { Sheet = kvp.Value.Sheet, Cell = kvp.Value.Cell };
+                }
+            }
+            else
+            {
+                foreach (var kvp in DefaultGeneralFields)
+                {
+                    if (!tm.GeneralFields.ContainsKey(kvp.Key))
+                    {
+                        tm.GeneralFields[kvp.Key] = new CellCoordinate { Sheet = kvp.Value.Sheet, Cell = kvp.Value.Cell };
+                    }
+                }
+            }
+
+            tm.SqRange ??= new SqRangeMapping { Sheet = "Verification List", StartRow = 4, EndRow = 25, SlotCol = "G", TextCol = "H" };
+            if (tm.SqRange.Sheet == "Skid 1" || tm.SqRange.StartRow == 1)
+            {
+                tm.SqRange.Sheet = "Verification List";
+                tm.SqRange.StartRow = 4;
+                tm.SqRange.EndRow = 25;
+                tm.SqRange.SlotCol = "G";
+                tm.SqRange.TextCol = "H";
+            }
             tm.RuleCellMappings ??= new Dictionary<string, RuleCellMapping>(StringComparer.Ordinal);
 
             var liveSemanticKeys = new HashSet<string>(rules.Where(r => !string.IsNullOrWhiteSpace(r.SemanticKey)).Select(r => r.SemanticKey), StringComparer.Ordinal);

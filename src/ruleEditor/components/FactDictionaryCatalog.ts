@@ -11,11 +11,24 @@ export const FACT_DICTIONARY: FactFieldDefinition[] = [
     category: 'Geometry & Casing',
     dataType: 'enum',
     enumOptions: [
-      { value: 'ISG', label: 'ISG' },
-      { value: 'CAD', label: 'CAD' }
+      { value: 'ThermalBreak', label: 'Thermal Break' },
+      { value: 'Standard', label: 'Standard' }
+    ],
+    sampleValue: 'ThermalBreak',
+    description: 'Unit casing shell construction style (ThermalBreak vs Standard).'
+  },
+  {
+    key: 'unit.detailingTool',
+    label: 'Detailing Tool',
+    scope: 'Unit',
+    category: 'Geometry & Casing',
+    dataType: 'enum',
+    enumOptions: [
+      { value: 'ISG', label: 'ISG (Automated Generator)' },
+      { value: 'CAD', label: 'CAD (Manual Modeling)' }
     ],
     sampleValue: 'ISG',
-    description: 'Unit casing shell system design standard (ISG vs CAD).'
+    description: 'Drafting software or detailing methodology used (ISG vs CAD).'
   },
   {
     key: 'roof.roofPeak',

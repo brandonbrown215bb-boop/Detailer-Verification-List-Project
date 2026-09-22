@@ -215,6 +215,17 @@ namespace AHUVerification.Core.Services
                 derivationName: "Upper Base Detected"
             );
 
+            facts["unit.isMultiTunnel"] = CreateFact(
+                "unit.isMultiTunnel",
+                "Is Multi-Tunnel Unit",
+                "Baserail & Skid",
+                graph.IsMultiTunnel,
+                FactStatus.Derived,
+                FactConfidence.Authoritative,
+                "/root:AHU/segmentList",
+                derivationName: "Parallel air tunnels detected"
+            );
+
             facts["unit.hasFloorDrains"] = CreateFact(
                 "unit.hasFloorDrains",
                 "Unit Has Floor Drains",
@@ -322,14 +333,28 @@ namespace AHUVerification.Core.Services
             // ==========================================
             // 3. Housing, Casing, Materials & Roof Domain
             // ==========================================
+            string rawHousingStyle = graph.UnitOptions.Materials.HousingStyle ?? "";
+            string normalizedHousingStyle = rawHousingStyle.ToLowerInvariant().Replace(" ", "").Replace("_", "").Replace("-", "");
+            string resolvedShellType = normalizedHousingStyle.Contains("standard", StringComparison.Ordinal) ? "Standard" : "ThermalBreak";
+
             facts["unit.shellType"] = CreateFact(
                 "unit.shellType",
                 "Shell Type",
                 "Housing & Materials",
-                graph.UnitOptions.Materials.HousingStyle.Equals("CAD", StringComparison.OrdinalIgnoreCase) ? "CAD" : "ISG",
+                resolvedShellType,
                 FactStatus.Known,
                 FactConfidence.Authoritative,
                 "/root:AHU/unitOptions/defaultConstructionOptions/housingStyle"
+            );
+
+            facts["unit.detailingTool"] = CreateFact(
+                "unit.detailingTool",
+                "Detailing Tool",
+                "Housing & Materials",
+                "ISG",
+                FactStatus.Known,
+                FactConfidence.Authoritative,
+                "workflow_default"
             );
 
             facts["unit.unitType"] = CreateFact(
@@ -340,6 +365,23 @@ namespace AHUVerification.Core.Services
                 FactStatus.Known,
                 FactConfidence.Authoritative,
                 "/root:AHU/unitOptions/unitType"
+            );
+
+            var activeTags = new List<string>();
+            if (graph.IsTiered) activeTags.Add("Tiered");
+            if (graph.IsStacked) activeTags.Add("Stacked");
+            if (graph.IsMultiTunnel) activeTags.Add("Multi-Tunnel");
+            string derivedUnitTags = activeTags.Count > 0 ? string.Join(", ", activeTags) : "Standard";
+
+            facts["unit.tags"] = CreateFact(
+                "unit.tags",
+                "Unit Tags",
+                "Housing & Materials",
+                derivedUnitTags,
+                FactStatus.Derived,
+                FactConfidence.Authoritative,
+                "/root:AHU/segmentList",
+                derivationName: "Derived from Tiered/Stacked/Multi-Tunnel structure"
             );
 
             facts["unit.thermalBreak"] = CreateFact(
@@ -898,6 +940,11 @@ namespace AHUVerification.Core.Services
                 Note = note,
                 Snapshot = auditSnapshot
             });
+
+            if (canonicalKey is "unit.isTiered" or "unit.isStacked" or "unit.isMultiTunnel")
+            {
+                SyncUnitTagsIfAutomatic(registry);
+            }
         }
 
         public void RevertFact(Dictionary<string, Fact> registry, string key)
@@ -934,6 +981,36 @@ namespace AHUVerification.Core.Services
                 By = "Detailer",
                 Snapshot = auditSnapshot
             });
+
+            if (canonicalKey is "unit.isTiered" or "unit.isStacked" or "unit.isMultiTunnel")
+            {
+                SyncUnitTagsIfAutomatic(registry);
+            }
+        }
+
+        private static bool IsTruthyFact(Fact? fact)
+        {
+            if (fact?.Value == null) return false;
+            if (fact.Value is bool b) return b;
+            string s = fact.Value.ToString() ?? "";
+            return s.Equals("True", StringComparison.OrdinalIgnoreCase) || s.Equals("Yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void SyncUnitTagsIfAutomatic(Dictionary<string, Fact> registry)
+        {
+            if (registry.TryGetValue("unit.tags", out var tagsFact) && tagsFact.Status != FactStatus.ManuallyOverridden)
+            {
+                registry.TryGetValue("unit.isTiered", out var tf);
+                registry.TryGetValue("unit.isStacked", out var sf);
+                registry.TryGetValue("unit.isMultiTunnel", out var mtf);
+
+                var activeTags = new List<string>();
+                if (IsTruthyFact(tf)) activeTags.Add("Tiered");
+                if (IsTruthyFact(sf)) activeTags.Add("Stacked");
+                if (IsTruthyFact(mtf)) activeTags.Add("Multi-Tunnel");
+
+                tagsFact.Value = activeTags.Count > 0 ? string.Join(", ", activeTags) : "Standard";
+            }
         }
     }
 }

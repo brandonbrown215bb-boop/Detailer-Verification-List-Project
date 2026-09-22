@@ -690,6 +690,21 @@ namespace AHUVerification.Core.Parsers
             graph.IsStacked = graph.Bases.Any(b => b.IsUpperBase);
             graph.HasFloorDrains = graph.FloorDrains.Count > 0;
 
+            bool hasTunnelNodes = root.Descendants().Any(e =>
+                e.Name.LocalName.Contains("tunnel", StringComparison.OrdinalIgnoreCase) &&
+                !e.Name.LocalName.Equals("tunnelFit", StringComparison.OrdinalIgnoreCase) &&
+                (e.Name.LocalName.Contains("multi", StringComparison.OrdinalIgnoreCase) ||
+                 e.Name.LocalName.Equals("tunnelList", StringComparison.OrdinalIgnoreCase) ||
+                 e.Value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                 e.Value.Contains("MultiTunnel", StringComparison.OrdinalIgnoreCase)));
+
+            bool hasSideBySideSegments = graph.Segments.Any(s1 =>
+                graph.Segments.Any(s2 => s1 != s2 && !s1.IsTiered && !s2.IsTiered &&
+                    Math.Abs(s1.Dimensions.Z - s2.Dimensions.Z) > 10 &&
+                    Math.Max(s1.Dimensions.X, s2.Dimensions.X) < Math.Min(s1.Dimensions.X + s1.Dimensions.XLength, s2.Dimensions.X + s2.Dimensions.XLength)));
+
+            graph.IsMultiTunnel = hasTunnelNodes || hasSideBySideSegments;
+
             // Shipping Skids
             var skidList = FindElement(root, "shippingSkidList");
             var skidNodes = skidList != null ? FindElements(skidList, "shippingSkid") : FindDescendants(root, "shippingSkid");

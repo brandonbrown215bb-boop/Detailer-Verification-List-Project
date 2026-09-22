@@ -178,6 +178,7 @@ export interface SaveProjectPayload {
   expectedRevision: number;
   requestId?: string;
   targetPath?: string;
+  defaultDirectory?: string;
   forceSaveAs?: boolean;
 }
 
@@ -201,6 +202,7 @@ export interface ExportExcelPayload {
   requestId?: string;
   isDraft: boolean;
   targetPath?: string;
+  defaultDirectory?: string;
 }
 
 export interface ExportExcelResult {

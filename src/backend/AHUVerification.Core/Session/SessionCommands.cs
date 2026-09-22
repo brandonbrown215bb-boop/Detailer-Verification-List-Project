@@ -241,6 +241,9 @@ namespace AHUVerification.Core.Session
         [JsonPropertyName("targetPath")]
         public string? TargetPath { get; set; }
 
+        [JsonPropertyName("defaultDirectory")]
+        public string? DefaultDirectory { get; set; }
+
         [JsonPropertyName("forceSaveAs")]
         public bool ForceSaveAs { get; set; }
 
@@ -267,6 +270,9 @@ namespace AHUVerification.Core.Session
 
         [JsonPropertyName("targetPath")]
         public string? TargetPath { get; set; }
+
+        [JsonPropertyName("defaultDirectory")]
+        public string? DefaultDirectory { get; set; }
 
         [JsonPropertyName("expectedRevision")]
         public long ExpectedRevision { get; set; }

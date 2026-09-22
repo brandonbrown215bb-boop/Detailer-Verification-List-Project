@@ -531,7 +531,13 @@ export const AppContent: React.FC = () => {
             <div className="flex items-center gap-2.5 text-xs text-rose-900 dark:text-rose-200">
               <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
               <span>
-                <strong>Excel Export Failed:</strong> {exportError}
+                {exportError.startsWith('Edit rejected') ? (
+                  <><strong>Edit Rejected:</strong> {exportError.replace(/^Edit rejected:\s*/, '')}</>
+                ) : exportError.startsWith('Cannot export deliverable') ? (
+                  <><strong>Export Blocked:</strong> {exportError}</>
+                ) : (
+                  <><strong>Excel Export Failed:</strong> {exportError}</>
+                )}
               </span>
             </div>
             <button

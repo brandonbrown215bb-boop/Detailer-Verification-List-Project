@@ -44,6 +44,8 @@ $dotnetArguments = @(
     $testProject
     '--configuration'
     $Configuration
+    '--filter'
+    'Category!=WindowsHost'
     '--collect:XPlat Code Coverage;Format=cobertura'
     '--results-directory'
     $resultsDirectory

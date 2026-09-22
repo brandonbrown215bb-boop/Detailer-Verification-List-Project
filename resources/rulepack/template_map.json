@@ -72,9 +72,9 @@
       "sheet": "Verification List",
       "cell": "D7"
     },
-    "unit.unitType": {
+    "unit.tags": {
       "sheet": "Verification List",
-      "cell": "D16"
+      "cell": "D8"
     },
     "unit.baseHeight": {
       "sheet": "Verification List",
@@ -103,6 +103,10 @@
     "unit.isSeismic": {
       "sheet": "Verification List",
       "cell": "D15"
+    },
+    "unit.unitType": {
+      "sheet": "Verification List",
+      "cell": "D16"
     },
     "unit.knockdown": {
       "sheet": "Verification List",

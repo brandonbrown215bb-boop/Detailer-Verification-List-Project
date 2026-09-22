@@ -80,7 +80,7 @@ namespace AHUVerification.App
 
                 string rulePackPath = packagedRulePack;
 
-                // Priority 1: Synced active_rulepack from LocalApplicationData if present and valid
+                // Priority 1: Synced active_rulepack from LocalApplicationData if present, valid, and compatible
                 if (Directory.Exists(localActiveRulePack) && File.Exists(Path.Combine(localActiveRulePack, "manifest.json")))
                 {
                     try
@@ -89,7 +89,27 @@ namespace AHUVerification.App
                         var testBundle = testManager.LoadFromDirectory(localActiveRulePack);
                         if (testBundle.IsValid)
                         {
-                            rulePackPath = localActiveRulePack;
+                            bool isCompatible = true;
+                            if (Directory.Exists(packagedRulePack) && File.Exists(Path.Combine(packagedRulePack, "fact_contract.json")))
+                            {
+                                try
+                                {
+                                    var packagedBundle = testManager.LoadFromDirectory(packagedRulePack);
+                                    if (packagedBundle.IsValid && !AHUVerification.Core.Services.FactContractValidator.IsFactContractCovered(packagedBundle.FactContract, testBundle.FactContract))
+                                    {
+                                        isCompatible = false;
+                                    }
+                                }
+                                catch
+                                {
+                                    // If packaged bundle cannot be loaded, rely on testBundle
+                                }
+                            }
+
+                            if (isCompatible)
+                            {
+                                rulePackPath = localActiveRulePack;
+                            }
                         }
                     }
                     catch
@@ -102,7 +122,7 @@ namespace AHUVerification.App
                 string repoRoot = PathUtils.FindRepoRoot();
                 string repositoryRulePack = Path.Combine(repoRoot, "resources", "rulepack");
                 string repositoryDist = Path.Combine(repoRoot, "dist");
-                if (Directory.Exists(repositoryRulePack) && !Directory.Exists(localActiveRulePack)) rulePackPath = repositoryRulePack;
+                if (Directory.Exists(repositoryRulePack)) rulePackPath = repositoryRulePack;
                 if (Directory.Exists(repositoryDist)) distFolder = repositoryDist;
 #else
                 // Release build fallback: if no local active rulepack exists yet, check corporate share before packaged rulepack
